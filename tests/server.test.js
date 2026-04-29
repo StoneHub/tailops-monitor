@@ -16,6 +16,15 @@ test("resolveStaticRequest maps /api/telemetry to live telemetry metadata", () =
   assert.equal(result.contentType, "application/json; charset=utf-8");
 });
 
+test("resolveStaticRequest maps A2A agent discovery endpoints", () => {
+  const googleStyle = resolveStaticRequest("/.well-known/agent.json");
+  const cardStyle = resolveStaticRequest("/.well-known/agent-card.json");
+
+  assert.equal(googleStyle.kind, "agent-card");
+  assert.equal(cardStyle.kind, "agent-card");
+  assert.equal(googleStyle.contentType, "application/json; charset=utf-8");
+});
+
 test("resolveStaticRequest maps root to index.html", () => {
   const result = resolveStaticRequest("/");
 

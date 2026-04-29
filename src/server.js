@@ -33,6 +33,12 @@ export function resolveStaticRequest(urlPath) {
       contentType: "application/json; charset=utf-8",
     };
   }
+  if (cleanPath === "/.well-known/agent.json" || cleanPath === "/.well-known/agent-card.json") {
+    return {
+      kind: "agent-card",
+      contentType: "application/json; charset=utf-8",
+    };
+  }
 
   const relative = cleanPath === "/" ? "index.html" : cleanPath.slice(1);
   const normalized = normalize(relative);
@@ -108,6 +114,63 @@ async function getLiveTelemetry() {
   };
 }
 
+function getAgentCard(request) {
+  const host = request.headers.host ?? "127.0.0.1:4173";
+  const proto = request.headers["x-forwarded-proto"] ?? "http";
+  const baseUrl = `${proto}://${host}`;
+  return {
+    name: "TailOps Monitor",
+    description: "Local tailnet observability and AI agent phonebook for Tailscale-connected hosts.",
+    version: "0.1.0",
+    url: baseUrl,
+    provider: {
+      organization: "StoneHub",
+      url: "https://github.com/stonehub",
+    },
+    capabilities: {
+      streaming: false,
+      pushNotifications: false,
+      stateTransitionHistory: false,
+    },
+    defaultInputModes: ["application/json", "text/plain"],
+    defaultOutputModes: ["application/json"],
+    skills: [
+      {
+        id: "tailnet-telemetry",
+        name: "Tailnet telemetry",
+        description: "Returns live Tailscale peer status, MagicDNS names, online state, relay state, traffic counters, and local host CPU/memory when available.",
+        tags: ["tailscale", "telemetry", "network", "observability"],
+        examples: ["GET /api/telemetry"],
+      },
+      {
+        id: "agent-phonebook",
+        name: "Agent phonebook",
+        description: "Returns local AI agent contact entries by host, endpoint, availability, and capability tags.",
+        tags: ["agents", "phonebook", "mcp", "a2a", "openclaw"],
+        examples: ["GET /api/agents"],
+      },
+    ],
+    supportedInterfaces: [
+      {
+        url: `${baseUrl}/api/telemetry`,
+        protocolBinding: "REST",
+        protocolVersion: "1.0.0",
+      },
+      {
+        url: `${baseUrl}/api/agents`,
+        protocolBinding: "REST",
+        protocolVersion: "1.0.0",
+      },
+    ],
+    securitySchemes: {
+      tailnetOrLan: {
+        type: "network",
+        description: "Designed for trusted LAN or Tailscale-only access. Do not expose publicly without authentication.",
+      },
+    },
+  };
+}
+
 export function createTailopsServer() {
   return createServer(async (request, response) => {
     const result = resolveStaticRequest(request.url ?? "/");
@@ -134,6 +197,16 @@ export function createTailopsServer() {
         });
         response.end(JSON.stringify({ schema: "tailops.telemetry.v1", source: "unavailable", error: error.message }, null, 2));
       }
+      return;
+    }
+
+    if (result.kind === "agent-card") {
+      response.writeHead(200, {
+        "content-type": result.contentType,
+        "cache-control": "no-store",
+        "access-control-allow-origin": "*",
+      });
+      response.end(JSON.stringify(getAgentCard(request), null, 2));
       return;
     }
 
