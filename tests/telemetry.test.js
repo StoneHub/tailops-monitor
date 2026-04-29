@@ -5,6 +5,7 @@ import {
   getTopActiveHost,
   mapTailscaleStatusToHosts,
   normalizeCpuTemperature,
+  summarizeLocalNetwork,
 } from "../src/telemetry.js";
 
 const hosts = [
@@ -163,4 +164,38 @@ test("mapTailscaleStatusToHosts uses MagicDNS basename when host reports localho
   });
 
   assert.equal(hosts[0].name, "pixel-6a");
+});
+
+test("summarizeLocalNetwork separates router and Wi-Fi device telemetry", () => {
+  const summary = summarizeLocalNetwork([
+    ...hosts,
+    {
+      id: "asus-zenwifi-xd5",
+      name: "ZenWiFi XD5",
+      role: "ASUS Router",
+      os: "asuswrt",
+      status: "online",
+      networkInMbps: 44.5,
+      networkOutMbps: 11.25,
+      latencyMs: 0.6,
+      activeServices: 59,
+      subnetRoutes: true,
+      homeAssistant: {
+        devicesConnected: 59,
+        externalIp: "192.168.1.101",
+        wan: { connected: true },
+        networkInMbps: 44.5,
+        networkOutMbps: 11.25,
+      },
+    },
+  ]);
+
+  assert.equal(summary.hostCount, 4);
+  assert.equal(summary.onlineHosts, 4);
+  assert.equal(summary.offlineHosts, 0);
+  assert.equal(summary.router?.name, "ZenWiFi XD5");
+  assert.equal(summary.router?.devicesConnected, 59);
+  assert.equal(summary.router?.wanConnected, true);
+  assert.equal(summary.router?.externalIp, "192.168.1.101");
+  assert.equal(summary.router?.throughputMbps, 55.75);
 });

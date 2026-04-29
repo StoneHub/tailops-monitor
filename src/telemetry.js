@@ -59,6 +59,38 @@ export function formatMbps(value) {
   return `${Math.round(value)} Mbps`;
 }
 
+export function summarizeLocalNetwork(hosts) {
+  const router = hosts.find((host) => host.homeAssistant || host.os === "asuswrt" || /router/i.test(host.role ?? ""));
+  const onlineHosts = hosts.filter((host) => host.status === "online").length;
+  const offlineHosts = hosts.filter((host) => host.status === "offline").length;
+  const warningHosts = hosts.filter((host) => host.status === "warning").length;
+  const throughputMbps = hosts.reduce((sum, host) => sum + (host.networkInMbps ?? 0) + (host.networkOutMbps ?? 0), 0);
+
+  return {
+    hostCount: hosts.length,
+    onlineHosts,
+    offlineHosts,
+    warningHosts,
+    throughputMbps,
+    router: router
+      ? {
+          id: router.id,
+          name: router.name,
+          devicesConnected: router.homeAssistant?.devicesConnected ?? router.activeServices ?? null,
+          wanConnected: router.homeAssistant?.wan?.connected ?? null,
+          externalIp: router.homeAssistant?.externalIp ?? null,
+          networkInMbps: router.homeAssistant?.networkInMbps ?? router.networkInMbps ?? 0,
+          networkOutMbps: router.homeAssistant?.networkOutMbps ?? router.networkOutMbps ?? 0,
+          throughputMbps:
+            (router.homeAssistant?.networkInMbps ?? router.networkInMbps ?? 0) +
+            (router.homeAssistant?.networkOutMbps ?? router.networkOutMbps ?? 0),
+          lastBoot: router.homeAssistant?.lastBoot ?? null,
+          latencyMs: router.latencyMs ?? null,
+        }
+      : null,
+  };
+}
+
 function hashToUnit(text, salt) {
   let hash = 2166136261;
   const input = `${text}:${salt}`;

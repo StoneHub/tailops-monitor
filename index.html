@@ -43,21 +43,50 @@
         <div class="agent-strip" id="agentStrip">Agent directory loading</div>
       </section>
 
-      <section class="throughput panel" aria-label="Global throughput chart">
-        <div class="panel-head">
-          <span>Global Throughput</span>
-          <strong id="globalThroughput">12.4 Gbps</strong>
-        </div>
-        <canvas id="throughputChart" width="520" height="130"></canvas>
-      </section>
+      <div class="node-tooltip" id="nodeTooltip" role="status" aria-live="polite"></div>
 
-      <section class="health panel" aria-label="Host health summary">
-        <div class="panel-head">
-          <span>Host Health + CPU Temp</span>
-          <strong>7 nodes</strong>
-        </div>
-        <div class="heatmap" id="healthHeatmap"></div>
-      </section>
+      <div class="bottom-dock" aria-label="Local network telemetry panels">
+        <section class="throughput panel" aria-label="Global throughput chart">
+          <div class="panel-head">
+            <span>Global Throughput</span>
+            <strong id="globalThroughput">12.4 Gbps</strong>
+          </div>
+          <canvas id="throughputChart" width="520" height="130"></canvas>
+        </section>
+
+        <section class="router panel" aria-label="Router and Wi-Fi summary">
+          <div class="panel-head">
+            <span>Router + Wi-Fi</span>
+            <strong id="routerName">ZenWiFi XD5</strong>
+          </div>
+          <div class="router-stats">
+            <div><span>WAN</span><strong id="routerWan">--</strong></div>
+            <div><span>CLIENTS</span><strong id="routerClients">--</strong></div>
+            <div><span>DOWN</span><strong id="routerDown">--</strong></div>
+            <div><span>UP</span><strong id="routerUp">--</strong></div>
+          </div>
+          <canvas id="routerChart" width="360" height="92"></canvas>
+          <canvas id="deviceChart" width="360" height="58"></canvas>
+          <p class="microcopy" id="routerMeta">Waiting for router telemetry</p>
+        </section>
+
+        <section class="health panel" aria-label="Host health summary">
+          <div class="panel-head">
+            <span>Host Health + CPU Temp</span>
+            <strong id="hostHealthCount">7 nodes</strong>
+          </div>
+          <div class="heatmap" id="healthHeatmap"></div>
+        </section>
+
+        <section class="agents panel" aria-label="Agent phonebook">
+          <div class="panel-head">
+            <span>Agent Phonebook</span>
+            <strong id="agentSummary">0 available</strong>
+          </div>
+          <div class="agent-list" id="agentList"></div>
+          <p class="microcopy" id="agentCapabilityLine">Capabilities loading</p>
+        </section>
+      </div>
 
       <section class="latency panel" aria-label="Mesh latency">
         <div class="panel-head">

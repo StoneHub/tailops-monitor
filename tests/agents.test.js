@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildAgentDirectory,
   getReachableAgents,
+  summarizeAgentDirectory,
   serializeAgentDirectory,
 } from "../src/agents.js";
 
@@ -75,4 +76,16 @@ test("serializeAgentDirectory returns stable JSON for /api/agents style delivery
   assert.equal(parsed.schema, "tailops.agent-directory.v1");
   assert.equal(parsed.hosts.length, 3);
   assert.equal(parsed.hosts[0].agents[0].capabilities.includes("files"), true);
+});
+
+test("summarizeAgentDirectory counts status, types, and unique capabilities", () => {
+  const summary = summarizeAgentDirectory(buildAgentDirectory(hosts));
+
+  assert.equal(summary.hosts, 3);
+  assert.equal(summary.totalAgents, 2);
+  assert.equal(summary.availableAgents, 1);
+  assert.equal(summary.busyAgents, 1);
+  assert.equal(summary.types.OpenClaw, 1);
+  assert.equal(summary.types["local worker"], 1);
+  assert.deepEqual(summary.capabilities, ["files", "indexing", "storage", "transcode", "video"]);
 });

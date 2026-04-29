@@ -34,6 +34,33 @@ export function getReachableAgents(directory) {
   );
 }
 
+export function summarizeAgentDirectory(directory) {
+  const summary = {
+    hosts: directory.length,
+    totalAgents: 0,
+    availableAgents: 0,
+    busyAgents: 0,
+    unknownAgents: 0,
+    types: {},
+    capabilities: [],
+  };
+  const capabilities = new Set();
+
+  for (const entry of directory) {
+    for (const agent of entry.agents) {
+      summary.totalAgents += 1;
+      if (agent.status === "available") summary.availableAgents += 1;
+      else if (agent.status === "busy") summary.busyAgents += 1;
+      else summary.unknownAgents += 1;
+      summary.types[agent.type] = (summary.types[agent.type] ?? 0) + 1;
+      for (const capability of agent.capabilities ?? []) capabilities.add(capability);
+    }
+  }
+
+  summary.capabilities = [...capabilities].sort((a, b) => a.localeCompare(b));
+  return summary;
+}
+
 export function serializeAgentDirectory(directory) {
   return JSON.stringify(
     {
