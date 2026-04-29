@@ -6,6 +6,7 @@ Ambient Tailscale device performance dashboard for a local network. The app rend
 
 - Stitch project: https://stitch.withgoogle.com/projects/2020355768956197107
 - Current concept screenshot: `docs/assets/stitch-final-mesh-combo.png`
+- Current local browser capture: `docs/assets/browser-current-dashboard.png`
 
 ## What It Shows
 
