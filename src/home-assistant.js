@@ -12,8 +12,13 @@ export const ASUS_ROUTER_ENTITIES = {
   memoryFree: "sensor.192_168_50_1_memory_free",
   memoryUsed: "sensor.192_168_50_1_memory_used",
   cpuTemp: "sensor.192_168_50_1_cpu_temperature",
+  devicesConnected: "sensor.192_168_50_1_devices_connected",
+  lastBoot: "sensor.192_168_50_1_last_boot",
   wanBinary: "binary_sensor.zenwifi_xd5_7890_wan_status",
   wanStatus: "sensor.zenwifi_xd5_7890_wan_status",
+  downloadSpeed: "sensor.zenwifi_xd5_7890_download_speed",
+  uploadSpeed: "sensor.zenwifi_xd5_7890_upload_speed",
+  externalIp: "sensor.zenwifi_xd5_7890_external_ip",
 };
 
 const ENTITY_IDS = [
@@ -23,8 +28,13 @@ const ENTITY_IDS = [
   ASUS_ROUTER_ENTITIES.memoryFree,
   ASUS_ROUTER_ENTITIES.memoryUsed,
   ASUS_ROUTER_ENTITIES.cpuTemp,
+  ASUS_ROUTER_ENTITIES.devicesConnected,
+  ASUS_ROUTER_ENTITIES.lastBoot,
   ASUS_ROUTER_ENTITIES.wanBinary,
   ASUS_ROUTER_ENTITIES.wanStatus,
+  ASUS_ROUTER_ENTITIES.downloadSpeed,
+  ASUS_ROUTER_ENTITIES.uploadSpeed,
+  ASUS_ROUTER_ENTITIES.externalIp,
 ];
 
 function parseNumericState(entity) {
@@ -34,6 +44,10 @@ function parseNumericState(entity) {
 
 function normalizeUnit(entity) {
   return entity?.attributes?.unit_of_measurement ?? "";
+}
+
+function kibPerSecondToMbps(value) {
+  return typeof value === "number" ? (value * 1024 * 8) / 1_000_000 : 0;
 }
 
 function entityById(states) {
@@ -46,8 +60,13 @@ export function mapAsusRouterStatesToStats(states, generatedAt = new Date().toIS
   const memory = parseNumericState(byId.get(ASUS_ROUTER_ENTITIES.memory));
   const tempEntity = byId.get(ASUS_ROUTER_ENTITIES.cpuTemp);
   const cpuTempC = parseNumericState(tempEntity);
+  const devicesConnected = parseNumericState(byId.get(ASUS_ROUTER_ENTITIES.devicesConnected));
+  const lastBoot = byId.get(ASUS_ROUTER_ENTITIES.lastBoot)?.state ?? null;
   const wanBinary = byId.get(ASUS_ROUTER_ENTITIES.wanBinary)?.state ?? null;
   const wanStatus = byId.get(ASUS_ROUTER_ENTITIES.wanStatus)?.state ?? null;
+  const downloadKibPerSec = parseNumericState(byId.get(ASUS_ROUTER_ENTITIES.downloadSpeed));
+  const uploadKibPerSec = parseNumericState(byId.get(ASUS_ROUTER_ENTITIES.uploadSpeed));
+  const externalIp = byId.get(ASUS_ROUTER_ENTITIES.externalIp)?.state ?? null;
 
   return {
     id: "asus-zenwifi-xd5",
@@ -59,6 +78,15 @@ export function mapAsusRouterStatesToStats(states, generatedAt = new Date().toIS
     memory,
     cpuTempC,
     cpuTempUnit: normalizeUnit(tempEntity) || "C",
+    devicesConnected,
+    lastBoot,
+    externalIp,
+    networkInMbps: kibPerSecondToMbps(downloadKibPerSec),
+    networkOutMbps: kibPerSecondToMbps(uploadKibPerSec),
+    rawSpeed: {
+      downloadKibPerSec,
+      uploadKibPerSec,
+    },
     cpuCores: ASUS_ROUTER_ENTITIES.cpuCores.map((entityId, index) => ({
       core: index + 1,
       entityId,
@@ -89,17 +117,17 @@ export function routerHostFromHomeAssistant(stats) {
     memory: stats.memory,
     disk: null,
     diskIoMbps: 0,
-    networkInMbps: 0,
-    networkOutMbps: 0,
+    networkInMbps: stats.networkInMbps ?? 0,
+    networkOutMbps: stats.networkOutMbps ?? 0,
     rxBytes: 0,
     txBytes: 0,
     latencyMs: 0.6,
     packetLossPct: null,
     cpuTempC: stats.cpuTempC,
-    uptime: stats.wan?.status ?? "unknown",
+    uptime: stats.lastBoot ? `booted ${new Date(stats.lastBoot).toLocaleString()}` : stats.wan?.status ?? "unknown",
     exitNode: false,
     subnetRoutes: true,
-    activeServices: 2,
+    activeServices: stats.devicesConnected ?? 2,
     tags: ["router", "asuswrt", "home-assistant"],
     tailscaleIp: null,
     magicDns: null,
@@ -142,6 +170,9 @@ export async function fetchHomeAssistantRouterStats(options = {}) {
         },
         signal: controller.signal,
       });
+      if (response.status === 404) {
+        continue;
+      }
       if (!response.ok) {
         throw new Error(`Home Assistant ${entityId} returned ${response.status}`);
       }

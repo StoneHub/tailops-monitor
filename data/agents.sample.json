@@ -33,7 +33,7 @@
         {
           "agentId": "home-assistant-mcp",
           "type": "MCP",
-          "status": "auth-needed",
+          "status": "available",
           "contact": "http://100.104.71.37:8086/mcp",
           "capabilities": [
             "home-assistant",

@@ -10,7 +10,7 @@ Ambient Tailscale device performance dashboard for a local network. The app rend
 ## What It Shows
 
 - Live Tailscale hosts from `tailscale status --json` when served with `npm run serve`
-- ASUSWRT router CPU, memory, WAN state, and CPU temperature through Home Assistant when `TAILOPS_HA_TOKEN` is configured
+- ASUSWRT router WAN state, upload/download speed, connected-device count, external IP, and last boot through Home Assistant when `TAILOPS_HA_TOKEN` is configured
 - Tailscale peer online/offline state, OS, MagicDNS name, Tailscale IP, relay, activity state, tx/rx counters, exit-node and subnet-route state
 - Local machine CPU and memory from Windows CIM when available
 - Placeholder fields for remote CPU, memory, disk, disk I/O, packet loss, and CPU temperature until a per-host agent reports them
@@ -81,7 +81,7 @@ $env:TAILOPS_HA_TOKEN = "<home-assistant-long-lived-access-token>"
 npm run serve
 ```
 
-Known ASUS entities currently targeted:
+Known ASUS entities currently targeted. CPU, memory, and temperature are included when HA exposes them; the current live ASUS data set includes WAN status, upload/download speed, connected devices, external IP, and last boot.
 
 ```text
 sensor.192_168_50_1_cpu_usage
@@ -93,8 +93,13 @@ sensor.192_168_50_1_memory_usage
 sensor.192_168_50_1_memory_free
 sensor.192_168_50_1_memory_used
 sensor.192_168_50_1_cpu_temperature
+sensor.192_168_50_1_devices_connected
+sensor.192_168_50_1_last_boot
 binary_sensor.zenwifi_xd5_7890_wan_status
 sensor.zenwifi_xd5_7890_wan_status
+sensor.zenwifi_xd5_7890_download_speed
+sensor.zenwifi_xd5_7890_upload_speed
+sensor.zenwifi_xd5_7890_external_ip
 ```
 
 Run tests with:

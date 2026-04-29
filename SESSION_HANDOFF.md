@@ -51,10 +51,11 @@ Current known state:
 - `ha-mcp.service` is active.
 - HA MCP bridge responds at `http://100.104.71.37:8086/mcp`.
 - The bridge URL was fixed from `https://127.0.0.1:8123` to `http://127.0.0.1:8123`.
-- The bridge token in `/home/monroe/.homeassistant-token` is invalid.
-- `hass --script auth list` reported zero users at the time of repair.
+- The bridge token in `/home/monroe/.homeassistant-token` was updated from the provided long-lived token, had trailing Windows CR/LF stripped, and the bridge was restarted.
+- The bridge was verified with `ha_get_state` on `sensor.192_168_50_1_devices_connected`.
+- `hass --script auth list` reported zero users at the time of repair, but the long-lived token provided by the user is valid for the API.
 
-Current blocker: create or provide a valid Home Assistant long-lived access token, then restart TailOps with:
+Current secret requirement: restart TailOps with a valid Home Assistant long-lived access token in the environment:
 
 ```powershell
 $env:TAILOPS_HA_URL = "http://100.104.71.37:8123"
@@ -62,7 +63,7 @@ $env:TAILOPS_HA_TOKEN = "<home-assistant-long-lived-access-token>"
 npm run serve
 ```
 
-Once that token is set, TailOps should add a virtual `ZenWiFi XD5` router host to `/api/telemetry`.
+With that token set, TailOps adds a virtual `ZenWiFi XD5` router host to `/api/telemetry`.
 
 ## ASUSWRT Entities Targeted
 
@@ -78,9 +79,16 @@ sensor.192_168_50_1_memory_usage
 sensor.192_168_50_1_memory_free
 sensor.192_168_50_1_memory_used
 sensor.192_168_50_1_cpu_temperature
+sensor.192_168_50_1_devices_connected
+sensor.192_168_50_1_last_boot
 binary_sensor.zenwifi_xd5_7890_wan_status
 sensor.zenwifi_xd5_7890_wan_status
+sensor.zenwifi_xd5_7890_download_speed
+sensor.zenwifi_xd5_7890_upload_speed
+sensor.zenwifi_xd5_7890_external_ip
 ```
+
+As of the last live check, HA exposed WAN status, connected-device count, last boot, external IP, upload speed, and download speed. CPU, memory, and CPU temperature entity IDs were present in the registry earlier but were not present in current `/api/states`, so TailOps tolerates those optional entities being absent.
 
 ## Verification
 
@@ -90,22 +98,24 @@ Last known test command:
 npm test
 ```
 
-Result: 17 passing tests.
+Result: 18 passing tests.
 
 The sandbox blocked Node's test-runner worker spawn with `spawn EPERM`; running the same command with escalation succeeded.
 
-Last known live telemetry state without HA token:
+Last known live telemetry state with HA token:
 
 ```json
 {
-  "available": false,
+  "available": true,
   "source": "home-assistant",
-  "homeAssistantUrl": "http://100.104.71.37:8123",
-  "error": "TAILOPS_HA_TOKEN is not set"
+  "devicesConnected": 59,
+  "externalIp": "192.168.1.101",
+  "networkInMbps": 0.21264925070411775,
+  "networkOutMbps": 0.28088774357807594
 }
 ```
 
-This is expected until a valid HA token is supplied.
+The exact speed values change over time.
 
 ## Suggested Next Session Steps
 
@@ -115,7 +125,7 @@ This is expected until a valid HA token is supplied.
 4. Open `http://127.0.0.1:4173/api/telemetry` and confirm Tailscale live data.
 5. Add a valid Home Assistant long-lived access token to `TAILOPS_HA_TOKEN`.
 6. Confirm `/api/telemetry` includes `integrations.homeAssistant.available: true`.
-7. Confirm the virtual `ZenWiFi XD5` router host appears with CPU, memory, WAN status, and CPU temperature.
+7. Confirm the virtual `ZenWiFi XD5` router host appears with WAN status, connected devices, upload/download speed, external IP, and last boot. CPU/memory/temp should appear automatically if HA exposes those ASUSWRT entities again.
 8. Consider making `/api/agents` generated from live Tailscale plus discovered MCP/A2A endpoints instead of using `data/agents.sample.json`.
 9. Consider adding a real MCP server/resource for the phonebook.
 10. Only after explicit approval, publish the repo to GitHub under `@stonehub`.

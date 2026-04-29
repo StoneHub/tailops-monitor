@@ -74,7 +74,7 @@ export const sampleAgentHosts = [
       {
         id: "home-assistant-mcp",
         type: "MCP",
-        status: "auth-needed",
+        status: "available",
         endpoint: "http://100.104.71.37:8086/mcp",
         capabilities: ["home-assistant", "asuswrt", "router-stats", "local-network"],
         lastSeen: "2026-04-29T11:25:00-04:00",
