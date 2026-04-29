@@ -10,6 +10,7 @@ Ambient Tailscale device performance dashboard for a local network. The app rend
 ## What It Shows
 
 - Live Tailscale hosts from `tailscale status --json` when served with `npm run serve`
+- ASUSWRT router CPU, memory, WAN state, and CPU temperature through Home Assistant when `TAILOPS_HA_TOKEN` is configured
 - Tailscale peer online/offline state, OS, MagicDNS name, Tailscale IP, relay, activity state, tx/rx counters, exit-node and subnet-route state
 - Local machine CPU and memory from Windows CIM when available
 - Placeholder fields for remote CPU, memory, disk, disk I/O, packet loss, and CPU temperature until a per-host agent reports them
@@ -57,6 +58,44 @@ http://127.0.0.1:4173/api/agents
 ```
 
 The browser falls back to simulated demo telemetry when opened directly from `file://`.
+
+## Home Assistant And ASUSWRT
+
+Home Assistant on fcfdev is reachable at:
+
+```text
+http://100.104.71.37:8123/
+```
+
+The Home Assistant MCP bridge is reachable on the tailnet at:
+
+```text
+http://100.104.71.37:8086/mcp
+```
+
+TailOps can pull ASUSWRT entities directly from Home Assistant's REST API. Set a Home Assistant long-lived access token before starting the dashboard:
+
+```powershell
+$env:TAILOPS_HA_URL = "http://100.104.71.37:8123"
+$env:TAILOPS_HA_TOKEN = "<home-assistant-long-lived-access-token>"
+npm run serve
+```
+
+Known ASUS entities currently targeted:
+
+```text
+sensor.192_168_50_1_cpu_usage
+sensor.192_168_50_1_cpu_core_1_usage
+sensor.192_168_50_1_cpu_core_2_usage
+sensor.192_168_50_1_cpu_core_3_usage
+sensor.192_168_50_1_cpu_core_4_usage
+sensor.192_168_50_1_memory_usage
+sensor.192_168_50_1_memory_free
+sensor.192_168_50_1_memory_used
+sensor.192_168_50_1_cpu_temperature
+binary_sensor.zenwifi_xd5_7890_wan_status
+sensor.zenwifi_xd5_7890_wan_status
+```
 
 Run tests with:
 

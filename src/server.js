@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { promisify } from "node:util";
 import { mapTailscaleStatusToHosts } from "./telemetry.js";
+import { fetchHomeAssistantRouterStats, routerHostFromHomeAssistant } from "./home-assistant.js";
 
 const root = resolve(new URL("..", import.meta.url).pathname.slice(1));
 const execFileAsync = promisify(execFile);
@@ -100,6 +101,11 @@ async function getLiveTelemetry() {
   const status = JSON.parse(stdout);
   const localMetrics = await getLocalMetrics();
   const ratesById = calculateRates(status);
+  const homeAssistant = await fetchHomeAssistantRouterStats();
+  const hosts = mapTailscaleStatusToHosts(status, { localMetrics, ratesById });
+  if (homeAssistant.available) {
+    hosts.push(routerHostFromHomeAssistant(homeAssistant));
+  }
   return {
     schema: "tailops.telemetry.v1",
     source: "tailscale-cli",
@@ -110,7 +116,10 @@ async function getLiveTelemetry() {
       backendState: status.BackendState ?? null,
       health: status.Health ?? [],
     },
-    hosts: mapTailscaleStatusToHosts(status, { localMetrics, ratesById }),
+    integrations: {
+      homeAssistant,
+    },
+    hosts,
   };
 }
 

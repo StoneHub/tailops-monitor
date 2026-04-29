@@ -24,24 +24,24 @@
       ]
     },
     {
-      "host": "nuc-lab",
-      "hostId": "nuc-lab",
+      "host": "fcfdev",
+      "hostId": "fcfdev",
       "status": "online",
-      "tailscaleIp": "100.85.10.21",
-      "magicDns": "nuc-lab.tailnet.ts.net",
+      "tailscaleIp": "100.104.71.37",
+      "magicDns": "fcfdev.tail161fa6.ts.net",
       "agents": [
         {
-          "agentId": "lab-mcp",
+          "agentId": "home-assistant-mcp",
           "type": "MCP",
-          "status": "available",
-          "contact": "https://nuc-lab.tailnet.ts.net/mcp",
+          "status": "auth-needed",
+          "contact": "http://100.104.71.37:8086/mcp",
           "capabilities": [
-            "shell",
-            "git",
-            "builds",
-            "containers"
+            "home-assistant",
+            "asuswrt",
+            "router-stats",
+            "local-network"
           ],
-          "lastSeen": "2026-04-29T14:12:01-04:00"
+          "lastSeen": "2026-04-29T11:25:00-04:00"
         }
       ]
     },
