@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TailOps Monitor</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <main class="dashboard" aria-label="TailOps Monitor ambient dashboard">
+      <canvas id="meshCanvas" aria-hidden="true"></canvas>
+
+      <header class="topbar">
+        <div>
+          <p class="label">TailOps Monitor</p>
+          <h1>Ambient Tailnet Mesh</h1>
+        </div>
+        <div class="status-line">
+          <span id="clock">--:--</span>
+          <span>Local dashboard</span>
+          <span id="agentCount">0 agents reachable</span>
+        </div>
+      </header>
+
+      <section class="spotlight" aria-label="Top activity host">
+        <div class="spotlight-head">
+          <div>
+            <p class="label">Top Activity</p>
+            <h2 id="topHostName">nas-vault</h2>
+          </div>
+          <div class="score-ring" id="topScore">98</div>
+        </div>
+        <p class="reason" id="topReason">High network + disk IO</p>
+        <div class="metrics-grid">
+          <div><span>CPU</span><strong id="metricCpu">82%</strong></div>
+          <div><span>MEM</span><strong id="metricMemory">64%</strong></div>
+          <div><span>TEMP</span><strong id="metricTemp">71C</strong></div>
+          <div><span>LAT</span><strong id="metricLatency">0.8ms</strong></div>
+          <div><span>DISK IO</span><strong id="metricDiskIo">1.2GB/s</strong></div>
+          <div><span>NET</span><strong id="metricNet">12.7Gbps</strong></div>
+        </div>
+        <canvas id="spotlightChart" width="420" height="120" aria-label="Top host throughput and disk IO chart"></canvas>
+        <div class="agent-strip" id="agentStrip">Agent directory loading</div>
+      </section>
+
+      <section class="throughput panel" aria-label="Global throughput chart">
+        <div class="panel-head">
+          <span>Global Throughput</span>
+          <strong id="globalThroughput">12.4 Gbps</strong>
+        </div>
+        <canvas id="throughputChart" width="520" height="130"></canvas>
+      </section>
+
+      <section class="health panel" aria-label="Host health summary">
+        <div class="panel-head">
+          <span>Host Health + CPU Temp</span>
+          <strong>7 nodes</strong>
+        </div>
+        <div class="heatmap" id="healthHeatmap"></div>
+      </section>
+
+      <section class="latency panel" aria-label="Mesh latency">
+        <div class="panel-head">
+          <span>Mesh Latency</span>
+          <strong id="meshLatency">1.2 ms avg</strong>
+        </div>
+        <div class="loss-strip"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </section>
+
+      <script id="tailops-agent-directory" type="application/json"></script>
+    </main>
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>

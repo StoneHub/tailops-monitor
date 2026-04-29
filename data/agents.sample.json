@@ -1,0 +1,128 @@
+{
+  "schema": "tailops.agent-directory.v1",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "hosts": [
+    {
+      "host": "atlas-win11",
+      "hostId": "atlas-win11",
+      "status": "online",
+      "tailscaleIp": "100.84.20.11",
+      "magicDns": "atlas-win11.tailnet.ts.net",
+      "agents": [
+        {
+          "agentId": "desktop-helper",
+          "type": "local worker",
+          "status": "available",
+          "contact": "http://atlas-win11.tailnet.ts.net:8787/agent",
+          "capabilities": [
+            "browser",
+            "desktop",
+            "windows"
+          ],
+          "lastSeen": "2026-04-29T14:10:15-04:00"
+        }
+      ]
+    },
+    {
+      "host": "nuc-lab",
+      "hostId": "nuc-lab",
+      "status": "online",
+      "tailscaleIp": "100.85.10.21",
+      "magicDns": "nuc-lab.tailnet.ts.net",
+      "agents": [
+        {
+          "agentId": "lab-mcp",
+          "type": "MCP",
+          "status": "available",
+          "contact": "https://nuc-lab.tailnet.ts.net/mcp",
+          "capabilities": [
+            "shell",
+            "git",
+            "builds",
+            "containers"
+          ],
+          "lastSeen": "2026-04-29T14:12:01-04:00"
+        }
+      ]
+    },
+    {
+      "host": "nas-vault",
+      "hostId": "nas-vault",
+      "status": "online",
+      "tailscaleIp": "100.88.12.42",
+      "magicDns": "nas-vault.tailnet.ts.net",
+      "agents": [
+        {
+          "agentId": "openclaw-nas",
+          "type": "OpenClaw",
+          "status": "available",
+          "contact": "http://nas-vault.tailnet.ts.net:4317/mcp",
+          "capabilities": [
+            "files",
+            "storage",
+            "indexing",
+            "retrieval"
+          ],
+          "lastSeen": "2026-04-29T14:12:30-04:00"
+        }
+      ]
+    },
+    {
+      "host": "pi-dns",
+      "hostId": "pi-dns",
+      "status": "online",
+      "tailscaleIp": "100.64.0.53",
+      "magicDns": "pi-dns.tailnet.ts.net",
+      "agents": []
+    },
+    {
+      "host": "media-mac",
+      "hostId": "media-mac",
+      "status": "online",
+      "tailscaleIp": "100.91.44.18",
+      "magicDns": "media-mac.tailnet.ts.net",
+      "agents": [
+        {
+          "agentId": "render-worker",
+          "type": "local worker",
+          "status": "busy",
+          "contact": "ws://media-mac.tailnet.ts.net:8787/agent",
+          "capabilities": [
+            "video",
+            "transcode",
+            "media"
+          ],
+          "lastSeen": "2026-04-29T14:11:02-04:00"
+        }
+      ]
+    },
+    {
+      "host": "work-laptop",
+      "hostId": "work-laptop",
+      "status": "warning",
+      "tailscaleIp": "100.77.8.19",
+      "magicDns": "work-laptop.tailnet.ts.net",
+      "agents": [
+        {
+          "agentId": "laptop-codex",
+          "type": "OpenClaw",
+          "status": "unknown",
+          "contact": "http://work-laptop.tailnet.ts.net:3920/mcp",
+          "capabilities": [
+            "coding",
+            "files"
+          ],
+          "lastSeen": "2026-04-29T13:59:42-04:00"
+        }
+      ]
+    },
+    {
+      "host": "homelab-router",
+      "hostId": "homelab-router",
+      "status": "online",
+      "tailscaleIp": "100.100.1.1",
+      "magicDns": "homelab-router.tailnet.ts.net",
+      "agents": []
+    }
+  ]
+}
