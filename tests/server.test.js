@@ -9,6 +9,13 @@ test("resolveStaticRequest maps /api/agents to JSON response metadata", () => {
   assert.equal(result.contentType, "application/json; charset=utf-8");
 });
 
+test("resolveStaticRequest maps /api/telemetry to live telemetry metadata", () => {
+  const result = resolveStaticRequest("/api/telemetry");
+
+  assert.equal(result.kind, "telemetry");
+  assert.equal(result.contentType, "application/json; charset=utf-8");
+});
+
 test("resolveStaticRequest maps root to index.html", () => {
   const result = resolveStaticRequest("/");
 

@@ -1,8 +1,13 @@
 import { createServer } from "node:http";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
+import { promisify } from "node:util";
+import { mapTailscaleStatusToHosts } from "./telemetry.js";
 
 const root = resolve(new URL("..", import.meta.url).pathname.slice(1));
+const execFileAsync = promisify(execFile);
+const previousCounters = new Map();
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
   [".css", "text/css; charset=utf-8"],
@@ -19,6 +24,12 @@ export function resolveStaticRequest(urlPath) {
     return {
       kind: "agents",
       path: join(root, "data", "agents.sample.json"),
+      contentType: "application/json; charset=utf-8",
+    };
+  }
+  if (cleanPath === "/api/telemetry") {
+    return {
+      kind: "telemetry",
       contentType: "application/json; charset=utf-8",
     };
   }
@@ -39,12 +50,90 @@ export function resolveStaticRequest(urlPath) {
   };
 }
 
+function calculateRates(status, now = Date.now()) {
+  const peers = [status.Self, ...Object.values(status.Peer ?? {})].filter(Boolean);
+  const rates = new Map();
+  for (const peer of peers) {
+    const id = peer.ID || peer.PublicKey || peer.DNSName || peer.HostName;
+    if (!id) continue;
+    const previous = previousCounters.get(id);
+    const rxBytes = peer.RxBytes ?? 0;
+    const txBytes = peer.TxBytes ?? 0;
+    if (previous && now > previous.timestamp) {
+      const seconds = (now - previous.timestamp) / 1000;
+      rates.set(id, {
+        networkInMbps: Math.max(0, ((rxBytes - previous.rxBytes) * 8) / seconds / 1_000_000),
+        networkOutMbps: Math.max(0, ((txBytes - previous.txBytes) * 8) / seconds / 1_000_000),
+      });
+    }
+    previousCounters.set(id, { rxBytes, txBytes, timestamp: now });
+  }
+  return rates;
+}
+
+async function getLocalMetrics() {
+  if (process.platform !== "win32") return {};
+  try {
+    const script = [
+      "$cpu=(Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average",
+      "$os=Get-CimInstance Win32_OperatingSystem",
+      "$mem=[math]::Round((($os.TotalVisibleMemorySize-$os.FreePhysicalMemory)/$os.TotalVisibleMemorySize)*100)",
+      "$thermal=$null",
+      "try { $t=Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop | Select-Object -First 1; if ($t) { $thermal=[math]::Round(($t.CurrentTemperature/10)-273.15) } } catch {}",
+      "[pscustomobject]@{cpu=[math]::Round($cpu);memory=$mem;cpuTempC=$thermal} | ConvertTo-Json -Compress",
+    ].join("; ");
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", script], { timeout: 5000 });
+    return JSON.parse(stdout);
+  } catch {
+    return {};
+  }
+}
+
+async function getLiveTelemetry() {
+  const { stdout } = await execFileAsync("tailscale", ["status", "--json"], { timeout: 8000 });
+  const status = JSON.parse(stdout);
+  const localMetrics = await getLocalMetrics();
+  const ratesById = calculateRates(status);
+  return {
+    schema: "tailops.telemetry.v1",
+    source: "tailscale-cli",
+    generatedAt: new Date().toISOString(),
+    tailnet: {
+      name: status.CurrentTailnet?.Name ?? null,
+      magicDnsSuffix: status.MagicDNSSuffix ?? null,
+      backendState: status.BackendState ?? null,
+      health: status.Health ?? [],
+    },
+    hosts: mapTailscaleStatusToHosts(status, { localMetrics, ratesById }),
+  };
+}
+
 export function createTailopsServer() {
   return createServer(async (request, response) => {
     const result = resolveStaticRequest(request.url ?? "/");
     if (result.kind === "not-found") {
       response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
       response.end("Not found");
+      return;
+    }
+
+    if (result.kind === "telemetry") {
+      try {
+        const telemetry = await getLiveTelemetry();
+        response.writeHead(200, {
+          "content-type": result.contentType,
+          "cache-control": "no-store",
+          "access-control-allow-origin": "*",
+        });
+        response.end(JSON.stringify(telemetry, null, 2));
+      } catch (error) {
+        response.writeHead(503, {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+          "access-control-allow-origin": "*",
+        });
+        response.end(JSON.stringify({ schema: "tailops.telemetry.v1", source: "unavailable", error: error.message }, null, 2));
+      }
       return;
     }
 

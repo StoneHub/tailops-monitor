@@ -18,22 +18,46 @@ const throughputChart = document.querySelector("#throughputChart").getContext("2
 const directory = buildAgentDirectory(sampleAgentHosts);
 const reachableAgents = getReachableAgents(directory);
 const agentJson = serializeAgentDirectory(directory);
+const appState = {
+  liveHosts: null,
+  telemetrySource: "demo",
+  lastTelemetryAt: null,
+};
 
 document.querySelector("#tailops-agent-directory").textContent = agentJson;
 window.tailopsAgentDirectory = JSON.parse(agentJson);
 window.tailopsReachableAgents = reachableAgents;
 
-const links = [
-  ["homelab-router", "nas-vault"],
-  ["homelab-router", "nuc-lab"],
-  ["homelab-router", "pi-dns"],
-  ["homelab-router", "atlas-win11"],
-  ["homelab-router", "media-mac"],
-  ["homelab-router", "work-laptop"],
-  ["nas-vault", "nuc-lab"],
-  ["nas-vault", "media-mac"],
-  ["nuc-lab", "atlas-win11"],
-];
+async function pollLiveTelemetry() {
+  if (window.location.protocol === "file:") return;
+  try {
+    const response = await fetch("/api/telemetry", { cache: "no-store" });
+    if (!response.ok) throw new Error(`telemetry ${response.status}`);
+    const telemetry = await response.json();
+    if (Array.isArray(telemetry.hosts) && telemetry.hosts.length > 0) {
+      appState.liveHosts = telemetry.hosts;
+      appState.telemetrySource = telemetry.source ?? "live";
+      appState.lastTelemetryAt = telemetry.generatedAt ?? new Date().toISOString();
+    }
+  } catch {
+    appState.telemetrySource = "demo";
+  }
+}
+
+function buildLinks(hosts, topHost) {
+  const self = hosts.find((host) => host.role === "This device") ?? hosts[0];
+  const hub = hosts.find((host) => host.subnetRoutes || host.exitNode) ?? self;
+  const links = [];
+  for (const host of hosts) {
+    if (host.id !== hub.id) links.push([hub.id, host.id]);
+  }
+  if (topHost && topHost.id !== hub.id) {
+    for (const host of hosts.filter((candidate) => candidate.id !== topHost.id && candidate.id !== hub.id).slice(0, 3)) {
+      links.push([topHost.id, host.id]);
+    }
+  }
+  return links;
+}
 
 function resizeCanvas(canvas, ctx) {
   const ratio = Math.max(1, window.devicePixelRatio || 1);
@@ -52,6 +76,7 @@ function pointFor(host, width, height) {
 
 function colorForHost(host) {
   const temp = normalizeCpuTemperature(host.cpuTempC);
+  if (temp.level === "unknown" && host.status === "online") return "#37d7ff";
   if (host.status === "warning" || temp.level === "hot") return "#ffae3d";
   if (host.status === "offline") return "#ff5b75";
   if (temp.level === "warm") return "#37d7ff";
@@ -59,6 +84,7 @@ function colorForHost(host) {
 }
 
 function drawRing(ctx, x, y, radius, pct, color, start = -Math.PI / 2) {
+  const safePct = typeof pct === "number" && Number.isFinite(pct) ? pct : 0;
   ctx.beginPath();
   ctx.strokeStyle = "rgba(130, 146, 173, 0.18)";
   ctx.lineWidth = 3;
@@ -68,17 +94,18 @@ function drawRing(ctx, x, y, radius, pct, color, start = -Math.PI / 2) {
   ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.lineCap = "round";
-  ctx.arc(x, y, radius, start, start + Math.PI * 2 * pct);
+  ctx.arc(x, y, radius, start, start + Math.PI * 2 * safePct);
   ctx.stroke();
 }
 
 function drawFlows(ctx, hosts, topHost, time, width, height) {
+  const links = buildLinks(hosts, topHost);
   const map = new Map(hosts.map((host) => [host.id, { host, ...pointFor(host, width, height) }]));
   for (const [fromId, toId] of links) {
     const from = map.get(fromId);
     const to = map.get(toId);
     if (!from || !to) continue;
-    const traffic = ((from.host.networkInMbps + from.host.networkOutMbps + to.host.networkInMbps + to.host.networkOutMbps) / 2000);
+    const traffic = (((from.host.networkInMbps ?? 0) + (from.host.networkOutMbps ?? 0) + (to.host.networkInMbps ?? 0) + (to.host.networkOutMbps ?? 0)) / 2000);
     const intensity = Math.min(1, 0.18 + traffic * 0.14);
     const isTop = fromId === topHost.id || toId === topHost.id;
     const pulse = (Math.sin(time / 420 + from.x * 0.01) + 1) / 2;
@@ -126,8 +153,8 @@ function drawNode(ctx, host, topHost, time, width, height) {
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  drawRing(ctx, x, y, radius + 7, host.cpu / 100, "#4188ff");
-  drawRing(ctx, x, y, radius + 12, host.memory / 100, "#37d7ff", -Math.PI / 2 + 0.4);
+  drawRing(ctx, x, y, radius + 7, (host.cpu ?? 0) / 100, "#4188ff");
+  drawRing(ctx, x, y, radius + 12, (host.memory ?? 0) / 100, "#37d7ff", -Math.PI / 2 + 0.4);
   drawRing(ctx, x, y, radius + 17, thermal.normalized / 100, color, -Math.PI / 2 + 0.8);
 
   ctx.fillStyle = color;
@@ -141,7 +168,7 @@ function drawNode(ctx, host, topHost, time, width, height) {
   ctx.fillText(host.name, x, y + radius + 32);
   ctx.fillStyle = "rgba(130, 146, 173, 0.86)";
   ctx.font = "10px Inter, sans-serif";
-  ctx.fillText(`${host.cpuTempC}C CPU temp`, x, y + radius + 47);
+  ctx.fillText(host.cpuTempC == null ? `${host.os ?? "peer"} / temp unknown` : `${host.cpuTempC}C CPU temp`, x, y + radius + 47);
 }
 
 function drawChart(ctx, values, color, fill, width, height) {
@@ -174,20 +201,21 @@ function drawChart(ctx, values, color, fill, width, height) {
 
 function updateDom(hosts, topHost, time) {
   const agentText = reachableAgents.map((agent) => `${agent.type} on ${agent.host}`).join(" • ");
-  const netTotal = topHost.networkInMbps + topHost.networkOutMbps;
+  const netTotal = (topHost.networkInMbps ?? 0) + (topHost.networkOutMbps ?? 0);
   document.querySelector("#clock").textContent = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date());
-  document.querySelector("#agentCount").textContent = `${reachableAgents.length} agents reachable`;
+  document.querySelector("#agentCount").textContent = `${appState.telemetrySource === "tailscale-cli" ? "live Tailscale" : "demo"} • ${reachableAgents.length} agents reachable`;
   document.querySelector("#topHostName").textContent = topHost.name;
   document.querySelector("#topScore").textContent = topHost.score;
   document.querySelector("#topReason").textContent = topHost.reason;
-  document.querySelector("#metricCpu").textContent = `${topHost.cpu}%`;
-  document.querySelector("#metricMemory").textContent = `${topHost.memory}%`;
-  document.querySelector("#metricTemp").textContent = `${topHost.cpuTempC}C`;
-  document.querySelector("#metricLatency").textContent = `${topHost.latencyMs}ms`;
+  document.querySelector("#metricCpu").textContent = topHost.cpu == null ? "--" : `${topHost.cpu}%`;
+  document.querySelector("#metricMemory").textContent = topHost.memory == null ? "--" : `${topHost.memory}%`;
+  document.querySelector("#metricTemp").textContent = topHost.cpuTempC == null ? "--" : `${topHost.cpuTempC}C`;
+  document.querySelector("#metricLatency").textContent = topHost.latencyMs == null ? "--" : `${topHost.latencyMs}ms`;
   document.querySelector("#metricDiskIo").textContent = formatMbps(topHost.diskIoMbps);
   document.querySelector("#metricNet").textContent = formatMbps(netTotal);
-  document.querySelector("#globalThroughput").textContent = formatMbps(hosts.reduce((sum, host) => sum + host.networkInMbps + host.networkOutMbps, 0));
-  document.querySelector("#meshLatency").textContent = `${(hosts.reduce((sum, host) => sum + host.latencyMs, 0) / hosts.length).toFixed(1)} ms avg`;
+  document.querySelector("#globalThroughput").textContent = formatMbps(hosts.reduce((sum, host) => sum + (host.networkInMbps ?? 0) + (host.networkOutMbps ?? 0), 0));
+  const latencyHosts = hosts.filter((host) => typeof host.latencyMs === "number");
+  document.querySelector("#meshLatency").textContent = latencyHosts.length === 0 ? "--" : `${(latencyHosts.reduce((sum, host) => sum + host.latencyMs, 0) / latencyHosts.length).toFixed(1)} ms avg`;
   document.querySelector("#agentStrip").innerHTML = `<strong>Agent phonebook:</strong> ${agentText}. JSON available at window.tailopsAgentDirectory.`;
 
   const heatmap = document.querySelector("#healthHeatmap");
@@ -208,7 +236,7 @@ function render(time) {
   resizeCanvas(document.querySelector("#throughputChart"), throughputChart);
   const width = meshCanvas.clientWidth;
   const height = meshCanvas.clientHeight;
-  const hosts = createTelemetrySnapshot(time);
+  const hosts = appState.liveHosts ?? createTelemetrySnapshot(time);
   const topHost = getTopActiveHost(hosts);
 
   meshCtx.clearRect(0, 0, width, height);
@@ -225,3 +253,5 @@ function render(time) {
 }
 
 requestAnimationFrame(render);
+pollLiveTelemetry();
+setInterval(pollLiveTelemetry, 5000);

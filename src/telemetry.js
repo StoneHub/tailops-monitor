@@ -1,6 +1,9 @@
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 export function normalizeCpuTemperature(tempC) {
+  if (typeof tempC !== "number" || Number.isNaN(tempC)) {
+    return { level: "unknown", normalized: 0 };
+  }
   let normalized = Math.floor(clamp(((tempC - 10) / 94) * 100, 0, 100));
   if (tempC >= 82) normalized = clamp(normalized + 1, 0, 100);
   let level = "cool";
@@ -51,8 +54,97 @@ export function getTopActiveHost(hosts) {
 }
 
 export function formatMbps(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "--";
   if (value >= 1000) return `${(value / 1000).toFixed(1)} Gbps`;
   return `${Math.round(value)} Mbps`;
+}
+
+function hashToUnit(text, salt) {
+  let hash = 2166136261;
+  const input = `${text}:${salt}`;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
+}
+
+function stripTrailingDot(value) {
+  return typeof value === "string" ? value.replace(/\.$/, "") : "";
+}
+
+function hasSubnetRoutes(peer) {
+  return (peer.AllowedIPs ?? []).some((cidr) => {
+    if (typeof cidr !== "string") return false;
+    return !cidr.startsWith("100.") && !cidr.startsWith("fd7a:") && !cidr.endsWith("/32") && !cidr.endsWith("/128");
+  });
+}
+
+function estimateLatency(peer) {
+  if (peer.__tailopsSelf) return 0;
+  if (!peer.Online) return null;
+  if (peer.CurAddr) return 0.8;
+  if (peer.Relay) return 24;
+  return null;
+}
+
+function displayNameForPeer(peer, id) {
+  const dnsName = stripTrailingDot(peer.DNSName);
+  if (peer.HostName && peer.HostName.toLowerCase() !== "localhost") return peer.HostName;
+  if (dnsName) return dnsName.split(".")[0];
+  return id;
+}
+
+function hostFromTailscalePeer(peer, index, count, options = {}) {
+  const id = peer.ID || peer.PublicKey || peer.DNSName || peer.HostName || `host-${index}`;
+  const rates = options.ratesById?.get(id) ?? {};
+  const isSelf = options.isSelf === true;
+  const localMetrics = isSelf ? options.localMetrics ?? {} : {};
+  const angle = Math.PI * 2 * (index / Math.max(count, 1)) - Math.PI / 2;
+  const radius = 0.26 + hashToUnit(id, "radius") * 0.18;
+  const x = clamp(0.5 + Math.cos(angle) * radius + (hashToUnit(id, "x") - 0.5) * 0.08, 0.12, 0.88);
+  const y = clamp(0.5 + Math.sin(angle) * radius + (hashToUnit(id, "y") - 0.5) * 0.08, 0.16, 0.84);
+
+  return {
+    id,
+    name: displayNameForPeer(peer, id),
+    role: isSelf ? "This device" : peer.OS || "Tailnet peer",
+    os: peer.OS ?? "unknown",
+    status: peer.Online ? "online" : "offline",
+    x,
+    y,
+    cpu: localMetrics.cpu ?? null,
+    memory: localMetrics.memory ?? null,
+    disk: null,
+    diskIoMbps: localMetrics.diskIoMbps ?? 0,
+    networkInMbps: rates.networkInMbps ?? 0,
+    networkOutMbps: rates.networkOutMbps ?? 0,
+    rxBytes: peer.RxBytes ?? 0,
+    txBytes: peer.TxBytes ?? 0,
+    latencyMs: estimateLatency(peer),
+    packetLossPct: null,
+    cpuTempC: localMetrics.cpuTempC ?? null,
+    uptime: peer.LastHandshake && !peer.LastHandshake.startsWith("0001-") ? `seen ${new Date(peer.LastHandshake).toLocaleString()}` : "unknown",
+    exitNode: Boolean(peer.ExitNode || peer.ExitNodeOption),
+    subnetRoutes: hasSubnetRoutes(peer),
+    activeServices: 0,
+    tags: [peer.OS, peer.Relay ? `relay:${peer.Relay}` : null, peer.Active ? "active" : null].filter(Boolean),
+    tailscaleIp: peer.TailscaleIPs?.[0] ?? null,
+    magicDns: stripTrailingDot(peer.DNSName),
+    active: Boolean(peer.Active),
+    relay: peer.Relay ?? "",
+  };
+}
+
+export function mapTailscaleStatusToHosts(status, options = {}) {
+  const self = status.Self ? { ...status.Self, __tailopsSelf: true } : null;
+  const peers = [self, ...Object.values(status.Peer ?? {})].filter(Boolean);
+  return peers.map((peer, index) =>
+    hostFromTailscalePeer(peer, index, peers.length, {
+      ...options,
+      isSelf: peer.__tailopsSelf === true,
+    }),
+  );
 }
 
 export function createTelemetrySnapshot(seed = 0) {

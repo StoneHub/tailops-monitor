@@ -1,6 +1,6 @@
 # TailOps Monitor
 
-Ambient Tailscale device performance dashboard for a local network. The first build is a dependency-free static web app that renders a mesh constellation of hosts, animated traffic flows, CPU temperature health rings, and a top-activity spotlight.
+Ambient Tailscale device performance dashboard for a local network. The app renders a mesh constellation of hosts, animated traffic flows, CPU temperature health rings when available, and a top-activity spotlight.
 
 ## Design Reference
 
@@ -9,8 +9,10 @@ Ambient Tailscale device performance dashboard for a local network. The first bu
 
 ## What It Shows
 
-- Tailscale-style hosts: `atlas-win11`, `nuc-lab`, `nas-vault`, `pi-dns`, `media-mac`, `work-laptop`, `homelab-router`
-- Per-host CPU, memory, disk, disk I/O, network in/out, latency, packet loss, uptime, CPU temperature, exit-node and subnet-route state
+- Live Tailscale hosts from `tailscale status --json` when served with `npm run serve`
+- Tailscale peer online/offline state, OS, MagicDNS name, Tailscale IP, relay, activity state, tx/rx counters, exit-node and subnet-route state
+- Local machine CPU and memory from Windows CIM when available
+- Placeholder fields for remote CPU, memory, disk, disk I/O, packet loss, and CPU temperature until a per-host agent reports them
 - Automatically selected top active host, weighted toward network throughput and disk I/O
 - Agent availability indicators for OpenClaw, MCP, and local worker agents
 
@@ -21,13 +23,40 @@ The visible dashboard stays ambient, but the browser exposes a machine-readable 
 - `window.tailopsAgentDirectory`
 - `window.tailopsReachableAgents`
 - `<script id="tailops-agent-directory" type="application/json">`
+- server endpoint: `/api/agents`
 - sample file: `data/agents.sample.json`
 
-This is intended to evolve into `/api/agents` or an MCP resource/tool when the dashboard gets a live backend.
+This is intended to evolve into an MCP resource/tool so local AI agents can discover reachable peers from the phonebook.
 
 ## Run Locally
 
-Open `index.html` in a browser for local-only viewing, or serve it on your LAN with:`r`n`r`n```bash`r`nnpm run serve`r`n``` `r`n`r`nThe server binds to `0.0.0.0:4173` by default and exposes the phonebook at `/api/agents`.
+Open `index.html` in a browser for local-only demo viewing, or serve it on your LAN with:
+
+```bash
+npm run serve
+```
+
+The server binds to `0.0.0.0:4173` by default.
+
+Dashboard:
+
+```text
+http://127.0.0.1:4173/
+```
+
+Live telemetry endpoint:
+
+```text
+http://127.0.0.1:4173/api/telemetry
+```
+
+Agent phonebook endpoint:
+
+```text
+http://127.0.0.1:4173/api/agents
+```
+
+The browser falls back to simulated demo telemetry when opened directly from `file://`.
 
 Run tests with:
 
@@ -37,7 +66,6 @@ npm test
 
 ## Next Integration Points
 
-- Replace simulated telemetry in `src/telemetry.js` with Tailscale, host sensor, and process data.
-- Serve `data/agents.sample.json` as `/api/agents` from a small local backend.
-- Add MCP server support so local AI agents can discover reachable peers from the phonebook.
-
+- Add a per-host TailOps/OpenClaw agent that reports remote CPU, memory, disk, process, and CPU temperature data.
+- Replace `data/agents.sample.json` with a generated or discovered live agent registry.
+- Add MCP server support so local AI agents can query the phonebook directly.
