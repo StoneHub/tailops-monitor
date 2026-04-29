@@ -6,6 +6,10 @@ import {
   summarizeLocalNetwork,
 } from "./telemetry.js";
 import {
+  getNodeLabelPolicy,
+  getScreenMode,
+} from "./layout.js";
+import {
   buildAgentDirectory,
   getReachableAgents,
   sampleAgentHosts,
@@ -15,6 +19,7 @@ import {
 
 const meshCanvas = document.querySelector("#meshCanvas");
 const meshCtx = meshCanvas.getContext("2d");
+const dashboard = document.querySelector(".dashboard");
 const spotlightChart = document.querySelector("#spotlightChart").getContext("2d");
 const throughputChart = document.querySelector("#throughputChart").getContext("2d");
 const routerChart = document.querySelector("#routerChart").getContext("2d");
@@ -34,6 +39,7 @@ const renderState = {
   width: 0,
   height: 0,
   hoveredHost: null,
+  screenMode: "wide",
 };
 const nodeTooltip = document.querySelector("#nodeTooltip");
 
@@ -99,8 +105,24 @@ function colorForHost(host) {
   return temp.level === "unknown" ? "#37d7ff" : "#3ee88a";
 }
 
-function nodeRadius(host, topHost) {
-  return host.id === topHost?.id ? 35 : 19;
+function applyScreenMode(mode) {
+  if (renderState.screenMode === mode && dashboard.classList.contains(`mode-${mode}`)) return;
+  renderState.screenMode = mode;
+  dashboard.classList.remove("mode-wide", "mode-compact", "mode-tiny");
+  dashboard.classList.add(`mode-${mode}`);
+}
+
+function truncateLabel(value, maxLength) {
+  const text = String(value ?? "");
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(1, maxLength - 1))}…`;
+}
+
+function nodeRadius(host, topHost, mode = renderState.screenMode) {
+  const isTop = host.id === topHost?.id;
+  if (mode === "tiny") return isTop ? 27 : 14;
+  if (mode === "compact") return isTop ? 31 : 17;
+  return isTop ? 35 : 19;
 }
 
 function drawRing(ctx, x, y, radius, pct, color, start = -Math.PI / 2) {
@@ -149,14 +171,15 @@ function drawFlows(ctx, hosts, topHost, time, width, height) {
   }
 }
 
-function drawNode(ctx, host, topHost, hoveredHost, time, width, height) {
+function drawNode(ctx, host, topHost, hoveredHost, screenMode, time, width, height) {
   const { x, y } = pointFor(host, width, height);
   const isTop = host.id === topHost.id;
   const isHovered = host.id === hoveredHost?.id;
   const color = colorForHost(host);
   const thermal = normalizeCpuTemperature(host.cpuTempC);
   const pulse = (Math.sin(time / 520) + 1) / 2;
-  const radius = nodeRadius(host, topHost);
+  const radius = nodeRadius(host, topHost, screenMode);
+  const label = getNodeLabelPolicy(screenMode);
 
   if (isTop || isHovered) {
     for (let i = 0; i < 3; i += 1) {
@@ -189,12 +212,14 @@ function drawNode(ctx, host, topHost, hoveredHost, time, width, height) {
   ctx.fill();
 
   ctx.fillStyle = isTop ? "#ffffff" : "rgba(220, 232, 255, 0.82)";
-  ctx.font = isTop ? "700 13px Inter, sans-serif" : "600 11px Inter, sans-serif";
+  ctx.font = isTop ? `700 ${13 * label.fontScale}px Inter, sans-serif` : `600 ${11 * label.fontScale}px Inter, sans-serif`;
   ctx.textAlign = "center";
-  ctx.fillText(host.name, x, y + radius + 32);
-  ctx.fillStyle = "rgba(130, 146, 173, 0.86)";
-  ctx.font = "10px Inter, sans-serif";
-  ctx.fillText(host.cpuTempC == null ? `${host.os ?? "peer"} / temp unknown` : `${host.cpuTempC}C CPU temp`, x, y + radius + 47);
+  ctx.fillText(truncateLabel(host.name, label.maxLength), x, y + radius + (screenMode === "tiny" ? 24 : 32));
+  if (label.showSecondary) {
+    ctx.fillStyle = "rgba(130, 146, 173, 0.86)";
+    ctx.font = "10px Inter, sans-serif";
+    ctx.fillText(host.cpuTempC == null ? `${host.os ?? "peer"} / temp unknown` : `${host.cpuTempC}C CPU temp`, x, y + radius + 47);
+  }
 }
 
 function escapeHtml(value) {
@@ -261,7 +286,7 @@ function positionTooltip(host, clientX, clientY) {
   nodeTooltip.innerHTML = hostTooltipHtml(host);
   const margin = 14;
   const rect = meshCanvas.getBoundingClientRect();
-  const tooltipWidth = 310;
+  const tooltipWidth = renderState.screenMode === "tiny" ? 280 : 310;
   const estimatedHeight = host.homeAssistant ? 298 : 252;
   const left = Math.min(rect.width - tooltipWidth - margin, Math.max(margin, clientX - rect.left + 18));
   const top = Math.min(rect.height - estimatedHeight - margin, Math.max(82, clientY - rect.top + 18));
@@ -384,6 +409,8 @@ function render(time) {
   resizeCanvas(document.querySelector("#deviceChart"), deviceChart);
   const width = meshCanvas.clientWidth;
   const height = meshCanvas.clientHeight;
+  const screenMode = getScreenMode({ width, height });
+  applyScreenMode(screenMode);
   const hosts = appState.liveHosts ?? createTelemetrySnapshot(time);
   const topHost = getTopActiveHost(hosts);
   const localNetwork = summarizeLocalNetwork(hosts);
@@ -394,7 +421,7 @@ function render(time) {
 
   meshCtx.clearRect(0, 0, width, height);
   drawFlows(meshCtx, hosts, topHost, time, width, height);
-  hosts.forEach((host) => drawNode(meshCtx, host, topHost, renderState.hoveredHost, time, width, height));
+  hosts.forEach((host) => drawNode(meshCtx, host, topHost, renderState.hoveredHost, screenMode, time, width, height));
 
   const wave = Array.from({ length: 48 }, (_, index) => 0.36 + Math.sin(time / 520 + index * 0.34) * 0.19 + Math.sin(time / 980 + index * 0.8) * 0.1);
   const disk = Array.from({ length: 48 }, (_, index) => 0.28 + Math.sin(time / 700 + index * 0.5) * 0.14);
