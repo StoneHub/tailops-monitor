@@ -1,6 +1,7 @@
 import Foundation
 import TailOpsCore
 import TailOpsShared
+import WidgetKit
 
 @MainActor
 final class TailOpsActionSettingsModel: ObservableObject {
@@ -62,6 +63,7 @@ final class TailOpsActionSettingsModel: ObservableObject {
         }
         do {
             try store.saveActionConfiguration(configuration)
+            WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
             saveError = nil
             importExportMessage = "Saved actions."
         } catch {

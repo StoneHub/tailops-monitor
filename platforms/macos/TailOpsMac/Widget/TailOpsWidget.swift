@@ -76,9 +76,13 @@ struct TailOpsWidgetView: View {
                     .foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 7) {
-                ForEach(entry.snapshot.hosts.prefix(3)) { host in
-                    WidgetHostActionRow(host: host, actions: actionCatalog.actions(for: host))
+            if entry.snapshot.hosts.isEmpty {
+                WidgetEmptyState()
+            } else {
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(entry.snapshot.hosts.prefix(3)) { host in
+                        WidgetHostActionRow(host: host, actions: actionCatalog.actions(for: host))
+                    }
                 }
             }
         }
@@ -108,6 +112,22 @@ struct TailOpsWidgetView: View {
         case .offline:
             return .red
         }
+    }
+}
+
+private struct WidgetEmptyState: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Open TailOps to refresh")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text("Waiting for the shared tailnet snapshot.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 10)
     }
 }
 

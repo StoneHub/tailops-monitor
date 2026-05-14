@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import TailOpsCore
 import TailOpsShared
+import WidgetKit
 
 @MainActor
 final class TailnetMonitor: ObservableObject {
@@ -62,6 +63,7 @@ final class TailnetMonitor: ObservableObject {
             snapshot = diagnosedSnapshot
             lastError = nil
             try snapshotStore.save(diagnosedSnapshot)
+            WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
         } catch {
             lastError = error.localizedDescription
         }
