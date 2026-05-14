@@ -2,3 +2,12 @@ node_modules/
 .DS_Store
 .superpowers/
 *.log
+*.p12
+*.cer
+*.mobileprovision
+*.xcuserstate
+xcuserdata/
+platforms/macos/TailOpsMac/.build/
+platforms/macos/TailOpsMac/.swiftpm/
+platforms/macos/TailOpsMac/build/
+DerivedData/

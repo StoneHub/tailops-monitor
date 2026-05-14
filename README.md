@@ -1,116 +1,157 @@
 # TailOps Monitor
 
-Ambient Tailscale device performance dashboard for a local network. The app renders a mesh constellation of hosts, animated traffic flows, CPU temperature health rings when available, and a top-activity spotlight.
+TailOps Monitor is a low-impact macOS tailnet companion for Tailscale users. The primary experience is a Swift menu-bar app plus a WidgetKit desktop widget that keeps useful tailnet shortcuts one click away: SSH, local dashboards, copied IPs, and quick reachability status.
 
-## Design Reference
+The older browser dashboard is still included as a full-screen visualization and telemetry playground, but the macOS widget suite is now the main product path.
 
-- Stitch project: https://stitch.withgoogle.com/projects/2020355768956197107
-- Current concept screenshot: `docs/assets/stitch-final-mesh-combo.png`
-- Current local browser capture: `docs/assets/browser-current-dashboard.png`
+## What It Does
 
-## What It Shows
+- Shows Tailscale hosts from `tailscale status --json`.
+- Adds a macOS menu-bar panel for refreshing and inspecting tailnet hosts.
+- Adds a desktop WidgetKit widget with host rows and custom emoji action buttons.
+- Lets you configure custom actions for each host:
+  - `ssh`: opens `ssh://host`.
+  - `url`: opens HTTP dashboards, admin pages, Home Assistant, OpenClaw, router UIs, logs, and other web tools.
+  - `copy`: copies an IP address or other configured value through an App Intent.
+- Shares widget state through an App Group instead of running a Node backend.
+- Keeps the widget passive: removing the widget leaves no backend process to kill.
 
-- Live Tailscale hosts from `tailscale status --json` when served with `npm run serve`
-- ASUSWRT router WAN state, upload/download speed, connected-device count, external IP, and last boot through Home Assistant when `TAILOPS_HA_TOKEN` is configured
-- Tailscale peer online/offline state, OS, MagicDNS name, Tailscale IP, relay, activity state, tx/rx counters, exit-node and subnet-route state
-- Local machine CPU and memory from Windows CIM when available
-- Placeholder fields for remote CPU, memory, disk, disk I/O, packet loss, and CPU temperature until a per-host agent reports them
-- Automatically selected top active host, weighted toward network throughput and disk I/O
-- Agent availability indicators for OpenClaw, MCP, and local worker agents
+## Project Layout
 
-## AI Phonebook
+```text
+platforms/macos/TailOpsMac/       Swift macOS app, widget, core package, and Xcode project
+src/                              Browser dashboard server and telemetry modules
+tests/                            Node test suite for browser/server telemetry behavior
+data/agents.sample.json           Sample AI agent phonebook data
+docs/assets/                      Visual references and dashboard captures
+```
 
-The visible dashboard stays ambient, but the browser exposes a machine-readable contact directory:
+## macOS Quick Start
 
-- `window.tailopsAgentDirectory`
-- `window.tailopsReachableAgents`
-- `<script id="tailops-agent-directory" type="application/json">`
-- server endpoint: `/api/agents`
-- sample file: `data/agents.sample.json`
+Requirements:
 
-This is intended to evolve into an MCP resource/tool so local AI agents can discover reachable peers from the phonebook.
+- macOS with Xcode installed.
+- Tailscale CLI available as `tailscale`.
+- An Apple ID in Xcode for local development signing.
 
-## Run Locally
+Open the real app/widget project:
 
-Open `index.html` in a browser for local-only demo viewing, or serve it on your LAN with:
+```bash
+open platforms/macos/TailOpsMac/TailOpsMac.xcodeproj
+```
+
+In Xcode:
+
+1. Select the `TailOpsMac` scheme.
+2. Select target `TailOpsMac`, open **Signing & Capabilities**, enable **Automatically manage signing**, and choose your team.
+3. Repeat for target `TailOpsWidget`.
+4. Run the `TailOpsMac` scheme.
+5. Open macOS **Edit Widgets**, search for **TailOps**, and add the widget.
+
+For command-line verification without signing:
+
+```bash
+cd platforms/macos/TailOpsMac
+xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Debug CODE_SIGNING_ALLOWED=NO build
+```
+
+## Custom Widget Actions
+
+The app settings UI edits the same action configuration that the widget reads. Actions are stored as `tailops-actions.json` in the shared App Group container, with a fallback to `Application Support/TailOpsMac` when App Groups are unavailable.
+
+Example:
+
+```json
+{
+  "hostActions": [
+    {
+      "hostID": "openclaw",
+      "actions": [
+        { "emoji": "🖥", "title": "SSH", "kind": "ssh", "target": "openclaw.tailnet.ts.net" },
+        { "emoji": "🧭", "title": "Dash", "kind": "url", "target": "http://openclaw.tailnet.ts.net:8080" },
+        { "emoji": "📋", "title": "IP", "kind": "copy", "target": "100.64.0.2" }
+      ]
+    }
+  ]
+}
+```
+
+`hostID` can match a host ID, display name, MagicDNS name, or Tailscale IP. A sample file is available at:
+
+```text
+platforms/macos/TailOpsMac/config/tailops-actions.sample.json
+```
+
+## macOS Architecture
+
+The macOS implementation avoids a Node backend:
+
+- `TailOpsCore` parses Tailscale status and models hosts/actions.
+- `TailOpsShared` stores snapshots and action config for app/widget sharing.
+- `TailOpsIntents` provides widget App Intents for copy and refresh actions.
+- `TailOpsMac` is the SwiftUI menu-bar app.
+- `TailOpsWidget` is the WidgetKit extension.
+
+The widget uses WidgetKit container backgrounds, removable backgrounds, `widgetRenderingMode`, and `widgetAccentable(_:)` so macOS can apply modern tinted and Liquid Glass widget appearances.
+
+More detail: `platforms/macos/TailOpsMac/README.md`.
+
+## Verify The Swift Platform
+
+```bash
+cd platforms/macos/TailOpsMac
+swift run TailOpsCoreValidation
+swift build --target TailOpsMacViews
+swift build --target TailOpsWidgetViews
+xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Debug CODE_SIGNING_ALLOWED=NO build
+```
+
+## Browser Dashboard
+
+The browser dashboard remains available for full-screen visualization, live telemetry experiments, and the AI phonebook surface.
+
+Run it with:
 
 ```bash
 npm run serve
 ```
 
-The server binds to `0.0.0.0:4173` by default.
-
-Dashboard:
+Then open:
 
 ```text
 http://127.0.0.1:4173/
 ```
 
-Live telemetry endpoint:
+Endpoints:
 
 ```text
-http://127.0.0.1:4173/api/telemetry
+GET /api/telemetry
+GET /api/agents
+GET /.well-known/agent.json
 ```
 
-Agent phonebook endpoint:
+The server reads live Tailscale hosts through `tailscale status --json`. It can also pull ASUSWRT router telemetry through Home Assistant when `TAILOPS_HA_URL` and `TAILOPS_HA_TOKEN` are set.
 
-```text
-http://127.0.0.1:4173/api/agents
-```
-
-The browser falls back to simulated demo telemetry when opened directly from `file://`.
-
-## Home Assistant And ASUSWRT
-
-Home Assistant on fcfdev is reachable at:
-
-```text
-http://100.104.71.37:8123/
-```
-
-The Home Assistant MCP bridge is reachable on the tailnet at:
-
-```text
-http://100.104.71.37:8086/mcp
-```
-
-TailOps can pull ASUSWRT entities directly from Home Assistant's REST API. Set a Home Assistant long-lived access token before starting the dashboard:
-
-```powershell
-$env:TAILOPS_HA_URL = "http://100.104.71.37:8123"
-$env:TAILOPS_HA_TOKEN = "<home-assistant-long-lived-access-token>"
-npm run serve
-```
-
-Known ASUS entities currently targeted. CPU, memory, and temperature are included when HA exposes them; the current live ASUS data set includes WAN status, upload/download speed, connected devices, external IP, and last boot.
-
-```text
-sensor.192_168_50_1_cpu_usage
-sensor.192_168_50_1_cpu_core_1_usage
-sensor.192_168_50_1_cpu_core_2_usage
-sensor.192_168_50_1_cpu_core_3_usage
-sensor.192_168_50_1_cpu_core_4_usage
-sensor.192_168_50_1_memory_usage
-sensor.192_168_50_1_memory_free
-sensor.192_168_50_1_memory_used
-sensor.192_168_50_1_cpu_temperature
-sensor.192_168_50_1_devices_connected
-sensor.192_168_50_1_last_boot
-binary_sensor.zenwifi_xd5_7890_wan_status
-sensor.zenwifi_xd5_7890_wan_status
-sensor.zenwifi_xd5_7890_download_speed
-sensor.zenwifi_xd5_7890_upload_speed
-sensor.zenwifi_xd5_7890_external_ip
-```
-
-Run tests with:
+Run the Node test suite with:
 
 ```bash
 npm test
 ```
 
-## Next Integration Points
+## AI Phonebook
 
-- Add a per-host TailOps/OpenClaw agent that reports remote CPU, memory, disk, process, and CPU temperature data.
-- Replace `data/agents.sample.json` with a generated or discovered live agent registry.
-- Add MCP server support so local AI agents can query the phonebook directly.
+The browser dashboard exposes a machine-readable local agent directory:
+
+- `window.tailopsAgentDirectory`
+- `window.tailopsReachableAgents`
+- `<script id="tailops-agent-directory" type="application/json">`
+- `/api/agents`
+
+This is intended to evolve into an MCP resource/tool so local AI agents can discover reachable tailnet peers.
+
+## Next Work
+
+- Add a host picker in macOS settings from the current Tailscale snapshot.
+- Add terminal preference support for SSH actions.
+- Expand widget size variants.
+- Replace direct `tailscale status --json` process calls with a helper/XPC path if pursuing a sandboxed distribution build.
