@@ -38,7 +38,7 @@ Next implementation batch:
 2. Add `Launch at login` in settings using `ServiceManagement`.
 3. Add `Show menu bar icon` setting.
 4. Add a widget-to-app entry point instead of a hover-only gear.
-5. Show latest ping route and latency text in widget rows so the sparkline has context.
+5. Show latest ping route and latency text in widget rows so the sparkline has context. Done, with rolling average and sample count.
 
 Secondary backlog:
 
@@ -59,6 +59,7 @@ Current refresh behavior:
 - The app refreshes on launch, when the menu panel appears, and when the refresh button is pressed.
 - Each app refresh runs `tailscale status --json`.
 - For each online peer, each app refresh runs `tailscale ping --c 6 --timeout 1500ms --until-direct=false <host>`.
+- The app retains up to 120 recent ping samples per host in the shared snapshot, so the widget can show the latest route/latency plus an average without running network checks itself.
 
 The current idle impact is therefore near zero beyond WidgetKit reading a small JSON file. The active refresh cost is one `tailscale status` command plus six ping samples per online peer.
 

@@ -16,6 +16,7 @@ final class TailnetMonitor: ObservableObject {
     private let parser = TailnetSnapshotParser()
     private let snapshotStore: SharedSnapshotStoring
     private let actionCatalog = HostActionCatalog()
+    private let maxRetainedPingSamples = 120
 
     init(
         statusProvider: TailscaleStatusProviding,
@@ -76,6 +77,11 @@ final class TailnetMonitor: ObservableObject {
     private func snapshotWithPingDiagnostics(_ snapshot: TailnetSnapshot) async -> TailnetSnapshot {
         guard let pingProvider else { return snapshot }
 
+        let existingPingByHostID = Dictionary(
+            uniqueKeysWithValues: self.snapshot.hosts.compactMap { host in
+                host.diagnostics?.ping.map { (host.id, $0) }
+            }
+        )
         var diagnosedHosts: [TailnetHost] = []
         for host in snapshot.hosts {
             guard host.role == .peer, host.status == .online else {
@@ -84,8 +90,15 @@ final class TailnetMonitor: ObservableObject {
             }
 
             do {
-                let ping = try await pingProvider.pingSummary(for: host)
-                diagnosedHosts.append(host.withDiagnostics(TailnetHostDiagnostics(ping: ping)))
+                guard let ping = try await pingProvider.pingSummary(for: host) else {
+                    diagnosedHosts.append(host)
+                    continue
+                }
+                let retainedPing = existingPingByHostID[host.id]?.mergingRecentSamples(
+                    from: ping,
+                    maxSamples: maxRetainedPingSamples
+                ) ?? ping
+                diagnosedHosts.append(host.withDiagnostics(TailnetHostDiagnostics(ping: retainedPing)))
             } catch {
                 diagnosedHosts.append(host)
             }

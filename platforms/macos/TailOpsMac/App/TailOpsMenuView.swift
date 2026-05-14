@@ -260,7 +260,13 @@ private struct HostRow: View {
             return nil
         }
 
-        return "\(ping.latestRoute.label) \(latency.formatted(.number.precision(.fractionLength(0...1)))) ms"
+        let latestText = latency.formatted(.number.precision(.fractionLength(0...1)))
+        guard let average = ping.averageLatencyMilliseconds else {
+            return "\(ping.latestRoute.label) \(latestText) ms"
+        }
+
+        let averageText = average.formatted(.number.precision(.fractionLength(0...1)))
+        return "\(ping.latestRoute.label) \(latestText) ms | avg \(averageText) ms over \(ping.samples.count)"
     }
 
     private func perform(_ action: HostAction) {

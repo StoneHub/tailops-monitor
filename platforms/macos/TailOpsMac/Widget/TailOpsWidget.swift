@@ -198,6 +198,13 @@ private struct WidgetHostActionRow: View {
                 }
             }
 
+            if let pingText {
+                Text(pingText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
             HStack(spacing: 5) {
                 ForEach(actions.prefix(3), id: \.title) { action in
                     WidgetActionChip(action: action)
@@ -212,6 +219,19 @@ private struct WidgetHostActionRow: View {
                     .opacity(0.18)
             }
         }
+    }
+
+    private var pingText: String? {
+        guard let ping = host.diagnostics?.ping,
+              let latest = ping.latestLatencyMilliseconds,
+              let average = ping.averageLatencyMilliseconds
+        else {
+            return nil
+        }
+
+        let latestText = latest.formatted(.number.precision(.fractionLength(0...1)))
+        let averageText = average.formatted(.number.precision(.fractionLength(0...1)))
+        return "\(ping.latestRoute.label) \(latestText) ms | avg \(averageText) ms (\(ping.samples.count))"
     }
 
     private func color(for status: TailnetHost.Status) -> Color {

@@ -97,6 +97,23 @@ public struct TailnetPingSummary: Codable, Equatable, Sendable {
     public var latestLatencyMilliseconds: Double? {
         samples.last?.latencyMilliseconds
     }
+
+    public var averageLatencyMilliseconds: Double? {
+        guard !samples.isEmpty else {
+            return nil
+        }
+
+        let total = samples.reduce(0) { partial, sample in
+            partial + sample.latencyMilliseconds
+        }
+        return total / Double(samples.count)
+    }
+
+    public func mergingRecentSamples(from newerSummary: TailnetPingSummary, maxSamples: Int) -> TailnetPingSummary {
+        let sampleLimit = max(maxSamples, 0)
+        let retainedSamples = Array((samples + newerSummary.samples).suffix(sampleLimit))
+        return TailnetPingSummary(samples: retainedSamples, lastUpdated: newerSummary.lastUpdated)
+    }
 }
 
 public struct TailnetPingSample: Codable, Equatable, Sendable {

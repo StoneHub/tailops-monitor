@@ -14,6 +14,7 @@ struct TailOpsCoreValidation {
         summaryCountsOnlyOnlineHostsAsHealthy()
         try parserSortsHostsByRecentAvailability()
         pingParserReadsLatencyAndRouteSamples()
+        pingSummaryAveragesAndKeepsRecentSamples()
         taildropTargetsParserReadsAvailableAndOfflineTargets()
         widgetLayoutPrioritizesReachableHostsAndCountsHiddenOffline()
         try appPreferencesRoundTripThroughSharedStore()
@@ -323,6 +324,25 @@ struct TailOpsCoreValidation {
         expect(summary?.samples.map(\.route) == [.derp, .peerRelay, .direct], "expected parsed ping routes")
         expect(summary?.samples.map(\.latencyMilliseconds) == [42, 35.5, 10], "expected parsed ping latency")
         expect(summary?.latestRoute == .direct, "expected latest route")
+    }
+
+    private static func pingSummaryAveragesAndKeepsRecentSamples() {
+        let older = TailnetPingSummary(samples: [
+            TailnetPingSample(latencyMilliseconds: 100, route: .derp),
+            TailnetPingSample(latencyMilliseconds: 80, route: .peerRelay)
+        ], lastUpdated: Date(timeIntervalSince1970: 10))
+        let newer = TailnetPingSummary(samples: [
+            TailnetPingSample(latencyMilliseconds: 40, route: .direct),
+            TailnetPingSample(latencyMilliseconds: 20, route: .direct)
+        ], lastUpdated: Date(timeIntervalSince1970: 20))
+
+        let merged = older.mergingRecentSamples(from: newer, maxSamples: 3)
+
+        expect(merged.samples.map(\.latencyMilliseconds) == [80, 40, 20], "expected rolling ping samples to keep newest values")
+        expect(merged.averageLatencyMilliseconds == 140.0 / 3.0, "expected average latency across retained samples")
+        expect(merged.latestLatencyMilliseconds == 20, "expected latest ping latency from newest sample")
+        expect(merged.latestRoute == .direct, "expected latest ping route from newest sample")
+        expect(merged.lastUpdated == newer.lastUpdated, "expected merged summary to keep newest update date")
     }
 
     private static func sharedSnapshotStoreLoadsFirstExistingFallback() throws {
