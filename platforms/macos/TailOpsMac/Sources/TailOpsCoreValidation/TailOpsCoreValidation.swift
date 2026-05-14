@@ -11,6 +11,7 @@ struct TailOpsCoreValidation {
         actionConfigurationMatchesHostByNameMagicDNSOrAddress()
         actionConfigurationValidationReportsInvalidRows()
         summaryCountsOnlyOnlineHostsAsHealthy()
+        try parserSortsHostsByRecentAvailability()
         print("TailOpsCoreValidation passed")
     }
 
@@ -190,6 +191,56 @@ struct TailOpsCoreValidation {
         expect(summary.warningCount == 1, "expected one warning host")
         expect(summary.offlineCount == 1, "expected one offline host")
         expect(summary.trafficLight == .warning, "expected warning traffic light to take precedence")
+    }
+
+    private static func parserSortsHostsByRecentAvailability() throws {
+        let json = """
+        {
+          "Self": {
+            "ID": "self-1",
+            "HostName": "monroe-mac",
+            "DNSName": "monroe-mac.tailnet.ts.net.",
+            "TailscaleIPs": ["100.64.0.1"],
+            "Online": true,
+            "OS": "macOS"
+          },
+          "Peer": {
+            "old-peer": {
+              "ID": "old-peer",
+              "HostName": "old-peer",
+              "DNSName": "old-peer.tailnet.ts.net.",
+              "TailscaleIPs": ["100.64.0.3"],
+              "Online": false,
+              "LastSeen": "2026-05-12T18:30:00Z",
+              "OS": "linux"
+            },
+            "active-peer": {
+              "ID": "active-peer",
+              "HostName": "active-peer",
+              "DNSName": "active-peer.tailnet.ts.net.",
+              "TailscaleIPs": ["100.64.0.2"],
+              "Online": true,
+              "OS": "linux"
+            },
+            "recent-peer": {
+              "ID": "recent-peer",
+              "HostName": "recent-peer",
+              "DNSName": "recent-peer.tailnet.ts.net.",
+              "TailscaleIPs": ["100.64.0.4"],
+              "Online": false,
+              "LastSeen": "2026-05-14T18:30:00Z",
+              "OS": "linux"
+            }
+          }
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try TailnetSnapshotParser().parse(json)
+
+        expect(
+            snapshot.hosts.map(\.name) == ["monroe-mac", "active-peer", "recent-peer", "old-peer"],
+            "expected online hosts first, then offline hosts by latest LastSeen"
+        )
     }
 
     private static func fixture(id: String = "host", status: TailnetHost.Status) -> TailnetHost {

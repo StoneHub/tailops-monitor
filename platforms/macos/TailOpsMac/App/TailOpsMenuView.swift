@@ -42,7 +42,7 @@ struct TailOpsMenuView: View {
 
     private var hostListHeight: CGFloat {
         let visibleRows = min(max(monitor.snapshot.hosts.count, 1), 4)
-        return CGFloat(visibleRows) * 72
+        return CGFloat(visibleRows) * 86
     }
 
     private var header: some View {
@@ -146,6 +146,9 @@ private struct HostRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    Text(availabilityText)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
                 Spacer()
                 Text(host.operatingSystem ?? "")
@@ -179,15 +182,38 @@ private struct HostRow: View {
         }
     }
 
+    private var availabilityText: String {
+        switch host.status {
+        case .online:
+            return host.role == .thisDevice ? "This device" : "Available now"
+        case .warning:
+            return "Needs attention"
+        case .offline:
+            guard let lastSeen = host.lastSeen else {
+                return "No recent connection"
+            }
+            return "Last seen \(lastSeen.formatted(.relative(presentation: .named)))"
+        }
+    }
+
     private func perform(_ action: HostAction) {
         switch action.kind {
         case .ssh, .dashboard:
             if let url = action.url {
-                NSWorkspace.shared.open(url)
+                openAndActivate(url)
             }
         case .copyAddress:
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(action.value ?? "", forType: .string)
+        }
+    }
+
+    private func openAndActivate(_ url: URL) {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+
+        NSWorkspace.shared.open(url, configuration: configuration) { application, _ in
+            application?.activate(options: [.activateAllWindows])
         }
     }
 }

@@ -293,7 +293,44 @@ public struct TailnetSnapshotParser: Sendable {
             .sorted { $0.key < $1.key }
             .map { Self.host(from: $0.value, role: .peer) })
 
-        return TailnetSnapshot(hosts: hosts, generatedAt: generatedAt)
+        return TailnetSnapshot(hosts: Self.sortedByRecentAvailability(hosts), generatedAt: generatedAt)
+    }
+
+    private static func sortedByRecentAvailability(_ hosts: [TailnetHost]) -> [TailnetHost] {
+        hosts.sorted { left, right in
+            let leftRank = availabilityRank(left)
+            let rightRank = availabilityRank(right)
+
+            if leftRank != rightRank {
+                return leftRank < rightRank
+            }
+
+            if left.role != right.role {
+                return left.role == .thisDevice
+            }
+
+            switch (left.lastSeen, right.lastSeen) {
+            case (.some(let leftDate), .some(let rightDate)) where leftDate != rightDate:
+                return leftDate > rightDate
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            default:
+                return left.name.localizedStandardCompare(right.name) == .orderedAscending
+            }
+        }
+    }
+
+    private static func availabilityRank(_ host: TailnetHost) -> Int {
+        switch host.status {
+        case .online:
+            return 0
+        case .warning:
+            return 1
+        case .offline:
+            return 2
+        }
     }
 
     private static func host(from node: TailscaleNode, role: TailnetHost.Role) -> TailnetHost {

@@ -10,16 +10,12 @@ struct TailOpsMacApp: App {
     )
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarExtra("TailOps", systemImage: "point.3.connected.trianglepath.dotted") {
             TailOpsMenuView(monitor: monitor)
                 .frame(width: 360)
                 .task {
                     await monitor.refresh()
                 }
-        } label: {
-            TailOpsConstellationIcon(trafficLight: monitor.summary.trafficLight)
-                .frame(width: 18, height: 18)
-                .help("TailOps")
         }
         .menuBarExtraStyle(.window)
 

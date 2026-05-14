@@ -23,7 +23,7 @@ public extension TailnetSnapshot {
             operatingSystem: "linux",
             primaryAddress: "100.64.0.2",
             magicDNSName: "openclaw.tailnet.ts.net",
-            lastSeen: nil,
+            lastSeen: Date(timeIntervalSinceNow: -90),
             services: [
                 TailnetService(label: "OpenClaw", url: URL(string: "http://openclaw.tailnet.ts.net:8080")!)
             ]
@@ -36,7 +36,7 @@ public extension TailnetSnapshot {
             operatingSystem: "asuswrt",
             primaryAddress: "100.64.0.3",
             magicDNSName: "router.tailnet.ts.net",
-            lastSeen: nil,
+            lastSeen: Date(timeIntervalSinceNow: -240),
             services: [
                 TailnetService(label: "Router", url: URL(string: "http://router.tailnet.ts.net")!)
             ]
