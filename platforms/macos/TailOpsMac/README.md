@@ -6,8 +6,8 @@ Pure Swift macOS platform slice for a low-impact TailOps menu-bar app plus Widge
 
 - `Sources/TailOpsCore`: testable Swift package core for parsing `tailscale status --json`, host status, summaries, and host actions.
 - `Sources/TailOpsCoreValidation`: executable validation runner for this environment, because the installed command-line Swift toolchain does not expose `XCTest` or Swift `Testing`.
-- `App`: SwiftUI menu-bar app source. It owns refresh, runs `tailscale status --json`, writes a cached snapshot, and opens SSH/HTTP actions.
-- `Widget`: WidgetKit source. It reads the cached snapshot and shows reachability traffic lights.
+- `App`: SwiftUI menu-bar app source. It owns refresh, runs `tailscale status --json`, gathers ping diagnostics for online peers, writes a cached snapshot, and opens SSH/HTTP/Taildrop actions.
+- `Widget`: WidgetKit source. It reads the cached snapshot and shows the most useful reachable hosts first.
 - `Shared`: source files that should be included in both the app target and the widget extension target.
 
 ## Xcode Target Setup
@@ -24,11 +24,13 @@ Open it in Xcode and use the `TailOpsMac` scheme. The scheme builds:
 - `TailOpsWidget`: WidgetKit extension embedded in the app.
 - Local Swift package products: `TailOpsCore`, `TailOpsShared`, and `TailOpsIntents`.
 
-The targets are already configured with the shared App Group identifier:
+The targets are configured with a team-prefixed App Group at signing time:
 
 ```text
-group.dev.tailops.monitor
+$(TeamIdentifierPrefix)group.dev.tailops.monitor
 ```
+
+At runtime, a locally signed build resolves this to a value like `N6GPP46885.group.dev.tailops.monitor`. `SharedSnapshotStore` reads the signed App Group entitlement first and keeps a legacy fallback for older local builds that wrote to `group.dev.tailops.monitor`.
 
 For local command-line verification without signing:
 
@@ -45,7 +47,7 @@ If rebuilding this project manually, the intended target layout is:
 3. Add this directory as a local Swift package and link `TailOpsCore` into both targets.
 4. Add `App/*.swift` and `Shared/*.swift` to the app target.
 5. Add `Widget/*.swift` and `Shared/*.swift` to the widget extension target.
-6. Enable App Groups for both targets with `group.dev.tailops.monitor`.
+6. Enable App Groups for both targets with `$(TeamIdentifierPrefix)group.dev.tailops.monitor`.
 
 The app group identifier lives in `Shared/SharedSnapshotStore.swift`.
 
@@ -85,9 +87,35 @@ inside the shared app group container, or the fallback `Application Support/Tail
 
 `hostID` can match the host ID, display name, MagicDNS name, or Tailscale IP. A sample file lives at `config/tailops-actions.sample.json`.
 
-## Liquid Glass
+## Taildrop
+
+TailOps currently exposes Taildrop in two places:
+
+- The menu-bar host rows accept file drops and send them with `tailscale file cp`.
+- Finder can show a `Send with TailOps` Service for selected files. The service opens a Taildrop destination picker backed by `tailscale file cp --targets`.
+
+The planned next workflow is a temporary Finder-based `TailOps Drop Zone`: opening it creates one folder per available Taildrop target, and dropping a file into a device folder sends it to that device. A real mounted volume or File Provider extension remains possible later, but the watched-folder design is smaller and more reliable for a local utility.
+
+## Liquid Glass And Widget Rendering
 
 The widget uses WidgetKit container backgrounds and marks the background as removable so macOS can apply clear, tinted, and Liquid Glass appearances. It also uses `widgetRenderingMode` and `widgetAccentable(_:)` to keep primary content legible when the system renders the widget in accented or vibrant modes.
+
+The widget supports small, medium, and large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares. The medium widget intentionally prioritizes online/warning hosts and collapses extra offline devices into a count so the layout stays readable.
+
+WidgetKit does not expose arbitrary hover-only controls. A planned settings gear should be low-prominence and always available, opening TailOps settings through an App Intent.
+
+## Runtime Impact
+
+The widget itself does not ping. It reloads the cached snapshot from the shared App Group on its WidgetKit timeline, currently every five minutes.
+
+The app does the active refresh work. It refreshes on launch, when the menu panel appears, and when the refresh button is pressed. Each refresh currently runs:
+
+```text
+tailscale status --json
+tailscale ping --c 6 --timeout 1500ms --until-direct=false <online-peer>
+```
+
+Only online peers are pinged. With two online peers, one refresh means twelve ping samples total. Idle impact is therefore near zero; active impact is proportional to the number of online peers and the configured ping sample count. Ping rate controls are planned next.
 
 ## Sandbox Note
 
@@ -116,3 +144,21 @@ TailOpsCoreValidation passed
 The widget is intentionally passive. It does not own a backend and does not keep a process alive. The app refreshes state and writes a snapshot; the widget reads that snapshot on its normal WidgetKit timeline.
 
 Removing the widget therefore leaves no backend to kill. Quitting the menu-bar app stops refresh work.
+
+## Next Implementation Plan
+
+The next control-surface plan lives at:
+
+```text
+docs/superpowers/plans/2026-05-14-tailops-macos-control-surface.md
+```
+
+The planned order is:
+
+1. Shared app preferences.
+2. Launch at login.
+3. Menu bar icon visibility with a recovery path through widget settings.
+4. Widget settings gear.
+5. Latest ping route/latency text in widget rows.
+6. Ping sample and refresh-policy controls.
+7. TailOps Drop Zone design spike.

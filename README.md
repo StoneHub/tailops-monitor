@@ -9,6 +9,8 @@ The older browser dashboard is still included as a full-screen visualization and
 - Shows Tailscale hosts from `tailscale status --json`.
 - Adds a macOS menu-bar panel for refreshing and inspecting tailnet hosts.
 - Adds a desktop WidgetKit widget with host rows and custom emoji action buttons.
+- Adds passive ping context for online peers when the app refreshes, then exposes the cached result in the menu bar and widget.
+- Adds Taildrop shortcuts through menu-row file drops and a Finder Service.
 - Lets you configure custom actions for each host:
   - `ssh`: opens `ssh://host`.
   - `url`: opens HTTP dashboards, admin pages, Home Assistant, OpenClaw, router UIs, logs, and other web tools.
@@ -96,6 +98,17 @@ The widget uses WidgetKit container backgrounds, removable backgrounds, `widgetR
 
 More detail: `platforms/macos/TailOpsMac/README.md`.
 
+## macOS Runtime Impact
+
+The WidgetKit extension is passive. It reads the cached shared snapshot and asks WidgetKit for another timeline in about five minutes. It does not run `tailscale`, keep a backend alive, or ping hosts.
+
+The menu-bar app is the active side. It refreshes on app launch, when the menu panel appears, and when the user presses refresh. A refresh currently runs:
+
+- one `tailscale status --json`;
+- six `tailscale ping` samples for each online peer.
+
+For a small tailnet this is low impact, but ping controls are the next planned settings work so users can reduce sample count or make ping manual-only.
+
 ## Verify The Swift Platform
 
 ```bash
@@ -151,7 +164,12 @@ This is intended to evolve into an MCP resource/tool so local AI agents can disc
 
 ## Next Work
 
+- Add launch-at-login and menu-bar icon visibility settings.
+- Add a widget settings gear that opens TailOps settings.
+- Show latest ping route and latency text in the widget so the sparkline has context.
+- Add ping rate controls: fewer samples and manual-only mode.
+- Design and then build a Finder-based TailOps Drop Zone for easier Taildrop sends.
 - Add a host picker in macOS settings from the current Tailscale snapshot.
-- Add terminal preference support for SSH actions.
-- Expand widget size variants.
 - Replace direct `tailscale status --json` process calls with a helper/XPC path if pursuing a sandboxed distribution build.
+
+Detailed plan: `docs/superpowers/plans/2026-05-14-tailops-macos-control-surface.md`.
