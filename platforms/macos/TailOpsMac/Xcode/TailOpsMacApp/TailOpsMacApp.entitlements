@@ -4,7 +4,6 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>$(TeamIdentifierPrefix)</string>
 		<string>group.dev.tailops.monitor</string>
 	</array>
 </dict>

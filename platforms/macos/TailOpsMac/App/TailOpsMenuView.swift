@@ -13,14 +13,22 @@ struct TailOpsMenuView: View {
 
             Divider()
 
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(monitor.snapshot.hosts) { host in
-                        HostRow(host: host, actions: monitor.actions(for: host))
+            if monitor.snapshot.hosts.isEmpty {
+                Text("No tailnet hosts loaded")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 72)
+            } else {
+                ScrollView {
+                    VStack(spacing: 8) {
+                        ForEach(monitor.snapshot.hosts) { host in
+                            HostRow(host: host, actions: monitor.actions(for: host))
+                        }
                     }
+                    .padding(.vertical, 1)
                 }
+                .frame(height: hostListHeight)
             }
-            .frame(maxHeight: 420)
 
             if let lastError = monitor.lastError {
                 Text(lastError)
@@ -30,6 +38,11 @@ struct TailOpsMenuView: View {
             }
         }
         .padding(14)
+    }
+
+    private var hostListHeight: CGFloat {
+        let visibleRows = min(max(monitor.snapshot.hosts.count, 1), 4)
+        return CGFloat(visibleRows) * 72
     }
 
     private var header: some View {
