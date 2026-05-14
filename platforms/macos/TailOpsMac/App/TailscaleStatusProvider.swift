@@ -13,6 +13,10 @@ protocol TaildropFileTransferProviding: Sendable {
     func send(fileURL: URL, to host: TailnetHost) async throws
 }
 
+protocol TaildropTargetProviding: Sendable {
+    func targets() async throws -> [TaildropTarget]
+}
+
 struct ProcessTailscaleStatusProvider: TailscaleStatusProviding {
     private let runner = TailscaleCommandRunner()
 
@@ -56,6 +60,26 @@ struct ProcessTaildropFileTransferProvider: TaildropFileTransferProviding {
             fileURL.path,
             "\(target):"
         ])
+    }
+
+    func send(fileURLs: [URL], to target: TaildropTarget) async throws {
+        guard !fileURLs.isEmpty else { return }
+
+        _ = try await runner.run(arguments: [
+            "file",
+            "cp"
+        ] + fileURLs.map(\.path) + ["\(target.address):"])
+    }
+}
+
+struct ProcessTaildropTargetProvider: TaildropTargetProviding {
+    private let runner = TailscaleCommandRunner()
+    private let parser = TaildropTargetsParser()
+
+    func targets() async throws -> [TaildropTarget] {
+        let result = try await runner.run(arguments: ["file", "cp", "--targets"])
+        let output = String(data: result.stdout, encoding: .utf8) ?? ""
+        return parser.parse(output)
     }
 }
 

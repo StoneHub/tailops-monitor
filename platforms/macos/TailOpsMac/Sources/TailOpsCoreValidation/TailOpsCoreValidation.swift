@@ -1,5 +1,6 @@
 import Foundation
 import TailOpsCore
+import TailOpsShared
 
 @main
 struct TailOpsCoreValidation {
@@ -13,6 +14,8 @@ struct TailOpsCoreValidation {
         summaryCountsOnlyOnlineHostsAsHealthy()
         try parserSortsHostsByRecentAvailability()
         pingParserReadsLatencyAndRouteSamples()
+        taildropTargetsParserReadsAvailableAndOfflineTargets()
+        try sharedSnapshotStoreLoadsFirstExistingFallback()
         print("TailOpsCoreValidation passed")
     }
 
@@ -256,6 +259,44 @@ struct TailOpsCoreValidation {
         expect(summary?.samples.map(\.route) == [.derp, .peerRelay, .direct], "expected parsed ping routes")
         expect(summary?.samples.map(\.latencyMilliseconds) == [42, 35.5, 10], "expected parsed ping latency")
         expect(summary?.latestRoute == .direct, "expected latest route")
+    }
+
+    private static func sharedSnapshotStoreLoadsFirstExistingFallback() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "TailOpsCoreValidation-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let primaryURL = rootURL.appending(path: "primary", directoryHint: .isDirectory)
+        let fallbackURL = rootURL.appending(path: "fallback", directoryHint: .isDirectory)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        try FileManager.default.createDirectory(at: fallbackURL, withIntermediateDirectories: true)
+        let snapshot = TailnetSnapshot(hosts: [fixture(id: "fallback-peer", status: .online)])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(snapshot)
+        try data.write(to: fallbackURL.appending(path: "tailops-snapshot.json"))
+
+        let loaded = try SharedSnapshotStore(baseURLs: [primaryURL, fallbackURL]).load()
+
+        expect(loaded?.hosts.map(\.name) == ["fallback-peer"], "expected shared snapshot store to read fallback URL")
+    }
+
+    private static func taildropTargetsParserReadsAvailableAndOfflineTargets() {
+        let output = """
+        100.104.71.37\tfcfdev
+        100.83.152.74\tpixel-6a\toffline; last seen 20h27m0s ago
+        """
+
+        let targets = TaildropTargetsParser().parse(output)
+
+        expect(
+            targets == [
+                TaildropTarget(address: "100.104.71.37", name: "fcfdev", isAvailable: true),
+                TaildropTarget(address: "100.83.152.74", name: "pixel-6a", detail: "offline; last seen 20h27m0s ago", isAvailable: false)
+            ],
+            "expected parsed Taildrop targets"
+        )
     }
 
     private static func fixture(id: String = "host", status: TailnetHost.Status) -> TailnetHost {

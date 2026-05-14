@@ -1,9 +1,19 @@
+import AppKit
 import SwiftUI
 import TailOpsCore
 import TailOpsShared
 
+@MainActor
+final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.servicesProvider = TaildropServiceProvider.shared
+        NSUpdateDynamicServices()
+    }
+}
+
 @main
 struct TailOpsMacApp: App {
+    @NSApplicationDelegateAdaptor(TailOpsAppDelegate.self) private var appDelegate
     @StateObject private var monitor: TailnetMonitor
 
     init() {

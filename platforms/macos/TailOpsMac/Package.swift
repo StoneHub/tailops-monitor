@@ -42,6 +42,7 @@ let package = Package(
             exclude: ["TailOpsMacApp.swift"],
             sources: [
                 "DesignPreviewGallery.swift",
+                "TaildropServiceProvider.swift",
                 "TailscaleStatusProvider.swift",
                 "TailOpsActionSettingsModel.swift",
                 "TailOpsConstellationIcon.swift",
@@ -59,6 +60,6 @@ let package = Package(
                 "TailOpsWidget.swift"
             ]
         ),
-        .executableTarget(name: "TailOpsCoreValidation", dependencies: ["TailOpsCore"])
+        .executableTarget(name: "TailOpsCoreValidation", dependencies: ["TailOpsCore", "TailOpsShared"])
     ]
 )
