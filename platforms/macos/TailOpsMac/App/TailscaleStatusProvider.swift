@@ -5,13 +5,28 @@ protocol TailscaleStatusProviding: Sendable {
 }
 
 struct ProcessTailscaleStatusProvider: TailscaleStatusProviding {
+    private let candidateExecutablePaths = [
+        "/Applications/Tailscale.app/Contents/MacOS/tailscale",
+        "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+        "/opt/homebrew/bin/tailscale",
+        "/usr/local/bin/tailscale",
+        "/usr/bin/tailscale",
+    ]
+
     func statusJSON() async throws -> Data {
         try await Task.detached(priority: .utility) {
+            guard let executableURL = candidateExecutablePaths
+                .map(URL.init(fileURLWithPath:))
+                .first(where: { FileManager.default.isExecutableFile(atPath: $0.path) })
+            else {
+                throw TailscaleStatusError.executableNotFound(candidateExecutablePaths)
+            }
+
             let process = Process()
             let output = Pipe()
             let errorOutput = Pipe()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["tailscale", "status", "--json"]
+            process.executableURL = executableURL
+            process.arguments = ["status", "--json"]
             process.standardOutput = output
             process.standardError = errorOutput
 
@@ -30,10 +45,13 @@ struct ProcessTailscaleStatusProvider: TailscaleStatusProviding {
 }
 
 enum TailscaleStatusError: LocalizedError {
+    case executableNotFound([String])
     case commandFailed(String?)
 
     var errorDescription: String? {
         switch self {
+        case .executableNotFound(let paths):
+            return "Tailscale CLI not found. Checked: \(paths.joined(separator: ", "))"
         case .commandFailed(let message):
             return message?.isEmpty == false ? message : "tailscale status --json failed"
         }
