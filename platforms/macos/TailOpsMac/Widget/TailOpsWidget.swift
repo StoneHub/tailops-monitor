@@ -161,6 +161,13 @@ private struct WidgetHostActionRow: View {
             }
         }
         .padding(.vertical, 2)
+        .background {
+            if let samples = host.diagnostics?.ping?.samples {
+                PingSparklineView(samples: samples)
+                    .padding(.vertical, 2)
+                    .opacity(0.26)
+            }
+        }
     }
 
     private func color(for status: TailnetHost.Status) -> Color {

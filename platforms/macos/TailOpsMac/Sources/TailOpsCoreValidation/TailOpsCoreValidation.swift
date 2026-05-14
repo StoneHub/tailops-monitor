@@ -12,6 +12,7 @@ struct TailOpsCoreValidation {
         actionConfigurationValidationReportsInvalidRows()
         summaryCountsOnlyOnlineHostsAsHealthy()
         try parserSortsHostsByRecentAvailability()
+        pingParserReadsLatencyAndRouteSamples()
         print("TailOpsCoreValidation passed")
     }
 
@@ -241,6 +242,20 @@ struct TailOpsCoreValidation {
             snapshot.hosts.map(\.name) == ["monroe-mac", "active-peer", "recent-peer", "old-peer"],
             "expected online hosts first, then offline hosts by latest LastSeen"
         )
+    }
+
+    private static func pingParserReadsLatencyAndRouteSamples() {
+        let output = """
+        pong from fcfdev (100.104.71.37) via DERP(mia) in 42ms
+        pong from fcfdev (100.104.71.37) via peer-relay(198.51.100.167:7777:vni:7) in 35.5ms
+        pong from fcfdev (100.104.71.37) via 192.168.1.64:41642 in 10ms
+        """
+
+        let summary = TailnetPingOutputParser().parse(output)
+
+        expect(summary?.samples.map(\.route) == [.derp, .peerRelay, .direct], "expected parsed ping routes")
+        expect(summary?.samples.map(\.latencyMilliseconds) == [42, 35.5, 10], "expected parsed ping latency")
+        expect(summary?.latestRoute == .direct, "expected latest route")
     }
 
     private static func fixture(id: String = "host", status: TailnetHost.Status) -> TailnetHost {

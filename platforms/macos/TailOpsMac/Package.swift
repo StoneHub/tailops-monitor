@@ -22,6 +22,7 @@ let package = Package(
             dependencies: ["TailOpsCore"],
             path: "Shared",
             sources: [
+                "PingSparklineView.swift",
                 "PreviewFixtures.swift",
                 "SharedSnapshotStore.swift"
             ]

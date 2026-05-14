@@ -6,6 +6,7 @@ import TailOpsShared
 struct TailOpsMacApp: App {
     @StateObject private var monitor = TailnetMonitor(
         statusProvider: ProcessTailscaleStatusProvider(),
+        pingProvider: ProcessTailscalePingProvider(),
         snapshotStore: SharedSnapshotStore()
     )
 
