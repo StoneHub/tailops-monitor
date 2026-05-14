@@ -17,6 +17,7 @@ struct TailOpsCoreValidation {
         pingSummaryAveragesAndKeepsRecentSamples()
         taildropTargetsParserReadsAvailableAndOfflineTargets()
         widgetLayoutPrioritizesReachableHostsAndCountsHiddenOffline()
+        widgetLayoutPrioritizesPeersBeforeThisDevice()
         try appPreferencesRoundTripThroughSharedStore()
         try sharedSnapshotStoreLoadsFirstExistingFallback()
         print("TailOpsCoreValidation passed")
@@ -242,6 +243,38 @@ struct TailOpsCoreValidation {
 
         expect(layout.visibleHosts.map(\.id) == ["online", "warning"], "expected reachable hosts first")
         expect(layout.hiddenOfflineCount == 3, "expected hidden offline count")
+    }
+
+    private static func widgetLayoutPrioritizesPeersBeforeThisDevice() {
+        let thisDevice = TailnetHost(
+            id: "self",
+            name: "this-device",
+            role: .thisDevice,
+            status: .online,
+            operatingSystem: "macOS",
+            primaryAddress: "100.64.0.1",
+            magicDNSName: nil,
+            lastSeen: nil,
+            services: []
+        )
+        let peer = TailnetHost(
+            id: "peer",
+            name: "peer",
+            role: .peer,
+            status: .online,
+            operatingSystem: "linux",
+            primaryAddress: "100.64.0.2",
+            magicDNSName: nil,
+            lastSeen: nil,
+            services: [],
+            diagnostics: TailnetHostDiagnostics(ping: TailnetPingSummary(samples: [
+                TailnetPingSample(latencyMilliseconds: 10, route: .direct)
+            ]))
+        )
+
+        let layout = TailnetWidgetHostLayout(hosts: [thisDevice, peer], limit: 1)
+
+        expect(layout.visibleHosts.map(\.id) == ["peer"], "expected widget to show pingable peers before this device")
     }
 
     private static func appPreferencesRoundTripThroughSharedStore() throws {

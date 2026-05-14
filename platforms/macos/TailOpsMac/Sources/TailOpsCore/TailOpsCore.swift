@@ -150,7 +150,9 @@ public struct TailnetWidgetHostLayout: Equatable, Sendable {
 
     public init(hosts: [TailnetHost], limit: Int) {
         let safeLimit = max(limit, 0)
-        let reachable = hosts.filter { $0.status != .offline }
+        let reachable = hosts
+            .filter { $0.status != .offline }
+            .sorted { Self.reachableRank(for: $0) < Self.reachableRank(for: $1) }
         let offline = hosts.filter { $0.status == .offline }
 
         if reachable.isEmpty {
@@ -161,6 +163,21 @@ public struct TailnetWidgetHostLayout: Equatable, Sendable {
 
         let visibleOfflineCount = visibleHosts.filter { $0.status == .offline }.count
         hiddenOfflineCount = max(offline.count - visibleOfflineCount, 0)
+    }
+
+    private static func reachableRank(for host: TailnetHost) -> Int {
+        switch (host.role, host.status) {
+        case (.peer, .online):
+            return 0
+        case (.peer, .warning):
+            return 1
+        case (.thisDevice, .online):
+            return 2
+        case (.thisDevice, .warning):
+            return 3
+        case (_, .offline):
+            return 4
+        }
     }
 }
 
