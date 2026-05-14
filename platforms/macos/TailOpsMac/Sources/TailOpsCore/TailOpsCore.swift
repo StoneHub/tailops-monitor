@@ -127,6 +127,26 @@ public struct TaildropTarget: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+public struct TailnetWidgetHostLayout: Equatable, Sendable {
+    public let visibleHosts: [TailnetHost]
+    public let hiddenOfflineCount: Int
+
+    public init(hosts: [TailnetHost], limit: Int) {
+        let safeLimit = max(limit, 0)
+        let reachable = hosts.filter { $0.status != .offline }
+        let offline = hosts.filter { $0.status == .offline }
+
+        if reachable.isEmpty {
+            visibleHosts = Array(offline.prefix(safeLimit))
+        } else {
+            visibleHosts = Array(reachable.prefix(safeLimit))
+        }
+
+        let visibleOfflineCount = visibleHosts.filter { $0.status == .offline }.count
+        hiddenOfflineCount = max(offline.count - visibleOfflineCount, 0)
+    }
+}
+
 public enum TailnetPingRoute: String, Codable, Equatable, Sendable {
     case direct
     case peerRelay

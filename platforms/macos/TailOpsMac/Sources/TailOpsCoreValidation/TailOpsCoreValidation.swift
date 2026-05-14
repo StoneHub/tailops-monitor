@@ -15,6 +15,7 @@ struct TailOpsCoreValidation {
         try parserSortsHostsByRecentAvailability()
         pingParserReadsLatencyAndRouteSamples()
         taildropTargetsParserReadsAvailableAndOfflineTargets()
+        widgetLayoutPrioritizesReachableHostsAndCountsHiddenOffline()
         try sharedSnapshotStoreLoadsFirstExistingFallback()
         print("TailOpsCoreValidation passed")
     }
@@ -195,6 +196,50 @@ struct TailOpsCoreValidation {
         expect(summary.warningCount == 1, "expected one warning host")
         expect(summary.offlineCount == 1, "expected one offline host")
         expect(summary.trafficLight == .warning, "expected warning traffic light to take precedence")
+    }
+
+    private static func widgetLayoutPrioritizesReachableHostsAndCountsHiddenOffline() {
+        let now = Date()
+        let online = TailnetHost(
+            id: "online",
+            name: "online",
+            role: .peer,
+            status: .online,
+            operatingSystem: nil,
+            primaryAddress: "100.64.0.1",
+            magicDNSName: nil,
+            lastSeen: nil,
+            services: []
+        )
+        let warning = TailnetHost(
+            id: "warning",
+            name: "warning",
+            role: .peer,
+            status: .warning,
+            operatingSystem: nil,
+            primaryAddress: "100.64.0.2",
+            magicDNSName: nil,
+            lastSeen: now,
+            services: []
+        )
+        let offline = (1...3).map { index in
+            TailnetHost(
+                id: "offline-\(index)",
+                name: "offline-\(index)",
+                role: .peer,
+                status: .offline,
+                operatingSystem: nil,
+                primaryAddress: "100.64.0.\(index + 2)",
+                magicDNSName: nil,
+                lastSeen: now.addingTimeInterval(TimeInterval(-index * 60)),
+                services: []
+            )
+        }
+
+        let layout = TailnetWidgetHostLayout(hosts: [offline[0], online, offline[1], warning, offline[2]], limit: 3)
+
+        expect(layout.visibleHosts.map(\.id) == ["online", "warning"], "expected reachable hosts first")
+        expect(layout.hiddenOfflineCount == 3, "expected hidden offline count")
     }
 
     private static func parserSortsHostsByRecentAvailability() throws {
