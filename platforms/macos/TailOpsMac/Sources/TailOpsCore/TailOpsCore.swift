@@ -21,6 +21,7 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
     public let magicDNSName: String?
     public let lastSeen: Date?
     public let services: [TailnetService]
+    public let diagnostics: TailnetHostDiagnostics?
 
     public init(
         id: String,
@@ -31,7 +32,8 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
         primaryAddress: String?,
         magicDNSName: String?,
         lastSeen: Date?,
-        services: [TailnetService]
+        services: [TailnetService],
+        diagnostics: TailnetHostDiagnostics? = nil
     ) {
         self.id = id
         self.name = name
@@ -42,6 +44,22 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
         self.magicDNSName = magicDNSName
         self.lastSeen = lastSeen
         self.services = services
+        self.diagnostics = diagnostics
+    }
+
+    public func withDiagnostics(_ diagnostics: TailnetHostDiagnostics?) -> TailnetHost {
+        TailnetHost(
+            id: id,
+            name: name,
+            role: role,
+            status: status,
+            operatingSystem: operatingSystem,
+            primaryAddress: primaryAddress,
+            magicDNSName: magicDNSName,
+            lastSeen: lastSeen,
+            services: services,
+            diagnostics: diagnostics
+        )
     }
 }
 
@@ -52,6 +70,125 @@ public struct TailnetService: Codable, Equatable, Sendable {
     public init(label: String, url: URL) {
         self.label = label
         self.url = url
+    }
+}
+
+public struct TailnetHostDiagnostics: Codable, Equatable, Sendable {
+    public let ping: TailnetPingSummary?
+
+    public init(ping: TailnetPingSummary? = nil) {
+        self.ping = ping
+    }
+}
+
+public struct TailnetPingSummary: Codable, Equatable, Sendable {
+    public let samples: [TailnetPingSample]
+    public let lastUpdated: Date
+
+    public init(samples: [TailnetPingSample], lastUpdated: Date = Date()) {
+        self.samples = samples
+        self.lastUpdated = lastUpdated
+    }
+
+    public var latestRoute: TailnetPingRoute {
+        samples.last?.route ?? .unknown
+    }
+
+    public var latestLatencyMilliseconds: Double? {
+        samples.last?.latencyMilliseconds
+    }
+}
+
+public struct TailnetPingSample: Codable, Equatable, Sendable {
+    public let latencyMilliseconds: Double
+    public let route: TailnetPingRoute
+
+    public init(latencyMilliseconds: Double, route: TailnetPingRoute) {
+        self.latencyMilliseconds = latencyMilliseconds
+        self.route = route
+    }
+}
+
+public struct TaildropTarget: Codable, Equatable, Identifiable, Sendable {
+    public let address: String
+    public let name: String
+    public let detail: String?
+    public let isAvailable: Bool
+
+    public var id: String {
+        address
+    }
+
+    public init(address: String, name: String, detail: String? = nil, isAvailable: Bool = true) {
+        self.address = address
+        self.name = name
+        self.detail = detail
+        self.isAvailable = isAvailable
+    }
+}
+
+public struct TailnetWidgetHostLayout: Equatable, Sendable {
+    public let visibleHosts: [TailnetHost]
+    public let hiddenOfflineCount: Int
+
+    public init(hosts: [TailnetHost], limit: Int) {
+        let safeLimit = max(limit, 0)
+        let reachable = hosts.filter { $0.status != .offline }
+        let offline = hosts.filter { $0.status == .offline }
+
+        if reachable.isEmpty {
+            visibleHosts = Array(offline.prefix(safeLimit))
+        } else {
+            visibleHosts = Array(reachable.prefix(safeLimit))
+        }
+
+        let visibleOfflineCount = visibleHosts.filter { $0.status == .offline }.count
+        hiddenOfflineCount = max(offline.count - visibleOfflineCount, 0)
+    }
+}
+
+public enum TailnetPingRoute: String, Codable, Equatable, Sendable {
+    case direct
+    case peerRelay
+    case derp
+    case unknown
+
+    public var label: String {
+        switch self {
+        case .direct:
+            return "Direct"
+        case .peerRelay:
+            return "Peer relay"
+        case .derp:
+            return "DERP"
+        case .unknown:
+            return "Unknown"
+        }
+    }
+}
+
+public struct TaildropTargetsParser: Sendable {
+    public init() {}
+
+    public func parse(_ output: String) -> [TaildropTarget] {
+        output
+            .split(separator: "\n")
+            .compactMap { Self.parseLine(String($0)) }
+    }
+
+    private static func parseLine(_ line: String) -> TaildropTarget? {
+        let fields = line
+            .split(separator: "\t", omittingEmptySubsequences: false)
+            .map(String.init)
+
+        guard fields.count >= 2 else { return nil }
+        let detail = fields.count >= 3 && !fields[2].isEmpty ? fields[2] : nil
+        return TaildropTarget(
+            address: fields[0],
+            name: fields[1],
+            detail: detail,
+            isAvailable: !(detail?.localizedCaseInsensitiveContains("offline") ?? false)
+        )
     }
 }
 
@@ -293,7 +430,44 @@ public struct TailnetSnapshotParser: Sendable {
             .sorted { $0.key < $1.key }
             .map { Self.host(from: $0.value, role: .peer) })
 
-        return TailnetSnapshot(hosts: hosts, generatedAt: generatedAt)
+        return TailnetSnapshot(hosts: Self.sortedByRecentAvailability(hosts), generatedAt: generatedAt)
+    }
+
+    private static func sortedByRecentAvailability(_ hosts: [TailnetHost]) -> [TailnetHost] {
+        hosts.sorted { left, right in
+            let leftRank = availabilityRank(left)
+            let rightRank = availabilityRank(right)
+
+            if leftRank != rightRank {
+                return leftRank < rightRank
+            }
+
+            if left.role != right.role {
+                return left.role == .thisDevice
+            }
+
+            switch (left.lastSeen, right.lastSeen) {
+            case (.some(let leftDate), .some(let rightDate)) where leftDate != rightDate:
+                return leftDate > rightDate
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            default:
+                return left.name.localizedStandardCompare(right.name) == .orderedAscending
+            }
+        }
+    }
+
+    private static func availabilityRank(_ host: TailnetHost) -> Int {
+        switch host.status {
+        case .online:
+            return 0
+        case .warning:
+            return 1
+        case .offline:
+            return 2
+        }
     }
 
     private static func host(from node: TailscaleNode, role: TailnetHost.Role) -> TailnetHost {
@@ -325,6 +499,64 @@ public struct TailnetSnapshotParser: Sendable {
         let fractionalSeconds = ISO8601DateFormatter()
         fractionalSeconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return fractionalSeconds.date(from: value)
+    }
+}
+
+public struct TailnetPingOutputParser: Sendable {
+    public init() {}
+
+    public func parse(_ output: String, lastUpdated: Date = Date()) -> TailnetPingSummary? {
+        let samples = output
+            .split(separator: "\n")
+            .compactMap { Self.parseLine(String($0)) }
+
+        guard !samples.isEmpty else { return nil }
+        return TailnetPingSummary(samples: samples, lastUpdated: lastUpdated)
+    }
+
+    private static func parseLine(_ line: String) -> TailnetPingSample? {
+        guard line.contains("pong from"), line.contains(" in ") else {
+            return nil
+        }
+
+        let route = route(from: line)
+        guard let latency = latencyMilliseconds(from: line) else {
+            return nil
+        }
+
+        return TailnetPingSample(latencyMilliseconds: latency, route: route)
+    }
+
+    private static func route(from line: String) -> TailnetPingRoute {
+        if line.contains("via DERP(") {
+            return .derp
+        }
+        if line.contains("via peer-relay(") {
+            return .peerRelay
+        }
+        if line.contains("via ") {
+            return .direct
+        }
+        return .unknown
+    }
+
+    private static func latencyMilliseconds(from line: String) -> Double? {
+        guard let range = line.range(of: " in ") else { return nil }
+        let rawValue = line[range.upperBound...]
+            .split(separator: " ")
+            .first
+            .map(String.init) ?? ""
+
+        if rawValue.hasSuffix("ms") {
+            return Double(rawValue.dropLast(2))
+        }
+        if rawValue.hasSuffix("s") {
+            return Double(rawValue.dropLast()).map { $0 * 1_000 }
+        }
+        if rawValue.hasSuffix("µs") {
+            return Double(rawValue.dropLast(2)).map { $0 / 1_000 }
+        }
+        return nil
     }
 }
 

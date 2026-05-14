@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import TailOpsCore
 import TailOpsShared
+import WidgetKit
 
 @MainActor
 final class TailnetMonitor: ObservableObject {
@@ -11,16 +12,19 @@ final class TailnetMonitor: ObservableObject {
     @Published private(set) var lastError: String?
 
     private let statusProvider: TailscaleStatusProviding
+    private let pingProvider: TailscalePingProviding?
     private let parser = TailnetSnapshotParser()
     private let snapshotStore: SharedSnapshotStoring
     private let actionCatalog = HostActionCatalog()
 
     init(
         statusProvider: TailscaleStatusProviding,
+        pingProvider: TailscalePingProviding? = nil,
         snapshotStore: SharedSnapshotStoring,
         initialSnapshot: TailnetSnapshot? = nil
     ) {
         self.statusProvider = statusProvider
+        self.pingProvider = pingProvider
         self.snapshotStore = snapshotStore
         if let initialSnapshot {
             snapshot = initialSnapshot
@@ -55,9 +59,11 @@ final class TailnetMonitor: ObservableObject {
         do {
             let data = try await statusProvider.statusJSON()
             let nextSnapshot = try parser.parse(data)
-            snapshot = nextSnapshot
+            let diagnosedSnapshot = await snapshotWithPingDiagnostics(nextSnapshot)
+            snapshot = diagnosedSnapshot
             lastError = nil
-            try snapshotStore.save(nextSnapshot)
+            try snapshotStore.save(diagnosedSnapshot)
+            WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
         } catch {
             lastError = error.localizedDescription
         }
@@ -65,5 +71,26 @@ final class TailnetMonitor: ObservableObject {
 
     func actions(for host: TailnetHost) -> [HostAction] {
         HostActionCatalog(configuration: actionConfiguration).actions(for: host)
+    }
+
+    private func snapshotWithPingDiagnostics(_ snapshot: TailnetSnapshot) async -> TailnetSnapshot {
+        guard let pingProvider else { return snapshot }
+
+        var diagnosedHosts: [TailnetHost] = []
+        for host in snapshot.hosts {
+            guard host.role == .peer, host.status == .online else {
+                diagnosedHosts.append(host)
+                continue
+            }
+
+            do {
+                let ping = try await pingProvider.pingSummary(for: host)
+                diagnosedHosts.append(host.withDiagnostics(TailnetHostDiagnostics(ping: ping)))
+            } catch {
+                diagnosedHosts.append(host)
+            }
+        }
+
+        return TailnetSnapshot(hosts: diagnosedHosts, generatedAt: snapshot.generatedAt)
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import TailOpsCore
 
 public protocol SharedSnapshotStoring {
@@ -11,57 +12,154 @@ public protocol SharedSnapshotStoring {
 public struct SharedSnapshotStore: SharedSnapshotStoring {
     public static let appGroupIdentifier = "group.dev.tailops.monitor"
     private let fileManager: FileManager
+    private let baseURLOverride: [URL]?
 
-    public init(fileManager: FileManager = .default) {
+    public init(fileManager: FileManager = .default, baseURLs: [URL]? = nil) {
         self.fileManager = fileManager
+        self.baseURLOverride = baseURLs
     }
 
     public func load() throws -> TailnetSnapshot? {
-        let url = try snapshotURL()
-        guard fileManager.fileExists(atPath: url.path) else { return nil }
-        let data = try Data(contentsOf: url)
-        return try JSONDecoder.tailops.decode(TailnetSnapshot.self, from: data)
+        try loadFirstExisting(path: "tailops-snapshot.json", as: TailnetSnapshot.self)
     }
 
     public func save(_ snapshot: TailnetSnapshot) throws {
-        let url = try snapshotURL()
-        try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let data = try JSONEncoder.tailops.encode(snapshot)
-        try data.write(to: url, options: [.atomic])
+        try write(data, path: "tailops-snapshot.json")
     }
 
     public func loadActionConfiguration() throws -> TailnetActionConfiguration? {
-        let url = try actionConfigurationURL()
-        guard fileManager.fileExists(atPath: url.path) else { return nil }
-        let data = try Data(contentsOf: url)
-        return try JSONDecoder.tailops.decode(TailnetActionConfiguration.self, from: data)
+        try loadFirstExisting(path: "tailops-actions.json", as: TailnetActionConfiguration.self)
     }
 
     public func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws {
-        let url = try actionConfigurationURL()
-        try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let data = try JSONEncoder.tailops.encode(configuration)
-        try data.write(to: url, options: [.atomic])
+        try write(data, path: "tailops-actions.json")
     }
 
-    private func snapshotURL() throws -> URL {
-        try baseURL().appending(path: "tailops-snapshot.json")
+    private func loadFirstExisting<T: Decodable>(path: String, as type: T.Type) throws -> T? {
+        for baseURL in try baseURLs() {
+            let url = baseURL.appending(path: path)
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder.tailops.decode(T.self, from: data)
+        }
+        return nil
     }
 
-    private func actionConfigurationURL() throws -> URL {
-        try baseURL().appending(path: "tailops-actions.json")
+    private func write(_ data: Data, path: String) throws {
+        var firstError: Error?
+        var didWrite = false
+
+        for baseURL in try baseURLs() {
+            let url = baseURL.appending(path: path)
+            do {
+                try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try data.write(to: url, options: [.atomic])
+                didWrite = true
+            } catch {
+                if firstError == nil {
+                    firstError = error
+                }
+            }
+        }
+
+        if !didWrite, let firstError {
+            throw firstError
+        }
     }
 
-    private func baseURL() throws -> URL {
-        let baseURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier)
-            ?? fallbackApplicationSupportURL()
-        return baseURL
+    private func baseURLs() throws -> [URL] {
+        if let baseURLOverride {
+            return baseURLOverride
+        }
+
+        let appGroupURLs = Self.appGroupIdentifierCandidates.reduce(into: [URL?]()) { urls, identifier in
+            urls.append(fileManager.containerURL(forSecurityApplicationGroupIdentifier: identifier))
+            urls.append(explicitAppGroupURL(identifier: identifier))
+        }
+
+        return (appGroupURLs + [Optional(fallbackApplicationSupportURL())])
+            .compactMap(\.self)
+            .deduplicatedByPath()
+    }
+
+    private func explicitAppGroupURL(identifier: String) -> URL? {
+        guard let home = fileManager.homeDirectoryForCurrentUser.path.removingPercentEncoding else {
+            return nil
+        }
+
+        return URL(fileURLWithPath: home)
+            .appending(path: "Library", directoryHint: .isDirectory)
+            .appending(path: "Group Containers", directoryHint: .isDirectory)
+            .appending(path: identifier, directoryHint: .isDirectory)
     }
 
     private func fallbackApplicationSupportURL() -> URL {
         let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         return support.appending(path: "TailOpsMac", directoryHint: .isDirectory)
+    }
+}
+
+private extension SharedSnapshotStore {
+    static var appGroupIdentifierCandidates: [String] {
+        (signedAppGroupIdentifiers() + [teamPrefixedAppGroupIdentifier(), appGroupIdentifier])
+            .compactMap(\.self)
+            .deduplicated()
+    }
+
+    static func signedAppGroupIdentifiers() -> [String] {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let identifiers = SecTaskCopyValueForEntitlement(
+                task,
+                "com.apple.security.application-groups" as CFString,
+                nil
+              )
+        else {
+            return []
+        }
+
+        if let identifiers = identifiers as? [String] {
+            return identifiers
+        }
+
+        if let identifier = identifiers as? String {
+            return [identifier]
+        }
+
+        return []
+    }
+
+    static func teamPrefixedAppGroupIdentifier() -> String? {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let applicationIdentifier = SecTaskCopyValueForEntitlement(
+                task,
+                "com.apple.application-identifier" as CFString,
+                nil
+              ) as? String,
+              let teamIdentifier = applicationIdentifier.split(separator: ".").first
+        else {
+            return nil
+        }
+
+        return "\(teamIdentifier).\(appGroupIdentifier)"
+    }
+}
+
+private extension Array where Element == URL {
+    func deduplicatedByPath() -> [URL] {
+        var seen = Set<String>()
+        return filter { url in
+            seen.insert(url.standardizedFileURL.path).inserted
+        }
+    }
+}
+
+private extension Array where Element == String {
+    func deduplicated() -> [String] {
+        var seen = Set<String>()
+        return filter { seen.insert($0).inserted }
     }
 }
 

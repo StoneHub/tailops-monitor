@@ -9,6 +9,8 @@ The older browser dashboard is still included as a full-screen visualization and
 - Shows Tailscale hosts from `tailscale status --json`.
 - Adds a macOS menu-bar panel for refreshing and inspecting tailnet hosts.
 - Adds a desktop WidgetKit widget with host rows and custom emoji action buttons.
+- Adds passive ping context for online peers when the app refreshes, then exposes the cached result in the menu bar and widget.
+- Adds Taildrop shortcuts through menu-row file drops and a Finder Service.
 - Lets you configure custom actions for each host:
   - `ssh`: opens `ssh://host`.
   - `url`: opens HTTP dashboards, admin pages, Home Assistant, OpenClaw, router UIs, logs, and other web tools.
@@ -96,6 +98,31 @@ The widget uses WidgetKit container backgrounds, removable backgrounds, `widgetR
 
 More detail: `platforms/macos/TailOpsMac/README.md`.
 
+## Current macOS Progress
+
+As of May 14, 2026, the current branch has a working native Swift menu-bar app and WidgetKit widget. The app/widget are locally signed with a shared App Group, the widget reads cached snapshots, the menu bar owns live Tailscale refresh, and Taildrop is available through menu-row file drops plus a Finder Service.
+
+Next implementation batch:
+
+1. Shared app preferences.
+2. Launch at login.
+3. Menu bar icon visibility.
+4. Widget-to-app entry point instead of a hover-only gear.
+5. Latest ping route/latency text in widget rows.
+
+Deferred for now: ping-rate controls and TailOps Drop Zone. Drop Zone remains wishlist only.
+
+## macOS Runtime Impact
+
+The WidgetKit extension is passive. It reads the cached shared snapshot and asks WidgetKit for another timeline in about five minutes. It does not run `tailscale`, keep a backend alive, or ping hosts.
+
+The menu-bar app is the active side. It refreshes on app launch, when the menu panel appears, and when the user presses refresh. A refresh currently runs:
+
+- one `tailscale status --json`;
+- six `tailscale ping` samples for each online peer.
+
+For a small tailnet this is low impact. Ping rate controls are not in the next implementation batch; keep evaluating the default after the widget shows clearer ping context.
+
 ## Verify The Swift Platform
 
 ```bash
@@ -151,7 +178,12 @@ This is intended to evolve into an MCP resource/tool so local AI agents can disc
 
 ## Next Work
 
+- Add launch-at-login and menu-bar icon visibility settings.
+- Add a widget-to-app entry point so hiding the menu icon still has a recovery path.
+- Show latest ping route and latency text in the widget so the sparkline has context.
 - Add a host picker in macOS settings from the current Tailscale snapshot.
-- Add terminal preference support for SSH actions.
-- Expand widget size variants.
 - Replace direct `tailscale status --json` process calls with a helper/XPC path if pursuing a sandboxed distribution build.
+
+Wishlist: a Finder-based TailOps Drop Zone for easier Taildrop sends.
+
+Detailed plan: `docs/superpowers/plans/2026-05-14-tailops-macos-control-surface.md`.

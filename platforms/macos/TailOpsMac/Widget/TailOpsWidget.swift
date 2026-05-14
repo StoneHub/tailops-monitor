@@ -11,7 +11,7 @@ struct TailOpsWidget: Widget {
         }
         .configurationDisplayName("TailOps")
         .description("Glanceable Tailscale host reachability.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .containerBackgroundRemovable(true)
     }
 }
@@ -48,27 +48,29 @@ struct TailOpsTimelineProvider: TimelineProvider {
 
 struct TailOpsWidgetView: View {
     let entry: TailOpsEntry
+    @Environment(\.widgetFamily) private var family
     @Environment(\.widgetRenderingMode) private var renderingMode
-    @Environment(\.showsWidgetContainerBackground) private var showsWidgetContainerBackground
-
-    private var summary: TailnetSummary {
-        TailnetSummary(hosts: entry.snapshot.hosts)
-    }
 
     private var actionCatalog: HostActionCatalog {
         HostActionCatalog(configuration: entry.actionConfiguration)
     }
 
+    private var layout: TailnetWidgetHostLayout {
+        TailnetWidgetHostLayout(hosts: entry.snapshot.hosts, limit: visibleHostLimit)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label("TailOps", systemImage: symbol)
                     .font(.headline)
-                    .widgetAccentable()
+                    .foregroundStyle(.primary)
+                    .symbolRenderingMode(.hierarchical)
                 Spacer()
                 Button(intent: RefreshTailOpsWidgetIntent()) {
                     Image(systemName: "arrow.clockwise")
                         .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 Text(entry.date, style: .time)
@@ -76,38 +78,64 @@ struct TailOpsWidgetView: View {
                     .foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 7) {
-                ForEach(entry.snapshot.hosts.prefix(3)) { host in
-                    WidgetHostActionRow(host: host, actions: actionCatalog.actions(for: host))
+            if entry.snapshot.hosts.isEmpty {
+                WidgetEmptyState()
+            } else {
+                VStack(alignment: .leading, spacing: rowSpacing) {
+                    ForEach(layout.visibleHosts) { host in
+                        WidgetHostActionRow(host: host, actions: actionCatalog.actions(for: host))
+                    }
+                    if layout.hiddenOfflineCount > 0 {
+                        WidgetOfflineSummary(count: layout.hiddenOfflineCount)
+                    }
                 }
             }
         }
         .containerBackground(for: .widget) {
             TailOpsWidgetBackground(renderingMode: renderingMode)
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
     private var symbol: String {
-        switch summary.trafficLight {
-        case .healthy:
-            return "network"
-        case .warning:
-            return "exclamationmark.triangle"
-        case .offline:
-            return "wifi.slash"
+        "point.3.connected.trianglepath.dotted"
+    }
+
+    private var visibleHostLimit: Int {
+        switch family {
+        case .systemSmall:
+            return 1
+        case .systemLarge:
+            return 5
+        default:
+            return 2
         }
     }
 
-    private func color(for status: TailnetHost.Status) -> Color {
-        switch status {
-        case .online:
-            return .green
-        case .warning:
-            return .orange
-        case .offline:
-            return .red
+    private var rowSpacing: CGFloat {
+        switch family {
+        case .systemLarge:
+            return 8
+        default:
+            return 6
         }
+    }
+}
+
+private struct WidgetEmptyState: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Open TailOps to refresh")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text("Waiting for the shared tailnet snapshot.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 10)
     }
 }
 
@@ -130,21 +158,37 @@ private struct TailOpsWidgetBackground: View {
     }
 }
 
+private struct WidgetOfflineSummary: View {
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(.secondary)
+                .frame(width: 6, height: 6)
+            Text("\(count) offline")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.top, 1)
+    }
+}
+
 private struct WidgetHostActionRow: View {
     let host: TailnetHost
     let actions: [HostAction]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Circle()
                     .fill(color(for: host.status))
                     .frame(width: 7, height: 7)
-                    .widgetAccentable(host.status != .offline)
                 Text(host.name)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .widgetAccentable(host.status == .online)
                 Spacer()
                 if let address = host.primaryAddress {
                     Text(address)
@@ -161,6 +205,13 @@ private struct WidgetHostActionRow: View {
             }
         }
         .padding(.vertical, 2)
+        .background {
+            if let samples = host.diagnostics?.ping?.samples {
+                PingSparklineView(samples: samples)
+                    .padding(.vertical, 2)
+                    .opacity(0.18)
+            }
+        }
     }
 
     private func color(for status: TailnetHost.Status) -> Color {
@@ -200,11 +251,11 @@ private struct WidgetActionChip: View {
             Text(action.title)
                 .lineLimit(1)
         }
-        .font(.caption2.weight(.medium))
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background(.thinMaterial, in: Capsule())
-        .widgetAccentable(action.kind != .copyAddress)
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(Color.primary.opacity(0.82))
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.primary.opacity(0.11), in: Capsule())
     }
 
     private var fallbackEmoji: String {

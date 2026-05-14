@@ -1,5 +1,6 @@
 import Foundation
 import TailOpsCore
+import TailOpsShared
 
 @main
 struct TailOpsCoreValidation {
@@ -11,6 +12,11 @@ struct TailOpsCoreValidation {
         actionConfigurationMatchesHostByNameMagicDNSOrAddress()
         actionConfigurationValidationReportsInvalidRows()
         summaryCountsOnlyOnlineHostsAsHealthy()
+        try parserSortsHostsByRecentAvailability()
+        pingParserReadsLatencyAndRouteSamples()
+        taildropTargetsParserReadsAvailableAndOfflineTargets()
+        widgetLayoutPrioritizesReachableHostsAndCountsHiddenOffline()
+        try sharedSnapshotStoreLoadsFirstExistingFallback()
         print("TailOpsCoreValidation passed")
     }
 
@@ -190,6 +196,152 @@ struct TailOpsCoreValidation {
         expect(summary.warningCount == 1, "expected one warning host")
         expect(summary.offlineCount == 1, "expected one offline host")
         expect(summary.trafficLight == .warning, "expected warning traffic light to take precedence")
+    }
+
+    private static func widgetLayoutPrioritizesReachableHostsAndCountsHiddenOffline() {
+        let now = Date()
+        let online = TailnetHost(
+            id: "online",
+            name: "online",
+            role: .peer,
+            status: .online,
+            operatingSystem: nil,
+            primaryAddress: "100.64.0.1",
+            magicDNSName: nil,
+            lastSeen: nil,
+            services: []
+        )
+        let warning = TailnetHost(
+            id: "warning",
+            name: "warning",
+            role: .peer,
+            status: .warning,
+            operatingSystem: nil,
+            primaryAddress: "100.64.0.2",
+            magicDNSName: nil,
+            lastSeen: now,
+            services: []
+        )
+        let offline = (1...3).map { index in
+            TailnetHost(
+                id: "offline-\(index)",
+                name: "offline-\(index)",
+                role: .peer,
+                status: .offline,
+                operatingSystem: nil,
+                primaryAddress: "100.64.0.\(index + 2)",
+                magicDNSName: nil,
+                lastSeen: now.addingTimeInterval(TimeInterval(-index * 60)),
+                services: []
+            )
+        }
+
+        let layout = TailnetWidgetHostLayout(hosts: [offline[0], online, offline[1], warning, offline[2]], limit: 3)
+
+        expect(layout.visibleHosts.map(\.id) == ["online", "warning"], "expected reachable hosts first")
+        expect(layout.hiddenOfflineCount == 3, "expected hidden offline count")
+    }
+
+    private static func parserSortsHostsByRecentAvailability() throws {
+        let json = """
+        {
+          "Self": {
+            "ID": "self-1",
+            "HostName": "monroe-mac",
+            "DNSName": "monroe-mac.tailnet.ts.net.",
+            "TailscaleIPs": ["100.64.0.1"],
+            "Online": true,
+            "OS": "macOS"
+          },
+          "Peer": {
+            "old-peer": {
+              "ID": "old-peer",
+              "HostName": "old-peer",
+              "DNSName": "old-peer.tailnet.ts.net.",
+              "TailscaleIPs": ["100.64.0.3"],
+              "Online": false,
+              "LastSeen": "2026-05-12T18:30:00Z",
+              "OS": "linux"
+            },
+            "active-peer": {
+              "ID": "active-peer",
+              "HostName": "active-peer",
+              "DNSName": "active-peer.tailnet.ts.net.",
+              "TailscaleIPs": ["100.64.0.2"],
+              "Online": true,
+              "OS": "linux"
+            },
+            "recent-peer": {
+              "ID": "recent-peer",
+              "HostName": "recent-peer",
+              "DNSName": "recent-peer.tailnet.ts.net.",
+              "TailscaleIPs": ["100.64.0.4"],
+              "Online": false,
+              "LastSeen": "2026-05-14T18:30:00Z",
+              "OS": "linux"
+            }
+          }
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try TailnetSnapshotParser().parse(json)
+
+        expect(
+            snapshot.hosts.map(\.name) == ["monroe-mac", "active-peer", "recent-peer", "old-peer"],
+            "expected online hosts first, then offline hosts by latest LastSeen"
+        )
+    }
+
+    private static func pingParserReadsLatencyAndRouteSamples() {
+        let output = """
+        pong from fcfdev (100.104.71.37) via DERP(mia) in 42ms
+        pong from fcfdev (100.104.71.37) via peer-relay(198.51.100.167:7777:vni:7) in 35.5ms
+        pong from fcfdev (100.104.71.37) via 192.168.1.64:41642 in 10ms
+        """
+
+        let summary = TailnetPingOutputParser().parse(output)
+
+        expect(summary?.samples.map(\.route) == [.derp, .peerRelay, .direct], "expected parsed ping routes")
+        expect(summary?.samples.map(\.latencyMilliseconds) == [42, 35.5, 10], "expected parsed ping latency")
+        expect(summary?.latestRoute == .direct, "expected latest route")
+    }
+
+    private static func sharedSnapshotStoreLoadsFirstExistingFallback() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "TailOpsCoreValidation-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let primaryURL = rootURL.appending(path: "primary", directoryHint: .isDirectory)
+        let fallbackURL = rootURL.appending(path: "fallback", directoryHint: .isDirectory)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        try FileManager.default.createDirectory(at: fallbackURL, withIntermediateDirectories: true)
+        let snapshot = TailnetSnapshot(hosts: [fixture(id: "fallback-peer", status: .online)])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(snapshot)
+        try data.write(to: fallbackURL.appending(path: "tailops-snapshot.json"))
+
+        let loaded = try SharedSnapshotStore(baseURLs: [primaryURL, fallbackURL]).load()
+
+        expect(loaded?.hosts.map(\.name) == ["fallback-peer"], "expected shared snapshot store to read fallback URL")
+    }
+
+    private static func taildropTargetsParserReadsAvailableAndOfflineTargets() {
+        let output = """
+        100.104.71.37\tfcfdev
+        100.83.152.74\tpixel-6a\toffline; last seen 20h27m0s ago
+        """
+
+        let targets = TaildropTargetsParser().parse(output)
+
+        expect(
+            targets == [
+                TaildropTarget(address: "100.104.71.37", name: "fcfdev", isAvailable: true),
+                TaildropTarget(address: "100.83.152.74", name: "pixel-6a", detail: "offline; last seen 20h27m0s ago", isAvailable: false)
+            ],
+            "expected parsed Taildrop targets"
+        )
     }
 
     private static func fixture(id: String = "host", status: TailnetHost.Status) -> TailnetHost {
