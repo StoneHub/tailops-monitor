@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add user-controlled launch, menu-bar visibility, widget settings entry points, and clearer ping context while keeping TailOps low-impact.
+**Goal:** Add user-controlled launch, menu-bar visibility, a reliable widget-to-app recovery path, and clearer ping context while keeping TailOps low-impact.
 
-**Architecture:** Keep the widget passive and make the menu-bar app the only process that runs Tailscale CLI commands. Store preferences in the shared app group so app and widget can agree on display choices, but keep command execution inside the app. Use App Intents for widget buttons that need to open the app or settings.
+**Architecture:** Keep the widget passive and make the menu-bar app the only process that runs Tailscale CLI commands. Store preferences in the shared app group so app and widget can agree on display choices, but keep command execution inside the app. Use an App Intent or URL route for a widget control that opens TailOps when the menu-bar icon is hidden.
 
 **Tech Stack:** SwiftUI, WidgetKit, AppIntents, ServiceManagement, App Group storage, existing `TailOpsCore`, `TailOpsShared`, and `TailOpsCoreValidation`.
 
@@ -58,8 +58,7 @@ private static func appPreferencesRoundTripThroughSharedStore() throws {
     let preferences = TailOpsAppPreferences(
         launchAtLogin: true,
         showMenuBarIcon: false,
-        pingSampleCount: 3,
-        pingRefreshPolicy: .manual
+        opensSettingsFromWidget: true
     )
 
     try store.saveAppPreferences(preferences)
@@ -88,26 +87,18 @@ Add to `TailOpsCore.swift`:
 
 ```swift
 public struct TailOpsAppPreferences: Codable, Equatable, Sendable {
-    public enum PingRefreshPolicy: String, Codable, Equatable, Sendable {
-        case automatic
-        case manual
-    }
-
     public let launchAtLogin: Bool
     public let showMenuBarIcon: Bool
-    public let pingSampleCount: Int
-    public let pingRefreshPolicy: PingRefreshPolicy
+    public let opensSettingsFromWidget: Bool
 
     public init(
         launchAtLogin: Bool = false,
         showMenuBarIcon: Bool = true,
-        pingSampleCount: Int = 6,
-        pingRefreshPolicy: PingRefreshPolicy = .automatic
+        opensSettingsFromWidget: Bool = true
     ) {
         self.launchAtLogin = launchAtLogin
         self.showMenuBarIcon = showMenuBarIcon
-        self.pingSampleCount = max(1, min(pingSampleCount, 10))
-        self.pingRefreshPolicy = pingRefreshPolicy
+        self.opensSettingsFromWidget = opensSettingsFromWidget
     }
 }
 ```
@@ -216,11 +207,11 @@ Wrap the existing `MenuBarExtra` scene in a branch that only emits it when `show
 
 - [ ] **Step 3: Keep a recovery path**
 
-Add a settings button in the widget in Task 4 before hiding the menu bar icon is exposed. The app must always have a route back to settings.
+Add the widget-to-app control in Task 4 before hiding the menu bar icon is exposed. The app must always have a route back to settings.
 
 - [ ] **Step 4: Add the settings toggle**
 
-Add a setting labeled `Show menu bar icon`. Include help text: disabling this leaves the app running quietly for widget refresh and settings access through the widget gear.
+Add a setting labeled `Show menu bar icon`. Include help text: disabling this leaves the app running quietly for widget refresh and settings access through the widget's TailOps app control.
 
 - [ ] **Step 5: Build and run**
 
@@ -242,19 +233,25 @@ git add platforms/macos/TailOpsMac/App/TailOpsMacApp.swift \
 git commit -m "feat: add menu bar icon visibility setting"
 ```
 
-## Task 4: Widget Gear Entry Point
+## Task 4: Widget-To-App Entry Point
 
 **Files:**
 - Modify: `platforms/macos/TailOpsMac/Intents/TailOpsWidgetIntents.swift`
 - Modify: `platforms/macos/TailOpsMac/Widget/TailOpsWidget.swift`
 
-- [ ] **Step 1: Add an App Intent**
+- [ ] **Step 1: Add an App Intent or URL route**
 
-Add `OpenTailOpsSettingsIntent` that opens the app with a `tailops://settings` URL or calls `OpenURLIntent` with the app URL scheme after the URL scheme is registered.
+Add `OpenTailOpsIntent` that opens the app with a `tailops://open` URL route. If a direct AppIntent-to-URL path is awkward on macOS, use `.widgetURL(URL(string: "tailops://open"))` on the widget background and keep the explicit refresh button as the only small header control.
 
-- [ ] **Step 2: Add the gear button**
+- [ ] **Step 2: Prefer an app affordance, not a gear**
 
-In the widget header, add a small `gearshape` button next to refresh. WidgetKit does not expose arbitrary hover-only controls, so make it low-contrast and always present.
+Do not add a visible gear as the primary design. WidgetKit does not expose arbitrary hover-only controls, and a gear competes with the refresh control. Use one of these instead:
+
+- Small widget: tapping the widget body opens TailOps.
+- Medium widget: tapping empty/background space opens TailOps; host buttons still perform host actions.
+- Large widget: add a low-prominence `slider.horizontal.3` or `app.badge` button labeled by accessibility as `Open TailOps settings`.
+
+The visual goal is recovery/access, not an in-widget settings surface.
 
 - [ ] **Step 3: Build**
 
@@ -273,7 +270,7 @@ Expected: widget target and full app build succeed.
 ```bash
 git add platforms/macos/TailOpsMac/Intents/TailOpsWidgetIntents.swift \
   platforms/macos/TailOpsMac/Widget/TailOpsWidget.swift
-git commit -m "feat: add widget settings gear"
+git commit -m "feat: add widget TailOps entry point"
 ```
 
 ## Task 5: Ping Context In Widget
@@ -326,75 +323,15 @@ git add platforms/macos/TailOpsMac/Sources/TailOpsCore/TailOpsCore.swift \
 git commit -m "feat: show latest ping context in widget"
 ```
 
-## Task 6: Ping Rate Control
+## Wishlist: Taildrop Drop Zone
 
-**Files:**
-- Modify: `platforms/macos/TailOpsMac/App/TailnetMonitor.swift`
-- Modify: `platforms/macos/TailOpsMac/App/TailscaleStatusProvider.swift`
-- Modify: `platforms/macos/TailOpsMac/App/TailOpsSettingsView.swift`
+The TailOps Drop Zone remains a useful future idea, but it is not part of the next implementation batch.
 
-- [ ] **Step 1: Make ping sample count configurable**
+Preferred future shape:
 
-Change `TailscalePingProviding.pingSummary(for:)` to accept a sample count:
+- A temporary Finder folder named `TailOps Drop Zone`.
+- One child folder per available Taildrop target.
+- Dropping a file into a device folder sends it with `tailscale file cp`.
+- After send, TailOps confirms success and clears or archives the dropped file.
 
-```swift
-func pingSummary(for host: TailnetHost, sampleCount: Int) async throws -> TailnetPingSummary?
-```
-
-- [ ] **Step 2: Use preferences in monitor refresh**
-
-Load `TailOpsAppPreferences.pingSampleCount` before running ping diagnostics. Default to 6.
-
-- [ ] **Step 3: Add a settings control**
-
-Add a stepper or segmented control with values `1`, `3`, and `6` samples per online peer.
-
-- [ ] **Step 4: Add manual ping mode**
-
-If `pingRefreshPolicy == .manual`, skip ping diagnostics during automatic app refresh and only run them when the user presses refresh.
-
-- [ ] **Step 5: Build and validate**
-
-Run:
-
-```bash
-cd platforms/macos/TailOpsMac
-swift run TailOpsCoreValidation
-swift build --target TailOpsMacViews
-xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Debug build
-```
-
-Expected: all commands pass.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add platforms/macos/TailOpsMac/App/TailnetMonitor.swift \
-  platforms/macos/TailOpsMac/App/TailscaleStatusProvider.swift \
-  platforms/macos/TailOpsMac/App/TailOpsSettingsView.swift
-git commit -m "feat: add ping rate controls"
-```
-
-## Task 7: Taildrop Drop Zone Design Spike
-
-**Files:**
-- Create: `docs/superpowers/specs/2026-05-14-tailops-drop-zone-design.md`
-
-- [ ] **Step 1: Write a short design spec**
-
-Document the recommended first implementation: a temporary Finder folder named `TailOps Drop Zone` with one child folder per available Taildrop target.
-
-- [ ] **Step 2: Define behavior**
-
-Specify that opening the drop zone creates the folders, watches them with `DispatchSourceFileSystemObject` or a lightweight directory scan, sends dropped files via `tailscale file cp`, then moves sent files into a local `Sent` folder or removes them after confirmation.
-
-- [ ] **Step 3: Explicitly defer a mounted drive**
-
-Document that a real mounted volume or File Provider extension is a later option because it is heavier, more permission-sensitive, and not necessary for the first useful flow.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add docs/superpowers/specs/2026-05-14-tailops-drop-zone-design.md
-git commit -m "docs: design TailOps drop zone workflow"
-```
+A real mounted volume or File Provider extension stays out of scope until the watched-folder version proves useful.

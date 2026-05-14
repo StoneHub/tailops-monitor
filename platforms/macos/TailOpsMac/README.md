@@ -94,7 +94,7 @@ TailOps currently exposes Taildrop in two places:
 - The menu-bar host rows accept file drops and send them with `tailscale file cp`.
 - Finder can show a `Send with TailOps` Service for selected files. The service opens a Taildrop destination picker backed by `tailscale file cp --targets`.
 
-The planned next workflow is a temporary Finder-based `TailOps Drop Zone`: opening it creates one folder per available Taildrop target, and dropping a file into a device folder sends it to that device. A real mounted volume or File Provider extension remains possible later, but the watched-folder design is smaller and more reliable for a local utility.
+Wishlist: a temporary Finder-based `TailOps Drop Zone` could create one folder per available Taildrop target, then send files dropped into a device folder. A real mounted volume or File Provider extension remains possible later, but the watched-folder design is smaller and more reliable for a local utility.
 
 ## Liquid Glass And Widget Rendering
 
@@ -102,7 +102,7 @@ The widget uses WidgetKit container backgrounds and marks the background as remo
 
 The widget supports small, medium, and large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares. The medium widget intentionally prioritizes online/warning hosts and collapses extra offline devices into a count so the layout stays readable.
 
-WidgetKit does not expose arbitrary hover-only controls. A planned settings gear should be low-prominence and always available, opening TailOps settings through an App Intent.
+WidgetKit does not expose arbitrary hover-only controls. Instead of a gear-first design, the next plan uses a widget-to-app entry point: small widgets can open TailOps when tapped, medium widgets can open TailOps from background/empty space, and large widgets can expose a low-prominence app/settings affordance without competing with refresh or host action buttons.
 
 ## Runtime Impact
 
@@ -115,7 +115,7 @@ tailscale status --json
 tailscale ping --c 6 --timeout 1500ms --until-direct=false <online-peer>
 ```
 
-Only online peers are pinged. With two online peers, one refresh means twelve ping samples total. Idle impact is therefore near zero; active impact is proportional to the number of online peers and the configured ping sample count. Ping rate controls are planned next.
+Only online peers are pinged. With two online peers, one refresh means twelve ping samples total. Idle impact is therefore near zero; active impact is proportional to the number of online peers. Ping rate controls are intentionally deferred for now.
 
 ## Sandbox Note
 
@@ -157,8 +157,8 @@ The planned order is:
 
 1. Shared app preferences.
 2. Launch at login.
-3. Menu bar icon visibility with a recovery path through widget settings.
-4. Widget settings gear.
+3. Menu bar icon visibility with a widget-to-app recovery path.
+4. Widget-to-app entry point instead of a hover-only gear.
 5. Latest ping route/latency text in widget rows.
-6. Ping sample and refresh-policy controls.
-7. TailOps Drop Zone design spike.
+
+Wishlist: TailOps Drop Zone.

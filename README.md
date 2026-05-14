@@ -107,7 +107,7 @@ The menu-bar app is the active side. It refreshes on app launch, when the menu p
 - one `tailscale status --json`;
 - six `tailscale ping` samples for each online peer.
 
-For a small tailnet this is low impact, but ping controls are the next planned settings work so users can reduce sample count or make ping manual-only.
+For a small tailnet this is low impact. Ping rate controls are not in the next implementation batch; keep evaluating the default after the widget shows clearer ping context.
 
 ## Verify The Swift Platform
 
@@ -165,11 +165,11 @@ This is intended to evolve into an MCP resource/tool so local AI agents can disc
 ## Next Work
 
 - Add launch-at-login and menu-bar icon visibility settings.
-- Add a widget settings gear that opens TailOps settings.
+- Add a widget-to-app entry point so hiding the menu icon still has a recovery path.
 - Show latest ping route and latency text in the widget so the sparkline has context.
-- Add ping rate controls: fewer samples and manual-only mode.
-- Design and then build a Finder-based TailOps Drop Zone for easier Taildrop sends.
 - Add a host picker in macOS settings from the current Tailscale snapshot.
 - Replace direct `tailscale status --json` process calls with a helper/XPC path if pursuing a sandboxed distribution build.
+
+Wishlist: a Finder-based TailOps Drop Zone for easier Taildrop sends.
 
 Detailed plan: `docs/superpowers/plans/2026-05-14-tailops-macos-control-surface.md`.
