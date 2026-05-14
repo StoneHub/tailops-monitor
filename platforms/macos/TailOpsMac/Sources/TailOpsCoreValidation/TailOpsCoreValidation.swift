@@ -16,6 +16,7 @@ struct TailOpsCoreValidation {
         pingParserReadsLatencyAndRouteSamples()
         taildropTargetsParserReadsAvailableAndOfflineTargets()
         widgetLayoutPrioritizesReachableHostsAndCountsHiddenOffline()
+        try appPreferencesRoundTripThroughSharedStore()
         try sharedSnapshotStoreLoadsFirstExistingFallback()
         print("TailOpsCoreValidation passed")
     }
@@ -240,6 +241,24 @@ struct TailOpsCoreValidation {
 
         expect(layout.visibleHosts.map(\.id) == ["online", "warning"], "expected reachable hosts first")
         expect(layout.hiddenOfflineCount == 3, "expected hidden offline count")
+    }
+
+    private static func appPreferencesRoundTripThroughSharedStore() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "TailOpsPreferencesValidation-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let store = SharedSnapshotStore(baseURLs: [rootURL])
+        let preferences = TailOpsAppPreferences(
+            launchAtLogin: true,
+            showMenuBarIcon: false,
+            opensSettingsFromWidget: true
+        )
+
+        try store.saveAppPreferences(preferences)
+        let loaded = try store.loadAppPreferences()
+
+        expect(loaded == preferences, "expected shared app preferences to round trip")
     }
 
     private static func parserSortsHostsByRecentAvailability() throws {

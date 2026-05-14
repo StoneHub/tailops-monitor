@@ -147,6 +147,22 @@ public struct TailnetWidgetHostLayout: Equatable, Sendable {
     }
 }
 
+public struct TailOpsAppPreferences: Codable, Equatable, Sendable {
+    public let launchAtLogin: Bool
+    public let showMenuBarIcon: Bool
+    public let opensSettingsFromWidget: Bool
+
+    public init(
+        launchAtLogin: Bool = false,
+        showMenuBarIcon: Bool = true,
+        opensSettingsFromWidget: Bool = true
+    ) {
+        self.launchAtLogin = launchAtLogin
+        self.showMenuBarIcon = showMenuBarIcon
+        self.opensSettingsFromWidget = opensSettingsFromWidget
+    }
+}
+
 public enum TailnetPingRoute: String, Codable, Equatable, Sendable {
     case direct
     case peerRelay

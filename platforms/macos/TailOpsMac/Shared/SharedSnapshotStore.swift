@@ -7,6 +7,8 @@ public protocol SharedSnapshotStoring {
     func save(_ snapshot: TailnetSnapshot) throws
     func loadActionConfiguration() throws -> TailnetActionConfiguration?
     func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws
+    func loadAppPreferences() throws -> TailOpsAppPreferences?
+    func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws
 }
 
 public struct SharedSnapshotStore: SharedSnapshotStoring {
@@ -35,6 +37,15 @@ public struct SharedSnapshotStore: SharedSnapshotStoring {
     public func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws {
         let data = try JSONEncoder.tailops.encode(configuration)
         try write(data, path: "tailops-actions.json")
+    }
+
+    public func loadAppPreferences() throws -> TailOpsAppPreferences? {
+        try loadFirstExisting(path: "tailops-preferences.json", as: TailOpsAppPreferences.self)
+    }
+
+    public func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws {
+        let data = try JSONEncoder.tailops.encode(preferences)
+        try write(data, path: "tailops-preferences.json")
     }
 
     private func loadFirstExisting<T: Decodable>(path: String, as type: T.Type) throws -> T? {

@@ -34,7 +34,7 @@ Completed:
 
 Next implementation batch:
 
-1. Add shared app preferences for launch/login/menu visibility/widget app-entry state.
+1. Add shared app preferences for launch/login/menu visibility/widget app-entry state. Done.
 2. Add `Launch at login` in settings using `ServiceManagement`.
 3. Add `Show menu bar icon` setting.
 4. Add a widget-to-app entry point instead of a hover-only gear.
@@ -82,7 +82,7 @@ The current idle impact is therefore near zero beyond WidgetKit reading a small 
 - Modify: `platforms/macos/TailOpsMac/Sources/TailOpsCoreValidation/TailOpsCoreValidation.swift`
 - Modify: `platforms/macos/TailOpsMac/Shared/SharedSnapshotStore.swift`
 
-- [ ] **Step 1: Write the failing validation**
+- [x] **Step 1: Write the failing validation**
 
 Add a validation function named `appPreferencesRoundTripThroughSharedStore()` in `TailOpsCoreValidation.swift`:
 
@@ -108,7 +108,7 @@ private static func appPreferencesRoundTripThroughSharedStore() throws {
 
 Call it from `main()` before the final print.
 
-- [ ] **Step 2: Run validation to verify it fails**
+- [x] **Step 2: Run validation to verify it fails**
 
 Run:
 
@@ -119,7 +119,7 @@ swift run TailOpsCoreValidation
 
 Expected: compile failure because `TailOpsAppPreferences`, `saveAppPreferences`, and `loadAppPreferences` do not exist yet.
 
-- [ ] **Step 3: Add the model**
+- [x] **Step 3: Add the model**
 
 Add to `TailOpsCore.swift`:
 
@@ -141,7 +141,7 @@ public struct TailOpsAppPreferences: Codable, Equatable, Sendable {
 }
 ```
 
-- [ ] **Step 4: Add store methods**
+- [x] **Step 4: Add store methods**
 
 Extend `SharedSnapshotStoring` and `SharedSnapshotStore` in `SharedSnapshotStore.swift`:
 
@@ -152,7 +152,7 @@ func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws
 
 Use the path `tailops-preferences.json` and the existing `loadFirstExisting` / `write` helpers.
 
-- [ ] **Step 5: Run validation to verify it passes**
+- [x] **Step 5: Run validation to verify it passes**
 
 Run:
 
