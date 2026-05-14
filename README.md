@@ -111,6 +111,7 @@ npm test
 
 ## Next Integration Points
 
+- Add the pure Swift macOS menu-bar app and WidgetKit extension from `platforms/macos/TailOpsMac` as the low-impact desktop path.
 - Add a per-host TailOps/OpenClaw agent that reports remote CPU, memory, disk, process, and CPU temperature data.
 - Replace `data/agents.sample.json` with a generated or discovered live agent registry.
 - Add MCP server support so local AI agents can query the phonebook directly.

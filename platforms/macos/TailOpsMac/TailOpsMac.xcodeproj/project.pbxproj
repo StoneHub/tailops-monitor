@@ -1,0 +1,451 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* App/TailOpsMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* App/TailOpsMacApp.swift */; };
+		A10000000000000000000002 /* App/TailscaleStatusProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* App/TailscaleStatusProvider.swift */; };
+		A10000000000000000000003 /* App/TailOpsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* App/TailOpsSettingsView.swift */; };
+		A10000000000000000000004 /* App/TailOpsMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* App/TailOpsMenuView.swift */; };
+		A10000000000000000000005 /* App/TailnetMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* App/TailnetMonitor.swift */; };
+		A10000000000000000000006 /* App/TailOpsActionSettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* App/TailOpsActionSettingsModel.swift */; };
+		A10000000000000000000007 /* Widget/TailOpsWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */; };
+		A10000000000000000000008 /* Widget/TailOpsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* Widget/TailOpsWidget.swift */; };
+		A10000000000000000000009 /* TailOpsWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* TailOpsWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A10000000000000000000010 /* TailOpsCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* TailOpsCore */; };
+		A10000000000000000000011 /* TailOpsShared in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* TailOpsShared */; };
+		A10000000000000000000012 /* TailOpsCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000004 /* TailOpsCore */; };
+		A10000000000000000000013 /* TailOpsShared in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000005 /* TailOpsShared */; };
+		A10000000000000000000014 /* TailOpsIntents in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000006 /* TailOpsIntents */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A30000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A40000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A50000000000000000000002;
+			remoteInfo = TailOpsWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A60000000000000000000001 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A10000000000000000000009 /* TailOpsWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* App/TailOpsMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsMacApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* App/TailscaleStatusProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailscaleStatusProvider.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* App/TailOpsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsSettingsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* App/TailOpsMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsMenuView.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* App/TailnetMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailnetMonitor.swift; sourceTree = "<group>"; };
+		A20000000000000000000006 /* App/TailOpsActionSettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsActionSettingsModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidgetBundle.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* Widget/TailOpsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidget.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* TailOpsMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TailOpsMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000010 /* TailOpsWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TailOpsWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000011 /* Xcode/TailOpsMacApp/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Xcode/TailOpsMacApp/Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000012 /* Xcode/TailOpsMacApp/TailOpsMacApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Xcode/TailOpsMacApp/TailOpsMacApp.entitlements; sourceTree = "<group>"; };
+		A20000000000000000000013 /* Xcode/TailOpsWidget/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Xcode/TailOpsWidget/Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000014 /* Xcode/TailOpsWidget/TailOpsWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Xcode/TailOpsWidget/TailOpsWidget.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A70000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000010 /* TailOpsCore in Frameworks */,
+				A10000000000000000000011 /* TailOpsShared in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A70000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000012 /* TailOpsCore in Frameworks */,
+				A10000000000000000000013 /* TailOpsShared in Frameworks */,
+				A10000000000000000000014 /* TailOpsIntents in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A80000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A80000000000000000000002 /* App */,
+				A80000000000000000000003 /* Widget */,
+				A80000000000000000000004 /* Xcode */,
+				A80000000000000000000005 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A80000000000000000000002 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* App/TailOpsMacApp.swift */,
+				A20000000000000000000002 /* App/TailscaleStatusProvider.swift */,
+				A20000000000000000000003 /* App/TailOpsSettingsView.swift */,
+				A20000000000000000000004 /* App/TailOpsMenuView.swift */,
+				A20000000000000000000005 /* App/TailnetMonitor.swift */,
+				A20000000000000000000006 /* App/TailOpsActionSettingsModel.swift */,
+			);
+			name = App;
+			sourceTree = "<group>";
+		};
+		A80000000000000000000003 /* Widget */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */,
+				A20000000000000000000008 /* Widget/TailOpsWidget.swift */,
+			);
+			name = Widget;
+			sourceTree = "<group>";
+		};
+		A80000000000000000000004 /* Xcode */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000011 /* Xcode/TailOpsMacApp/Info.plist */,
+				A20000000000000000000012 /* Xcode/TailOpsMacApp/TailOpsMacApp.entitlements */,
+				A20000000000000000000013 /* Xcode/TailOpsWidget/Info.plist */,
+				A20000000000000000000014 /* Xcode/TailOpsWidget/TailOpsWidget.entitlements */,
+			);
+			name = Xcode;
+			sourceTree = "<group>";
+		};
+		A80000000000000000000005 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000009 /* TailOpsMac.app */,
+				A20000000000000000000010 /* TailOpsWidget.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* TailOpsMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB0000000000000000000003 /* Build configuration list for PBXNativeTarget "TailOpsMac" */;
+			buildPhases = (
+				AC0000000000000000000001 /* Sources */,
+				A70000000000000000000001 /* Frameworks */,
+				AD0000000000000000000001 /* Resources */,
+				A60000000000000000000001 /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AE0000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = TailOpsMac;
+			packageProductDependencies = (
+				A90000000000000000000001 /* TailOpsCore */,
+				A90000000000000000000002 /* TailOpsShared */,
+			);
+			productName = TailOpsMac;
+			productReference = A20000000000000000000009 /* TailOpsMac.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A50000000000000000000002 /* TailOpsWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB0000000000000000000006 /* Build configuration list for PBXNativeTarget "TailOpsWidget" */;
+			buildPhases = (
+				AC0000000000000000000002 /* Sources */,
+				A70000000000000000000002 /* Frameworks */,
+				AD0000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TailOpsWidget;
+			packageProductDependencies = (
+				A90000000000000000000004 /* TailOpsCore */,
+				A90000000000000000000005 /* TailOpsShared */,
+				A90000000000000000000006 /* TailOpsIntents */,
+			);
+			productName = TailOpsWidget;
+			productReference = A20000000000000000000010 /* TailOpsWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A40000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					A50000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					A50000000000000000000002 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = AB0000000000000000000001 /* Build configuration list for PBXProject "TailOpsMac" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A80000000000000000000001;
+			packageReferences = (
+				A90000000000000000000000 /* XCLocalSwiftPackageReference "." */,
+			);
+			productRefGroup = A80000000000000000000005 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A50000000000000000000001 /* TailOpsMac */,
+				A50000000000000000000002 /* TailOpsWidget */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AD0000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AD0000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AC0000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* App/TailOpsMacApp.swift in Sources */,
+				A10000000000000000000002 /* App/TailscaleStatusProvider.swift in Sources */,
+				A10000000000000000000003 /* App/TailOpsSettingsView.swift in Sources */,
+				A10000000000000000000004 /* App/TailOpsMenuView.swift in Sources */,
+				A10000000000000000000005 /* App/TailnetMonitor.swift in Sources */,
+				A10000000000000000000006 /* App/TailOpsActionSettingsModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AC0000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000007 /* Widget/TailOpsWidgetBundle.swift in Sources */,
+				A10000000000000000000008 /* Widget/TailOpsWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AE0000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A50000000000000000000002 /* TailOpsWidget */;
+			targetProxy = A30000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		AB0000000000000000000002 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AB0000000000000000000004 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsMacApp/TailOpsMacApp.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N6GPP46885;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Xcode/TailOpsMacApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tailops.monitor;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AB0000000000000000000005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsMacApp/TailOpsMacApp.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N6GPP46885;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Xcode/TailOpsMacApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tailops.monitor;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		AB0000000000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsWidget/TailOpsWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N6GPP46885;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Xcode/TailOpsWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../../../../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tailops.monitor.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AB0000000000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsWidget/TailOpsWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = N6GPP46885;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Xcode/TailOpsWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../../../../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tailops.monitor.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AB0000000000000000000001 /* Build configuration list for PBXProject "TailOpsMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000002 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AB0000000000000000000003 /* Build configuration list for PBXNativeTarget "TailOpsMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000004 /* Debug */,
+				AB0000000000000000000005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AB0000000000000000000006 /* Build configuration list for PBXNativeTarget "TailOpsWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000007 /* Debug */,
+				AB0000000000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A90000000000000000000000 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A90000000000000000000001 /* TailOpsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A90000000000000000000000 /* XCLocalSwiftPackageReference "." */;
+			productName = TailOpsCore;
+		};
+		A90000000000000000000002 /* TailOpsShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A90000000000000000000000 /* XCLocalSwiftPackageReference "." */;
+			productName = TailOpsShared;
+		};
+		A90000000000000000000004 /* TailOpsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A90000000000000000000000 /* XCLocalSwiftPackageReference "." */;
+			productName = TailOpsCore;
+		};
+		A90000000000000000000005 /* TailOpsShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A90000000000000000000000 /* XCLocalSwiftPackageReference "." */;
+			productName = TailOpsShared;
+		};
+		A90000000000000000000006 /* TailOpsIntents */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A90000000000000000000000 /* XCLocalSwiftPackageReference "." */;
+			productName = TailOpsIntents;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A40000000000000000000001 /* Project object */;
+}

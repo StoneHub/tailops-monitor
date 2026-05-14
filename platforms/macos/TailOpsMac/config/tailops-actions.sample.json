@@ -1,0 +1,38 @@
+{
+  "hostActions": [
+    {
+      "hostID": "openclaw",
+      "actions": [
+        {
+          "emoji": "🖥",
+          "title": "SSH",
+          "kind": "ssh",
+          "target": "openclaw.tailnet.ts.net"
+        },
+        {
+          "emoji": "🧭",
+          "title": "Dash",
+          "kind": "url",
+          "target": "http://openclaw.tailnet.ts.net:8080"
+        },
+        {
+          "emoji": "📋",
+          "title": "IP",
+          "kind": "copy",
+          "target": "100.64.0.2"
+        }
+      ]
+    },
+    {
+      "hostID": "asus-router",
+      "actions": [
+        {
+          "emoji": "📡",
+          "title": "Admin",
+          "kind": "url",
+          "target": "http://router.tailnet.ts.net"
+        }
+      ]
+    }
+  ]
+}
