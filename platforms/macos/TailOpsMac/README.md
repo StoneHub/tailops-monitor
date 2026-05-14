@@ -153,6 +153,15 @@ The next control-surface plan lives at:
 docs/superpowers/plans/2026-05-14-tailops-macos-control-surface.md
 ```
 
+Current progress:
+
+- Native Swift menu-bar app and WidgetKit widget are working.
+- App and widget share state through the team-prefixed App Group.
+- Widget supports small, medium, and large families.
+- Widget shows reachable hosts first and collapses extra offline hosts.
+- Menu-bar rows support refresh, quick actions, ping sparkline context, and Taildrop file drops.
+- Finder Service can send selected files through Taildrop.
+
 The planned order is:
 
 1. Shared app preferences.

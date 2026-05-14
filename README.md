@@ -98,6 +98,20 @@ The widget uses WidgetKit container backgrounds, removable backgrounds, `widgetR
 
 More detail: `platforms/macos/TailOpsMac/README.md`.
 
+## Current macOS Progress
+
+As of May 14, 2026, the current branch has a working native Swift menu-bar app and WidgetKit widget. The app/widget are locally signed with a shared App Group, the widget reads cached snapshots, the menu bar owns live Tailscale refresh, and Taildrop is available through menu-row file drops plus a Finder Service.
+
+Next implementation batch:
+
+1. Shared app preferences.
+2. Launch at login.
+3. Menu bar icon visibility.
+4. Widget-to-app entry point instead of a hover-only gear.
+5. Latest ping route/latency text in widget rows.
+
+Deferred for now: ping-rate controls and TailOps Drop Zone. Drop Zone remains wishlist only.
+
 ## macOS Runtime Impact
 
 The WidgetKit extension is passive. It reads the cached shared snapshot and asks WidgetKit for another timeline in about five minutes. It does not run `tailscale`, keep a backend alive, or ping hosts.

@@ -14,6 +14,44 @@
 
 The current branch is `codex/macos-widget-platform`. As of this plan, the app builds and runs as a signed local macOS app, the widget reads the shared snapshot from the team-prefixed App Group, the menu bar uses the constellation icon, and Taildrop is available through drag/drop in the menu plus a Finder Service.
 
+## Progress Snapshot - 2026-05-14
+
+Completed:
+
+- Native Swift/Apple macOS path selected over a Node-backed widget.
+- Xcode project exists for `TailOpsMac` plus embedded `TailOpsWidget`.
+- App and widget sign locally with the team-prefixed App Group.
+- Shared snapshot storage works in the team-prefixed App Group with legacy fallback.
+- Menu-bar app reads `tailscale status --json`, refreshes manually/on launch/on menu open, and writes the widget snapshot.
+- Menu-bar host rows sort by useful/recent availability.
+- Menu-bar rows show ping sparkline context and accept file drops for Taildrop.
+- Finder Service exists for `Send with TailOps`, backed by `tailscale file cp --targets`.
+- Widget supports small, medium, and large families.
+- Widget uses the constellation SF Symbol, avoids the inactive-focus white-pill rendering issue, prioritizes reachable hosts, and collapses extra offline hosts into a count.
+- Widget has refresh and copy intents.
+- Custom host action config exists for SSH, dashboard URLs, and copy actions.
+- Root and macOS READMEs describe the native macOS product path, runtime impact, Taildrop state, and next plan.
+
+Next implementation batch:
+
+1. Add shared app preferences for launch/login/menu visibility/widget app-entry state.
+2. Add `Launch at login` in settings using `ServiceManagement`.
+3. Add `Show menu bar icon` setting.
+4. Add a widget-to-app entry point instead of a hover-only gear.
+5. Show latest ping route and latency text in widget rows so the sparkline has context.
+
+Secondary backlog:
+
+- Add a host picker in macOS settings from the current Tailscale snapshot.
+- Add terminal preference support for SSH actions.
+- Replace direct `tailscale` process calls with an XPC/helper path if pursuing sandboxed distribution.
+
+Deferred:
+
+- Ping rate/sample controls are dropped from the next batch.
+- TailOps Drop Zone remains wishlist only.
+- A real mounted drive/File Provider Taildrop surface is deferred until a watched-folder Drop Zone proves useful.
+
 Current refresh behavior:
 
 - The widget timeline reloads every 5 minutes from `tailops-snapshot.json`.
