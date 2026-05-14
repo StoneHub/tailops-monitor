@@ -43,6 +43,7 @@ let package = Package(
                 "DesignPreviewGallery.swift",
                 "TailscaleStatusProvider.swift",
                 "TailOpsActionSettingsModel.swift",
+                "TailOpsConstellationIcon.swift",
                 "TailOpsSettingsView.swift",
                 "TailOpsMenuView.swift",
                 "TailnetMonitor.swift"

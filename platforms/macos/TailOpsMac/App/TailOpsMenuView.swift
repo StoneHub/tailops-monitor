@@ -47,7 +47,9 @@ struct TailOpsMenuView: View {
 
     private var header: some View {
         HStack {
-            Label("TailOps", systemImage: monitor.menuBarSymbol)
+            TailOpsConstellationIcon(trafficLight: monitor.summary.trafficLight)
+                .frame(width: 22, height: 22)
+            Text("TailOps")
                 .font(.headline)
 
             Spacer()
