@@ -67,8 +67,31 @@ struct TailOpsWidgetView: View {
                     .foregroundStyle(.primary)
                     .symbolRenderingMode(.hierarchical)
                 Spacer()
-                Button(intent: OpenTailOpsSettingsIntent()) {
-                    Image(systemName: "gearshape")
+            }
+
+            if entry.snapshot.hosts.isEmpty {
+                WidgetEmptyState()
+            } else {
+                VStack(alignment: .leading, spacing: rowSpacing) {
+                    ForEach(layout.visibleHosts) { host in
+                        WidgetHostActionRow(
+                            host: host,
+                            actions: actionCatalog.actions(for: host),
+                            showsActions: showsHostActions
+                        )
+                    }
+                    if layout.hiddenOfflineCount > 0 {
+                        WidgetOfflineSummary(count: layout.hiddenOfflineCount)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 8) {
+                Button(intent: OpenTailscaleAppIntent()) {
+                    Label("Tailscale", systemImage: "arrow.up.forward.app")
+                        .labelStyle(.iconOnly)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -82,19 +105,13 @@ struct TailOpsWidgetView: View {
                 Text(entry.date, style: .time)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-            }
-
-            if entry.snapshot.hosts.isEmpty {
-                WidgetEmptyState()
-            } else {
-                VStack(alignment: .leading, spacing: rowSpacing) {
-                    ForEach(layout.visibleHosts) { host in
-                        WidgetHostActionRow(host: host, actions: actionCatalog.actions(for: host))
-                    }
-                    if layout.hiddenOfflineCount > 0 {
-                        WidgetOfflineSummary(count: layout.hiddenOfflineCount)
-                    }
+                Spacer()
+                Button(intent: OpenTailOpsSettingsIntent()) {
+                    Image(systemName: "gearshape")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
             }
         }
         .containerBackground(for: .widget) {
@@ -113,18 +130,27 @@ struct TailOpsWidgetView: View {
         case .systemSmall:
             return 1
         case .systemLarge:
-            return 5
+            return 4
         default:
             return 2
+        }
+    }
+
+    private var showsHostActions: Bool {
+        switch family {
+        case .systemSmall:
+            return false
+        default:
+            return true
         }
     }
 
     private var rowSpacing: CGFloat {
         switch family {
         case .systemLarge:
-            return 8
+            return 7
         default:
-            return 6
+            return 5
         }
     }
 }
@@ -184,47 +210,62 @@ private struct WidgetOfflineSummary: View {
 private struct WidgetHostActionRow: View {
     let host: TailnetHost
     let actions: [HostAction]
+    let showsActions: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(color(for: host.status))
-                    .frame(width: 7, height: 7)
-                Text(host.name)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Spacer()
-                if let address = host.primaryAddress {
-                    Text(address)
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(color(for: host.status))
+                        .frame(width: 7, height: 7)
+                    Text(host.name)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                 }
-            }
 
-            if let pingText {
-                Text(pingText)
-                    .font(.caption2)
+                Text(detailText)
+                    .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
 
-            HStack(spacing: 5) {
-                ForEach(actions.prefix(3), id: \.title) { action in
-                    WidgetActionChip(action: action)
+            Spacer(minLength: 6)
+
+            if let pingText {
+                Text(pingText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+
+            if showsActions {
+                HStack(spacing: 4) {
+                    ForEach(actions.prefix(2), id: \.title) { action in
+                        WidgetActionChip(action: action)
+                    }
                 }
             }
         }
-        .padding(.vertical, 2)
-        .background {
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
             if let samples = host.diagnostics?.ping?.samples {
                 PingSparklineView(samples: samples)
-                    .padding(.vertical, 2)
-                    .opacity(0.18)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 3)
+                    .opacity(0.11)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .allowsHitTesting(false)
             }
         }
+    }
+
+    private var detailText: String {
+        host.primaryAddress ?? host.magicDNSName ?? host.status.rawValue
     }
 
     private var pingText: String? {
@@ -235,9 +276,9 @@ private struct WidgetHostActionRow: View {
             return nil
         }
 
-        let latestText = latest.formatted(.number.precision(.fractionLength(0...1)))
-        let averageText = average.formatted(.number.precision(.fractionLength(0...1)))
-        return "\(ping.latestRoute.label) \(latestText) ms | avg \(averageText) ms (\(ping.samples.count))"
+        let latestText = latest.formatted(.number.precision(.fractionLength(0...0)))
+        let averageText = average.formatted(.number.precision(.fractionLength(0...0)))
+        return "\(latestText) ms / \(averageText) avg"
     }
 
     private func color(for status: TailnetHost.Status) -> Color {
@@ -272,26 +313,22 @@ private struct WidgetActionChip: View {
     }
 
     private var chipContent: some View {
-        HStack(spacing: 3) {
-            Text(action.emoji ?? fallbackEmoji)
-            Text(action.title)
-                .lineLimit(1)
-        }
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(Color.primary.opacity(0.82))
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(Color.primary.opacity(0.11), in: Capsule())
+        Image(systemName: systemImage)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Color.primary.opacity(0.8))
+            .frame(width: 22, height: 22)
+            .background(Color.primary.opacity(0.1), in: Circle())
+            .accessibilityLabel(action.title)
     }
 
-    private var fallbackEmoji: String {
+    private var systemImage: String {
         switch action.kind {
         case .ssh:
-            return ">"
+            return "terminal"
         case .dashboard:
-            return "*"
+            return "gauge.with.dots.needle.50percent"
         case .copyAddress:
-            return "#"
+            return "doc.on.doc"
         }
     }
 }

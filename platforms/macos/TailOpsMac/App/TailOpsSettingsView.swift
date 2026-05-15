@@ -1,8 +1,10 @@
+import AppKit
 import SwiftUI
 import TailOpsCore
 import TailOpsShared
 
 struct TailOpsSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var model: TailOpsActionSettingsModel
     @StateObject private var preferencesModel: TailOpsPreferencesModel
     @State private var importExportText = ""
@@ -26,6 +28,7 @@ struct TailOpsSettingsView: View {
                     ForEach($model.hostActions) { $hostActions in
                         HostActionsEditor(
                             hostActions: $hostActions,
+                            addDashboard: { model.addDashboard(to: hostActions.id, target: $0) },
                             addAction: { model.addAction(to: hostActions.id) },
                             removeAction: { model.removeAction($0, from: hostActions.id) },
                             removeHost: { model.removeHostActions(id: hostActions.id) }
@@ -44,7 +47,7 @@ struct TailOpsSettingsView: View {
             footer
         }
         .padding(18)
-        .frame(minWidth: 680, minHeight: 520)
+        .frame(minWidth: 560, minHeight: 430)
     }
 
     private var header: some View {
@@ -52,16 +55,11 @@ struct TailOpsSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("TailOps Actions")
                     .font(.title3.weight(.semibold))
-                Text("Match a host by name, MagicDNS, Tailscale IP, or host ID, then add widget buttons.")
+                Text("Choose a host, paste a dashboard address, then save.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button {
-                model.addHostActions()
-            } label: {
-                Label("Host", systemImage: "plus")
-            }
             Button {
                 importExportText = model.exportJSON()
                 showsJSONEditor = true
@@ -84,15 +82,7 @@ struct TailOpsSettingsView: View {
                 )
             )
 
-            Toggle(
-                "Show menu bar icon",
-                isOn: Binding(
-                    get: { preferencesModel.showMenuBarIcon },
-                    set: { preferencesModel.setShowMenuBarIcon($0) }
-                )
-            )
-
-            Text("Turn off the menu bar icon for widget-only mode. Use the gear in the widget header to reopen these settings.")
+            Text("TailOps now runs widget-first. The host app stays hidden and keeps the shared widget snapshot, settings, and quick actions available.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -158,7 +148,7 @@ struct TailOpsSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text("Kinds: URL opens dashboards, SSH opens ssh:// links, Copy is wired visually until App Intents are added.")
+                Text("Kinds: URL opens dashboards, SSH opens ssh:// links, Copy puts configured values on the clipboard.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -166,7 +156,10 @@ struct TailOpsSettingsView: View {
             Spacer()
 
             Button("Save") {
-                model.save()
+                if model.save() {
+                    dismiss()
+                    NSApp.keyWindow?.close()
+                }
             }
             .buttonStyle(.borderedProminent)
             .disabled(!model.canSave)
@@ -176,30 +169,16 @@ struct TailOpsSettingsView: View {
 
 private struct HostActionsEditor: View {
     @Binding var hostActions: EditableHostActions
+    let addDashboard: (String) -> Void
     let addAction: () -> Void
     let removeAction: (EditableQuickAction.ID) -> Void
     let removeHost: () -> Void
+    @State private var dashboardTarget = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                TextField("Host name, MagicDNS, IP, or ID", text: $hostActions.hostID)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.callout)
-                Button {
-                    addAction()
-                } label: {
-                    Image(systemName: "plus.circle")
-                }
-                .help("Add action")
-                Button(role: .destructive) {
-                    removeHost()
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-                .help("Remove host")
-            }
+            hostHeader
+            dashboardEntry
 
             VStack(spacing: 8) {
                 ForEach($hostActions.actions) { $action in
@@ -211,6 +190,68 @@ private struct HostActionsEditor: View {
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var hostHeader: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(hostActions.displayName ?? hostActions.hostID)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                if let detail = hostActions.displayDetail ?? (hostActions.isKnownHost ? nil : hostActions.hostID) {
+                    Text(detail)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            if !hostActions.isKnownHost {
+                Button(role: .destructive) {
+                    removeHost()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Remove custom host")
+            }
+        }
+    }
+
+    private var dashboardEntry: some View {
+        HStack(spacing: 8) {
+            TextField("Paste dashboard address, like http://host:8080", text: $dashboardTarget)
+                .textFieldStyle(.roundedBorder)
+            Button {
+                addDashboard(dashboardTarget)
+                dashboardTarget = ""
+            } label: {
+                Label("Add", systemImage: "plus")
+            }
+            .disabled(dashboardTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button {
+                addAction()
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+            }
+            .help("Add custom action")
+        }
+    }
+
+    private var statusColor: Color {
+        switch hostActions.status {
+        case .online:
+            return .green
+        case .warning:
+            return .orange
+        case .offline:
+            return .secondary
+        case nil:
+            return .secondary
+        }
     }
 }
 
@@ -246,7 +287,7 @@ private struct ActionEditorRow: View {
                 .frame(width: 92)
 
                 TextField(targetPlaceholder, text: $action.target)
-                    .frame(minWidth: 260)
+                    .frame(minWidth: 190)
 
                 Button(role: .destructive) {
                     remove()

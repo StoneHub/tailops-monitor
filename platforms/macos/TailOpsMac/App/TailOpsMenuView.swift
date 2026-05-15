@@ -180,8 +180,14 @@ private struct HostRow: View {
 
             HStack(spacing: 6) {
                 ForEach(actions, id: \.title) { action in
-                    Button(action.title) {
+                    Button {
                         perform(action)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text(action.emoji ?? fallbackEmoji(for: action))
+                            Text(action.title)
+                                .lineLimit(1)
+                        }
                     }
                     .font(.caption)
                     .buttonStyle(.bordered)
@@ -282,6 +288,17 @@ private struct HostRow: View {
         case .copyAddress:
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(action.value ?? "", forType: .string)
+        }
+    }
+
+    private func fallbackEmoji(for action: HostAction) -> String {
+        switch action.kind {
+        case .ssh:
+            return ">"
+        case .dashboard:
+            return "*"
+        case .copyAddress:
+            return "#"
         }
     }
 

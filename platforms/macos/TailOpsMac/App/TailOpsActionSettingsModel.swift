@@ -14,13 +14,17 @@ final class TailOpsActionSettingsModel: ObservableObject {
     init(store: SharedSnapshotStoring = SharedSnapshotStore(), configuration: TailnetActionConfiguration? = nil) {
         self.store = store
         let initialConfiguration = configuration ?? (try? store.loadActionConfiguration()) ?? TailnetActionConfiguration()
-        hostActions = initialConfiguration.hostActions.map(EditableHostActions.init)
+        let hosts = (try? store.load()?.hosts) ?? []
+        hostActions = Self.mergedHostActions(hosts: hosts, configuration: initialConfiguration)
     }
 
     var configuration: TailnetActionConfiguration {
         TailnetActionConfiguration(
             hostActions: hostActions
-                .filter { !$0.hostID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .filter {
+                    !$0.hostID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && !$0.actions.compactMap(\.quickAction).isEmpty
+                }
                 .map { host in
                     TailnetHostActionConfiguration(
                         hostID: host.hostID.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -51,23 +55,44 @@ final class TailOpsActionSettingsModel: ObservableObject {
         hostActions[index].actions.append(EditableQuickAction())
     }
 
+    func addDashboard(to hostID: EditableHostActions.ID, target: String) {
+        let normalizedTarget = Self.normalizedDashboardTarget(target)
+        guard !normalizedTarget.isEmpty,
+              let index = hostActions.firstIndex(where: { $0.id == hostID })
+        else {
+            return
+        }
+
+        hostActions[index].actions.append(
+            EditableQuickAction(
+                emoji: "🧭",
+                title: Self.dashboardTitle(for: normalizedTarget),
+                kind: .url,
+                target: normalizedTarget
+            )
+        )
+    }
+
     func removeAction(_ actionID: EditableQuickAction.ID, from hostID: EditableHostActions.ID) {
         guard let index = hostActions.firstIndex(where: { $0.id == hostID }) else { return }
         hostActions[index].actions.removeAll { $0.id == actionID }
     }
 
-    func save() {
+    @discardableResult
+    func save() -> Bool {
         guard canSave else {
             saveError = "Fix validation issues before saving."
-            return
+            return false
         }
         do {
             try store.saveActionConfiguration(configuration)
             WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
             saveError = nil
             importExportMessage = "Saved actions."
+            return true
         } catch {
             saveError = error.localizedDescription
+            return false
         }
     }
 
@@ -98,6 +123,63 @@ final class TailOpsActionSettingsModel: ObservableObject {
             saveError = error.localizedDescription
         }
     }
+
+    private static func mergedHostActions(hosts: [TailnetHost], configuration: TailnetActionConfiguration) -> [EditableHostActions] {
+        var remainingConfigurations = configuration.hostActions
+        var rows: [EditableHostActions] = hosts.map { host in
+            let matchIndex = remainingConfigurations.firstIndex { hostConfiguration in
+                identifiers(for: host).contains(hostConfiguration.hostID)
+            }
+            let matchedConfiguration = matchIndex.map { remainingConfigurations.remove(at: $0) }
+
+            return EditableHostActions(
+                hostID: preferredIdentifier(for: host),
+                actions: matchedConfiguration?.actions.map(EditableQuickAction.init) ?? [],
+                displayName: host.name,
+                displayDetail: host.magicDNSName ?? host.primaryAddress,
+                status: host.status,
+                isKnownHost: true
+            )
+        }
+
+        rows.append(contentsOf: remainingConfigurations.map(EditableHostActions.init))
+        return rows
+    }
+
+    private static func preferredIdentifier(for host: TailnetHost) -> String {
+        host.magicDNSName ?? host.primaryAddress ?? host.name
+    }
+
+    private static func identifiers(for host: TailnetHost) -> Set<String> {
+        Set([host.id, host.name, host.magicDNSName, host.primaryAddress].compactMap(\.self))
+    }
+
+    private static func normalizedDashboardTarget(_ target: String) -> String {
+        let cleanTarget = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTarget.isEmpty else { return "" }
+        if URL(string: cleanTarget)?.scheme != nil {
+            return cleanTarget
+        }
+        return "http://\(cleanTarget)"
+    }
+
+    private static func dashboardTitle(for target: String) -> String {
+        guard let url = URL(string: target),
+              let host = url.host(percentEncoded: false),
+              !host.isEmpty
+        else {
+            return "Dashboard"
+        }
+
+        if let port = url.port {
+            return "\(port)"
+        }
+
+        return host
+            .split(separator: ".")
+            .first
+            .map(String.init) ?? "Dashboard"
+    }
 }
 
 private extension JSONEncoder {
@@ -118,17 +200,37 @@ struct EditableHostActions: Identifiable, Equatable {
     let id: UUID
     var hostID: String
     var actions: [EditableQuickAction]
+    var displayName: String?
+    var displayDetail: String?
+    var status: TailnetHost.Status?
+    var isKnownHost: Bool
 
-    init(id: UUID = UUID(), hostID: String, actions: [EditableQuickAction]) {
+    init(
+        id: UUID = UUID(),
+        hostID: String,
+        actions: [EditableQuickAction],
+        displayName: String? = nil,
+        displayDetail: String? = nil,
+        status: TailnetHost.Status? = nil,
+        isKnownHost: Bool = false
+    ) {
         self.id = id
         self.hostID = hostID
         self.actions = actions
+        self.displayName = displayName
+        self.displayDetail = displayDetail
+        self.status = status
+        self.isKnownHost = isKnownHost
     }
 
     init(configuration: TailnetHostActionConfiguration) {
         id = UUID()
         hostID = configuration.hostID
         actions = configuration.actions.map(EditableQuickAction.init)
+        displayName = nil
+        displayDetail = nil
+        status = nil
+        isKnownHost = false
     }
 }
 

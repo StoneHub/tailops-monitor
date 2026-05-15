@@ -40,6 +40,29 @@ public struct RefreshTailOpsWidgetIntent: AppIntent {
     }
 }
 
+public struct OpenTailscaleAppIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Open Tailscale"
+    public static let description = IntentDescription("Opens the Tailscale macOS app.")
+    public static let openAppWhenRun = false
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        let candidateURLs = [
+            URL(fileURLWithPath: "/Applications/Tailscale.app"),
+            URL(fileURLWithPath: "/System/Volumes/Data/Applications/Tailscale.app")
+        ]
+
+        if let url = candidateURLs.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            NSWorkspace.shared.open(url)
+        } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.tailscale.ipn.macsys") {
+            NSWorkspace.shared.open(url)
+        }
+
+        return .result()
+    }
+}
+
 public struct OpenTailOpsSettingsIntent: AppIntent {
     public static let title: LocalizedStringResource = "Open TailOps Settings"
     public static let description = IntentDescription("Opens TailOps settings from the widget.")

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add user-controlled launch, menu-bar visibility, a reliable widget-to-app recovery path, and clearer ping context while keeping TailOps low-impact.
+**Goal:** Keep TailOps widget-first, add reliable widget-to-settings recovery, and show clearer ping context while keeping TailOps low-impact.
 
-**Architecture:** Keep the widget passive and make the menu-bar app the only process that runs Tailscale CLI commands. Store preferences in the shared app group so app and widget can agree on display choices, but keep command execution inside the app. Use an App Intent or URL route for a widget control that opens TailOps when the menu-bar icon is hidden.
+**Architecture:** Keep the widget passive and make the hidden host app the only process that runs Tailscale CLI commands. Store preferences and action config in the shared app group so app and widget can agree on display choices, but keep command execution inside the app. Use an App Intent for the widget settings gear because it works even when the host app is already running hidden.
 
 **Tech Stack:** SwiftUI, WidgetKit, AppIntents, ServiceManagement, App Group storage, existing `TailOpsCore`, `TailOpsShared`, and `TailOpsCoreValidation`.
 
@@ -12,7 +12,7 @@
 
 ## Current Save Point
 
-The current branch is `codex/macos-widget-platform`. As of this plan, the app builds and runs as a signed local macOS app, the widget reads the shared snapshot from the team-prefixed App Group, the menu bar uses the constellation icon, and Taildrop is available through drag/drop in the menu plus a Finder Service.
+The current branch is `codex/macos-widget-platform`. As of May 15, 2026, the app builds and runs as a signed local macOS hidden host app, the widget reads the shared snapshot from the team-prefixed App Group, the widget gear opens settings through an App Intent, and Taildrop is available through a Finder Service.
 
 ## Progress Snapshot - 2026-05-14
 
@@ -22,15 +22,13 @@ Completed:
 - Xcode project exists for `TailOpsMac` plus embedded `TailOpsWidget`.
 - App and widget sign locally with the team-prefixed App Group.
 - Shared snapshot storage works in the team-prefixed App Group with legacy fallback.
-- Menu-bar app reads `tailscale status --json`, refreshes manually/on launch/on menu open, and writes the widget snapshot.
-- Menu-bar host rows sort by useful/recent availability.
-- Menu-bar rows show ping sparkline context and accept file drops for Taildrop.
+- Hidden host app reads `tailscale status --json`, refreshes on launch/widget refresh, and writes the widget snapshot.
 - Finder Service exists for `Send with TailOps`, backed by `tailscale file cp --targets`.
 - Widget supports small, medium, and large families.
-- Widget uses the constellation SF Symbol, avoids the inactive-focus white-pill rendering issue, prioritizes reachable hosts, and collapses extra offline hosts into a count.
+- Widget uses the constellation SF Symbol, avoids the inactive-focus white-pill rendering issue, prioritizes reachable hosts, fills remaining space with offline hosts, and collapses extra offline hosts into a count.
 - Widget has refresh and copy intents.
-- Widget has an always-visible settings gear that opens TailOps settings through `tailops://settings`.
-- Settings include `Launch at login` and `Show menu bar icon`, enabling widget-only mode without losing a recovery path.
+- Widget has an always-visible settings gear that opens TailOps settings through `OpenTailOpsSettingsIntent`.
+- Settings include `Launch at login`; the menu-bar icon is intentionally removed for now.
 - Custom host action config exists for SSH, dashboard URLs, and copy actions.
 - Root and macOS READMEs describe the native macOS product path, runtime impact, Taildrop state, and next plan.
 
@@ -38,7 +36,7 @@ Next implementation batch:
 
 1. Add shared app preferences for launch/login/menu visibility/widget app-entry state. Done.
 2. Add `Launch at login` in settings using `ServiceManagement`. Done.
-3. Add `Show menu bar icon` setting. Done.
+3. Remove menu-bar icon as the default surface. Done.
 4. Add a widget-to-app entry point instead of a hover-only gear. Done.
 5. Show latest ping route and latency text in widget rows so the sparkline has context. Done, with rolling average and sample count.
 
@@ -46,6 +44,7 @@ Secondary backlog:
 
 - Add a host picker in macOS settings from the current Tailscale snapshot.
 - Add terminal preference support for SSH actions.
+- Consider an optional menu-bar surface later only if the widget cannot cover a workflow.
 - Replace direct `tailscale` process calls with an XPC/helper path if pursuing sandboxed distribution.
 
 Deferred:
@@ -58,7 +57,7 @@ Current refresh behavior:
 
 - The widget timeline reloads every 5 minutes from `tailops-snapshot.json`.
 - The widget does not run `tailscale status` or `tailscale ping`.
-- The app refreshes on launch, when the menu panel appears, and when the refresh button is pressed.
+- The app refreshes on launch and when the refresh button is pressed.
 - Each app refresh runs `tailscale status --json`.
 - For each online peer, each app refresh runs `tailscale ping --c 6 --timeout 1500ms --until-direct=false <host>`.
 - The app retains up to 120 recent ping samples per host in the shared snapshot, so the widget can show the latest route/latency plus an average without running network checks itself.

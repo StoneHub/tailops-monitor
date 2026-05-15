@@ -1,12 +1,12 @@
 # TailOps Mac
 
-Pure Swift macOS platform slice for a low-impact TailOps menu-bar app plus WidgetKit widget. This path does not use the Node server.
+Pure Swift macOS platform slice for a low-impact TailOps WidgetKit desktop widget backed by a hidden native host app. This path does not use the Node server.
 
 ## Shape
 
 - `Sources/TailOpsCore`: testable Swift package core for parsing `tailscale status --json`, host status, summaries, and host actions.
 - `Sources/TailOpsCoreValidation`: executable validation runner for this environment, because the installed command-line Swift toolchain does not expose `XCTest` or Swift `Testing`.
-- `App`: SwiftUI menu-bar app source. It owns refresh, runs `tailscale status --json`, gathers ping diagnostics for online peers, writes a cached snapshot, and opens SSH/HTTP/Taildrop actions.
+- `App`: SwiftUI host app source. It owns refresh, runs `tailscale status --json`, gathers ping diagnostics for online peers, writes a cached snapshot, opens settings, and provides Finder Services.
 - `Widget`: WidgetKit source. It reads the cached snapshot and shows the most useful reachable hosts first.
 - `Shared`: source files that should be included in both the app target and the widget extension target.
 
@@ -20,7 +20,7 @@ TailOpsMac.xcodeproj
 
 Open it in Xcode and use the `TailOpsMac` scheme. The scheme builds:
 
-- `TailOpsMac`: menu-bar app.
+- `TailOpsMac`: hidden host app.
 - `TailOpsWidget`: WidgetKit extension embedded in the app.
 - Local Swift package products: `TailOpsCore`, `TailOpsShared`, and `TailOpsIntents`.
 
@@ -55,7 +55,7 @@ The app group identifier lives in `Shared/SharedSnapshotStore.swift`.
 
 Open these files in Xcode and use the canvas previews:
 
-- `App/TailOpsMenuView.swift` for the menu-bar panel.
+- `App/TailOpsSettingsView.swift` for custom dashboard/action settings.
 - `Widget/TailOpsWidget.swift` for small and medium desktop widgets.
 
 The preview data lives in `Shared/PreviewFixtures.swift`, so visual edits do not need live Tailscale state.
@@ -87,11 +87,16 @@ inside the shared app group container, or the fallback `Application Support/Tail
 
 `hostID` can match the host ID, display name, MagicDNS name, or Tailscale IP. A sample file lives at `config/tailops-actions.sample.json`.
 
+## Widget-First App
+
+TailOps no longer shows a menu-bar icon by default. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear runs `OpenTailOpsSettingsIntent`, which writes a shared settings-open request and asks the hidden host app to show the settings window.
+
+The host still registers the `tailops://settings` URL scheme as a fallback, but the widget gear uses App Intents because that is more reliable for a running hidden app. This follows Apple's WidgetKit pattern: widgets either run App Intents for actions or deep-link into the containing app for richer UI.
+
 ## Taildrop
 
-TailOps currently exposes Taildrop in two places:
+TailOps currently exposes Taildrop through Finder:
 
-- The menu-bar host rows accept file drops and send them with `tailscale file cp`.
 - Finder can show a `Send with TailOps` Service for selected files. The service opens a Taildrop destination picker backed by `tailscale file cp --targets`.
 
 Wishlist: a temporary Finder-based `TailOps Drop Zone` could create one folder per available Taildrop target, then send files dropped into a device folder. A real mounted volume or File Provider extension remains possible later, but the watched-folder design is smaller and more reliable for a local utility.
@@ -102,13 +107,13 @@ The widget uses WidgetKit container backgrounds and marks the background as remo
 
 The widget supports small, medium, and large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares. The medium widget intentionally prioritizes online/warning hosts and collapses extra offline devices into a count so the layout stays readable.
 
-WidgetKit does not expose arbitrary hover-only controls. Instead of a gear-first design, the next plan uses a widget-to-app entry point: small widgets can open TailOps when tapped, medium widgets can open TailOps from background/empty space, and large widgets can expose a low-prominence app/settings affordance without competing with refresh or host action buttons.
+WidgetKit does not expose arbitrary hover-only controls. TailOps uses an always-visible low-prominence gear in the widget footer so settings remain recoverable even with no menu-bar icon.
 
 ## Runtime Impact
 
 The widget itself does not ping. It reloads the cached snapshot from the shared App Group on its WidgetKit timeline, currently every five minutes.
 
-The app does the active refresh work. It refreshes on launch, when the menu panel appears, and when the refresh button is pressed. Each refresh currently runs:
+The app does the active refresh work. It refreshes on launch and when the refresh button is pressed. Each refresh currently runs:
 
 ```text
 tailscale status --json
@@ -143,7 +148,7 @@ TailOpsCoreValidation passed
 
 The widget is intentionally passive. It does not own a backend and does not keep a process alive. The app refreshes state and writes a snapshot; the widget reads that snapshot on its normal WidgetKit timeline.
 
-Removing the widget therefore leaves no backend to kill. Quitting the menu-bar app stops refresh work.
+Removing the widget leaves no backend to kill. Quitting the hidden host app stops refresh work.
 
 ## Next Implementation Plan
 
@@ -155,19 +160,20 @@ docs/superpowers/plans/2026-05-14-tailops-macos-control-surface.md
 
 Current progress:
 
-- Native Swift menu-bar app and WidgetKit widget are working.
+- Native Swift hidden host app and WidgetKit widget are working.
 - App and widget share state through the team-prefixed App Group.
 - Widget supports small, medium, and large families.
-- Widget shows reachable hosts first and collapses extra offline hosts.
-- Menu-bar rows support refresh, quick actions, ping sparkline context, and Taildrop file drops.
+- Widget shows reachable hosts first, then offline hosts when space remains, and collapses extra offline hosts.
+- Widget rows show latest ping route, latest latency, average latency, and sample count when diagnostics are cached.
+- Widget quick actions support SSH, dashboard URLs, and copy actions.
+- Widget settings gear opens the hidden host app settings window through an App Intent.
 - Finder Service can send selected files through Taildrop.
 
 The planned order is:
 
-1. Shared app preferences.
-2. Launch at login.
-3. Menu bar icon visibility with a widget-to-app recovery path.
-4. Widget-to-app entry point instead of a hover-only gear.
-5. Latest ping route/latency text in widget rows.
+1. Manually verify the widget gear in the live desktop widget after each install.
+2. Improve dashboard action presets and common-port helpers in settings.
+3. Continue Finder Taildrop destination and transfer feedback polish.
+4. Keep menu-bar UI as optional future scope only if the widget cannot cover a workflow.
 
 Wishlist: TailOps Drop Zone.

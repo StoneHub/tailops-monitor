@@ -207,6 +207,7 @@ public struct TailOpsSettingsOpenRequest: Codable, Equatable, Sendable {
 
 public enum TailOpsSettingsOpenSignal {
     public static let notificationName = "dev.tailops.monitor.openSettings"
+    public static let url = URL(string: "tailops://settings")!
 }
 
 public enum TailnetPingRoute: String, Codable, Equatable, Sendable {

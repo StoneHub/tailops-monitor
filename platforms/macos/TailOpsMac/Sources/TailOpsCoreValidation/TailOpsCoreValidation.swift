@@ -20,6 +20,7 @@ struct TailOpsCoreValidation {
         widgetLayoutPrioritizesPeersBeforeThisDevice()
         try appPreferencesRoundTripThroughSharedStore()
         try settingsOpenRequestRoundTripThroughSharedStore()
+        settingsOpenSignalUsesTailOpsURLScheme()
         try sharedSnapshotStoreLoadsFirstExistingFallback()
         print("TailOpsCoreValidation passed")
     }
@@ -311,6 +312,11 @@ struct TailOpsCoreValidation {
         try store.clearSettingsOpenRequest()
         let clearedRequest = try store.loadSettingsOpenRequest()
         expect(clearedRequest == nil, "expected settings open request to clear")
+    }
+
+    private static func settingsOpenSignalUsesTailOpsURLScheme() {
+        expect(TailOpsSettingsOpenSignal.url.scheme == "tailops", "expected settings URL to use tailops scheme")
+        expect(TailOpsSettingsOpenSignal.url.host == "settings", "expected settings URL to target settings")
     }
 
     private static func parserSortsHostsByRecentAvailability() throws {

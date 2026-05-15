@@ -1,15 +1,15 @@
 # TailOps Monitor
 
-TailOps Monitor is a low-impact macOS tailnet companion for Tailscale users. The primary experience is a Swift menu-bar app plus a WidgetKit desktop widget that keeps useful tailnet shortcuts one click away: SSH, local dashboards, copied IPs, and quick reachability status.
+TailOps Monitor is a low-impact macOS tailnet companion for Tailscale users. The primary experience is now a WidgetKit desktop widget backed by a hidden Swift host app. The widget keeps useful tailnet shortcuts one click away: SSH, local dashboards, copied IPs, and quick reachability status.
 
 The older browser dashboard is still included as a full-screen visualization and telemetry playground, but the macOS widget suite is now the main product path.
 
 ## What It Does
 
 - Shows Tailscale hosts from `tailscale status --json`.
-- Adds a macOS menu-bar panel for refreshing and inspecting tailnet hosts.
-- Adds a desktop WidgetKit widget with host rows and custom emoji action buttons.
-- Adds passive ping context for online peers when the app refreshes, then exposes the cached result in the menu bar and widget.
+- Adds a desktop WidgetKit widget with host rows, ping context, and custom emoji action buttons.
+- Uses a hidden native host app for refresh, settings, App Group sharing, and Finder Services.
+- Adds passive ping context for online peers when the host app refreshes, then exposes the cached result in the widget.
 - Adds Taildrop shortcuts through menu-row file drops and a Finder Service.
 - Lets you configure custom actions for each host:
   - `ssh`: opens `ssh://host`.
@@ -90,8 +90,8 @@ The macOS implementation avoids a Node backend:
 
 - `TailOpsCore` parses Tailscale status and models hosts/actions.
 - `TailOpsShared` stores snapshots and action config for app/widget sharing.
-- `TailOpsIntents` provides widget App Intents for copy and refresh actions.
-- `TailOpsMac` is the SwiftUI menu-bar app.
+- `TailOpsIntents` provides widget App Intents for copy, refresh, settings, and opening Tailscale.
+- `TailOpsMac` is the hidden SwiftUI host app for refresh, settings, and Finder Services.
 - `TailOpsWidget` is the WidgetKit extension.
 
 The widget uses WidgetKit container backgrounds, removable backgrounds, `widgetRenderingMode`, and `widgetAccentable(_:)` so macOS can apply modern tinted and Liquid Glass widget appearances.
@@ -100,15 +100,14 @@ More detail: `platforms/macos/TailOpsMac/README.md`.
 
 ## Current macOS Progress
 
-As of May 14, 2026, the current branch has a working native Swift menu-bar app and WidgetKit widget. The app/widget are locally signed with a shared App Group, the widget reads cached snapshots, the menu bar owns live Tailscale refresh, and Taildrop is available through menu-row file drops plus a Finder Service.
+As of May 15, 2026, the current branch has a widget-first native Swift macOS build. The app/widget are locally signed with a shared App Group, the widget reads cached snapshots, the hidden host app owns live Tailscale refresh and settings, and Taildrop is available through the Finder Service.
 
 Next implementation batch:
 
-1. Shared app preferences.
-2. Launch at login.
-3. Menu bar icon visibility.
-4. Widget-to-app entry point instead of a hover-only gear.
-5. Latest ping route/latency text in widget rows.
+1. Exercise the widget gear/settings flow in the real desktop widget after install.
+2. Polish the settings editor for custom dashboard presets and common ports.
+3. Continue right-click Taildrop polish around destination picking and transfer feedback.
+4. Decide whether any menu-bar surface is worth restoring later as optional, not primary.
 
 Deferred for now: ping-rate controls and TailOps Drop Zone. Drop Zone remains wishlist only.
 
@@ -116,7 +115,7 @@ Deferred for now: ping-rate controls and TailOps Drop Zone. Drop Zone remains wi
 
 The WidgetKit extension is passive. It reads the cached shared snapshot and asks WidgetKit for another timeline in about five minutes. It does not run `tailscale`, keep a backend alive, or ping hosts.
 
-The menu-bar app is the active side. It refreshes on app launch, when the menu panel appears, and when the user presses refresh. A refresh currently runs:
+The hidden host app is the active side. It refreshes on app launch and when the user presses refresh from the widget. A refresh currently runs:
 
 - one `tailscale status --json`;
 - six `tailscale ping` samples for each online peer.

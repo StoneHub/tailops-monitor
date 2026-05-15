@@ -5,6 +5,15 @@ import TailOpsShared
 
 @MainActor
 final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = TaildropServiceProvider.shared
         NSUpdateDynamicServices()
@@ -23,6 +32,10 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         DistributedNotificationCenter.default().removeObserver(self)
+        NSAppleEventManager.shared().removeEventHandler(
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -31,6 +44,11 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         Self.openSettingsWindow()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        Self.openSettingsWindow()
+        return true
     }
 
     static func openSettingsWindowIfRequested(store: SharedSnapshotStore = SharedSnapshotStore()) {
@@ -43,12 +61,23 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     static func openSettingsWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        TailOpsSettingsWindowController.shared.show()
     }
 
     @objc private func openSettingsWindowFromDistributedNotification(_ notification: Notification) {
         Self.openSettingsWindowIfRequested()
+    }
+
+    @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        guard let urlString = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+              let url = URL(string: urlString),
+              url.scheme == "tailops",
+              url.host == "settings"
+        else {
+            return
+        }
+
+        Self.openSettingsWindow()
     }
 }
 
@@ -64,27 +93,16 @@ struct TailOpsMacApp: App {
             pingProvider: ProcessTailscalePingProvider(),
             snapshotStore: SharedSnapshotStore()
         )
+        let preferencesModel = TailOpsPreferencesModel()
+        TailOpsSettingsWindowController.shared.preferencesModel = preferencesModel
         _monitor = StateObject(wrappedValue: monitor)
-        _preferencesModel = StateObject(wrappedValue: TailOpsPreferencesModel())
+        _preferencesModel = StateObject(wrappedValue: preferencesModel)
         Task { @MainActor in
             await monitor.refresh()
         }
     }
 
     var body: some Scene {
-        MenuBarExtra(
-            "TailOps",
-            systemImage: "point.3.connected.trianglepath.dotted",
-            isInserted: $preferencesModel.showMenuBarIcon
-        ) {
-            TailOpsMenuView(monitor: monitor)
-                .frame(width: 360)
-                .task {
-                    await monitor.refresh()
-                }
-        }
-        .menuBarExtraStyle(.window)
-
         Settings {
             TailOpsSettingsView(preferencesModel: preferencesModel)
         }
