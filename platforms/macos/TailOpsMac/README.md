@@ -89,9 +89,9 @@ inside the shared app group container, or the fallback `Application Support/Tail
 
 ## Widget-First App
 
-TailOps no longer shows a menu-bar icon by default. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear runs `OpenTailOpsSettingsIntent`, which writes a shared settings-open request and asks the hidden host app to show the settings window.
+TailOps no longer shows a menu-bar icon by default. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear runs `OpenTailOpsSettingsIntent`, which writes a shared settings-open request and sends a distributed settings notification. A running hidden host opens settings directly from that notification; a cold-launched host reads the shared request on startup.
 
-The host still registers the `tailops://settings` URL scheme as a fallback, but the widget gear uses App Intents because that is more reliable for a running hidden app. This follows Apple's WidgetKit pattern: widgets either run App Intents for actions or deep-link into the containing app for richer UI.
+The host still registers the `tailops://settings` URL scheme for future deep-link work, but the supported widget settings path is the App Intent notification flow. This follows Apple's WidgetKit pattern: widgets run App Intents for actions, while richer UI lives in the containing app.
 
 ## Taildrop
 

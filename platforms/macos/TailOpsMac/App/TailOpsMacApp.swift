@@ -65,7 +65,8 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettingsWindowFromDistributedNotification(_ notification: Notification) {
-        Self.openSettingsWindowIfRequested()
+        try? SharedSnapshotStore().clearSettingsOpenRequest()
+        Self.openSettingsWindow()
     }
 
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {

@@ -110,6 +110,8 @@ struct TailOpsWidgetView: View {
                     Image(systemName: "gearshape")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
