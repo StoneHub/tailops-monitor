@@ -11,8 +11,9 @@ struct TailOpsWidget: Widget {
         }
         .configurationDisplayName("TailOps")
         .description("Glanceable Tailscale host reachability.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
+        .supportedFamilies([.systemMedium, .systemLarge, .systemExtraLarge])
         .containerBackgroundRemovable(true)
+        .contentMarginsDisabled()
     }
 }
 
@@ -60,7 +61,7 @@ struct TailOpsWidgetView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: verticalSpacing) {
             HStack {
                 Image(systemName: symbol)
                     .font(.caption.weight(.semibold))
@@ -72,8 +73,24 @@ struct TailOpsWidgetView: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Spacer()
+                HStack(spacing: 7) {
+                    Button(intent: OpenTailscaleAppIntent()) {
+                        Label("Tailscale", systemImage: "arrow.up.forward.app")
+                            .labelStyle(.iconOnly)
+                    }
+                    Button(intent: RefreshTailOpsWidgetIntent()) {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text(entry.date, style: .time)
+                        .monospacedDigit()
+                    Button(intent: OpenTailOpsSettingsIntent()) {
+                        Image(systemName: "gearshape")
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
             }
-            .padding(.top, 7)
 
             if entry.snapshot.hosts.isEmpty {
                 WidgetEmptyState()
@@ -83,7 +100,8 @@ struct TailOpsWidgetView: View {
                         WidgetHostActionRow(
                             host: host,
                             actions: actionCatalog.actions(for: host),
-                            showsActions: showsHostActions
+                            showsActions: showsHostActions,
+                            isCompact: usesCompactRows
                         )
                     }
                     if layout.hiddenOfflineCount > 0 {
@@ -93,41 +111,12 @@ struct TailOpsWidgetView: View {
             }
 
             Spacer(minLength: 0)
-
-            HStack(spacing: 8) {
-                Button(intent: OpenTailscaleAppIntent()) {
-                    Label("Tailscale", systemImage: "arrow.up.forward.app")
-                        .labelStyle(.iconOnly)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                Button(intent: RefreshTailOpsWidgetIntent()) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                Text(entry.date, style: .time)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(intent: OpenTailOpsSettingsIntent()) {
-                    Image(systemName: "gearshape")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
         }
         .containerBackground(for: .widget) {
             TailOpsWidgetBackground(renderingMode: renderingMode)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 17)
-        .padding(.bottom, 15)
+        .padding(.horizontal, horizontalPadding)
+        .padding(.vertical, verticalPadding)
     }
 
     private var symbol: String {
@@ -138,10 +127,12 @@ struct TailOpsWidgetView: View {
         switch family {
         case .systemSmall:
             return 1
+        case .systemMedium:
+            return 2
         case .systemExtraLarge:
-            return 6
-        case .systemLarge:
             return 4
+        case .systemLarge:
+            return 2
         default:
             return 2
         }
@@ -156,6 +147,15 @@ struct TailOpsWidgetView: View {
         }
     }
 
+    private var usesCompactRows: Bool {
+        switch family {
+        case .systemLarge, .systemExtraLarge:
+            return false
+        default:
+            return true
+        }
+    }
+
     private var rowSpacing: CGFloat {
         switch family {
         case .systemExtraLarge:
@@ -163,7 +163,40 @@ struct TailOpsWidgetView: View {
         case .systemLarge:
             return 7
         default:
-            return 5
+            return 4
+        }
+    }
+
+    private var verticalSpacing: CGFloat {
+        switch family {
+        case .systemLarge, .systemExtraLarge:
+            return 10
+        default:
+            return 6
+        }
+    }
+
+    private var horizontalPadding: CGFloat {
+        switch family {
+        case .systemSmall:
+            return 12
+        default:
+            return 14
+        }
+    }
+
+    private var verticalPadding: CGFloat {
+        switch family {
+        case .systemSmall:
+            return 9
+        case .systemMedium:
+            return 12
+        case .systemLarge:
+            return 24
+        case .systemExtraLarge:
+            return 26
+        default:
+            return 14
         }
     }
 }
@@ -224,6 +257,7 @@ private struct WidgetHostActionRow: View {
     let host: TailnetHost
     let actions: [HostAction]
     let showsActions: Bool
+    let isCompact: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -263,7 +297,7 @@ private struct WidgetHostActionRow: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.vertical, isCompact ? 5 : 6)
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             if let samples = host.diagnostics?.ping?.samples {
@@ -310,7 +344,12 @@ private struct WidgetActionChip: View {
     let action: HostAction
 
     var body: some View {
-        if let url = action.url {
+        if action.kind == .ssh, let value = action.value {
+            Button(intent: OpenSSHInTerminalIntent(host: value)) {
+                chipContent
+            }
+            .buttonStyle(.plain)
+        } else if let url = action.url {
             Link(destination: url) {
                 chipContent
             }
@@ -349,7 +388,7 @@ private struct WidgetActionChip: View {
 #if DEBUG
 #Preview("Widget View") {
     TailOpsWidgetView(entry: TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview))
-        .frame(width: 340, height: 180)
+        .frame(width: 340, height: 240)
 }
 
 #Preview("Small", as: .systemSmall) {

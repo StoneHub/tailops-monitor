@@ -40,6 +40,47 @@ public struct RefreshTailOpsWidgetIntent: AppIntent {
     }
 }
 
+public struct OpenSSHInTerminalIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Open SSH in Terminal"
+    public static let description = IntentDescription("Opens an SSH session in Terminal.")
+    public static let openAppWhenRun = false
+
+    @Parameter(title: "Host")
+    public var host: String
+
+    public init() {
+        host = ""
+    }
+
+    public init(host: String) {
+        self.host = host
+    }
+
+    public func perform() async throws -> some IntentResult {
+        let target = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !target.isEmpty,
+              let sshURL = URL(string: "ssh://\(target)")
+        else {
+            return .result()
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+
+        if let terminalURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") {
+            try await NSWorkspace.shared.open(
+                [sshURL],
+                withApplicationAt: terminalURL,
+                configuration: configuration
+            )
+        } else {
+            try await NSWorkspace.shared.open(sshURL, configuration: configuration)
+        }
+
+        return .result()
+    }
+}
+
 public struct OpenTailscaleAppIntent: AppIntent {
     public static let title: LocalizedStringResource = "Open Tailscale"
     public static let description = IntentDescription("Opens the Tailscale macOS app.")

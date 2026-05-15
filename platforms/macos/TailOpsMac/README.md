@@ -107,11 +107,15 @@ Wishlist: a temporary Finder-based `TailOps Drop Zone` could create one folder p
 
 The widget uses WidgetKit container backgrounds and marks the background as removable so macOS can apply clear, tinted, and Liquid Glass appearances. It also uses `widgetRenderingMode` and `widgetAccentable(_:)` to keep primary content legible when the system renders the widget in accented or vibrant modes.
 
-The widget supports small, medium, large, and extra-large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares. The medium widget intentionally prioritizes online/warning hosts and collapses extra offline devices into a count so the layout stays readable. The extra-large family gives the host list more breathing room when macOS offers it.
+The widget supports medium, large, and extra-large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares and may delay showing new families until WidgetKit reloads the updated extension metadata. TailOps keeps the medium widget usable as a fallback by showing two prioritized online/warning hosts, collapsing extra offline devices into a count, and moving controls into the header instead of a bottom footer. Large and extra-large families provide more top and bottom breathing room when macOS offers them.
+
+When changing supported families or widget metadata, bump `CURRENT_PROJECT_VERSION` for both app and widget targets before installing. WidgetKit and PlugInKit cache extension metadata aggressively; removing stale DerivedData app/widget bundles and re-registering `/Applications/TailOps.app` can be required when the widget picker keeps showing an older `TailOpsMac` entry.
 
 The app target and widget extension both include `Xcode/Assets.xcassets` and use the shared `AppIcon` asset so Finder, Launch Services, and the widget picker display the same TailOps icon.
 
-WidgetKit does not expose arbitrary hover-only controls. TailOps uses an always-visible low-prominence gear in the widget footer so settings remain recoverable even with no menu-bar icon.
+WidgetKit does not expose arbitrary hover-only controls. TailOps uses always-visible, low-prominence header controls for Tailscale, refresh, last-update time, and settings so settings remain recoverable even with no menu-bar icon and the widget avoids bottom-edge clipping.
+
+Host SSH chips run `OpenSSHInTerminalIntent`, which opens `ssh://<host>` explicitly with Terminal. Plain widget `Link` dispatch for `ssh://` was not reliable enough on macOS.
 
 ## Runtime Impact
 
