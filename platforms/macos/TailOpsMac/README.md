@@ -20,9 +20,11 @@ TailOpsMac.xcodeproj
 
 Open it in Xcode and use the `TailOpsMac` scheme. The scheme builds:
 
-- `TailOpsMac`: hidden host app.
+- `TailOps`: hidden host app product built from the `TailOpsMac` target.
 - `TailOpsWidget`: WidgetKit extension embedded in the app.
 - Local Swift package products: `TailOpsCore`, `TailOpsShared`, and `TailOpsIntents`.
+
+The target and scheme keep the development name `TailOpsMac`, but the installed app bundle is branded as `TailOps.app` and the widget picker label is `TailOps`.
 
 The targets are configured with a team-prefixed App Group at signing time:
 
@@ -56,7 +58,7 @@ The app group identifier lives in `Shared/SharedSnapshotStore.swift`.
 Open these files in Xcode and use the canvas previews:
 
 - `App/TailOpsSettingsView.swift` for custom dashboard/action settings.
-- `Widget/TailOpsWidget.swift` for small and medium desktop widgets.
+- `Widget/TailOpsWidget.swift` for small, medium, large, and extra-large desktop widgets.
 
 The preview data lives in `Shared/PreviewFixtures.swift`, so visual edits do not need live Tailscale state.
 
@@ -105,7 +107,9 @@ Wishlist: a temporary Finder-based `TailOps Drop Zone` could create one folder p
 
 The widget uses WidgetKit container backgrounds and marks the background as removable so macOS can apply clear, tinted, and Liquid Glass appearances. It also uses `widgetRenderingMode` and `widgetAccentable(_:)` to keep primary content legible when the system renders the widget in accented or vibrant modes.
 
-The widget supports small, medium, and large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares. The medium widget intentionally prioritizes online/warning hosts and collapses extra offline devices into a count so the layout stays readable.
+The widget supports small, medium, large, and extra-large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares. The medium widget intentionally prioritizes online/warning hosts and collapses extra offline devices into a count so the layout stays readable. The extra-large family gives the host list more breathing room when macOS offers it.
+
+The app target and widget extension both include `Xcode/Assets.xcassets` and use the shared `AppIcon` asset so Finder, Launch Services, and the widget picker display the same TailOps icon.
 
 WidgetKit does not expose arbitrary hover-only controls. TailOps uses an always-visible low-prominence gear in the widget footer so settings remain recoverable even with no menu-bar icon.
 
@@ -162,12 +166,13 @@ Current progress:
 
 - Native Swift hidden host app and WidgetKit widget are working.
 - App and widget share state through the team-prefixed App Group.
-- Widget supports small, medium, and large families.
+- Widget supports small, medium, large, and extra-large families.
 - Widget shows reachable hosts first, then offline hosts when space remains, and collapses extra offline hosts.
 - Widget rows show latest ping route, latest latency, average latency, and sample count when diagnostics are cached.
 - Widget quick actions support SSH, dashboard URLs, and copy actions.
 - Widget settings gear opens the hidden host app settings window through an App Intent.
 - Finder Service can send selected files through Taildrop.
+- Local signed installs are branded as `/Applications/TailOps.app`; `TailOpsMac.app` is the old development product name.
 
 The planned order is:
 

@@ -12,7 +12,7 @@
 
 ## Current Save Point
 
-The current branch is `codex/macos-widget-platform`. As of May 15, 2026, the app builds and runs as a signed local macOS hidden host app, the widget reads the shared snapshot from the team-prefixed App Group, the widget gear opens settings through an App Intent, and Taildrop is available through a Finder Service.
+The current branch is `codex/macos-widget-platform`. As of May 15, 2026, the app builds and runs as a signed local macOS hidden host app, the widget reads the shared snapshot from the team-prefixed App Group, the widget gear opens settings through an App Intent, and Taildrop is available through a Finder Service. The Xcode target/scheme remain `TailOpsMac`, but the local signed product is branded and installed as `/Applications/TailOps.app`.
 
 ## Progress Snapshot - 2026-05-14
 
@@ -24,8 +24,9 @@ Completed:
 - Shared snapshot storage works in the team-prefixed App Group with legacy fallback.
 - Hidden host app reads `tailscale status --json`, refreshes on launch/widget refresh, and writes the widget snapshot.
 - Finder Service exists for `Send with TailOps`, backed by `tailscale file cp --targets`.
-- Widget supports small, medium, and large families.
+- Widget supports small, medium, large, and extra-large families.
 - Widget uses the constellation SF Symbol, avoids the inactive-focus white-pill rendering issue, prioritizes reachable hosts, fills remaining space with offline hosts, and collapses extra offline hosts into a count.
+- Widget header padding and icon handling have been adjusted to avoid desktop clipping and generic widget-picker icon fallbacks.
 - Widget has refresh and copy intents.
 - Widget has an always-visible settings gear that opens TailOps settings through `OpenTailOpsSettingsIntent`.
 - Settings include `Launch at login`; the menu-bar icon is intentionally removed for now.
@@ -61,6 +62,7 @@ Current refresh behavior:
 - Each app refresh runs `tailscale status --json`.
 - For each online peer, each app refresh runs `tailscale ping --c 6 --timeout 1500ms --until-direct=false <host>`.
 - The app retains up to 120 recent ping samples per host in the shared snapshot, so the widget can show the latest route/latency plus an average without running network checks itself.
+- The widget extension includes the shared `AppIcon` asset catalog, and the app/widget bundle names both resolve to `TailOps`.
 
 The current idle impact is therefore near zero beyond WidgetKit reading a small JSON file. The active refresh cost is one `tailscale status` command plus six ping samples per online peer.
 

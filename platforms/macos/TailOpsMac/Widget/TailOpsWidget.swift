@@ -11,7 +11,7 @@ struct TailOpsWidget: Widget {
         }
         .configurationDisplayName("TailOps")
         .description("Glanceable Tailscale host reachability.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
         .containerBackgroundRemovable(true)
     }
 }
@@ -62,12 +62,18 @@ struct TailOpsWidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("TailOps", systemImage: symbol)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+                Image(systemName: symbol)
+                    .font(.caption.weight(.semibold))
+                    .imageScale(.small)
                     .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.primary)
+                    .frame(width: 18, height: 18)
+                Text("TailOps")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
                 Spacer()
             }
+            .padding(.top, 7)
 
             if entry.snapshot.hosts.isEmpty {
                 WidgetEmptyState()
@@ -120,7 +126,8 @@ struct TailOpsWidgetView: View {
             TailOpsWidgetBackground(renderingMode: renderingMode)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.top, 17)
+        .padding(.bottom, 15)
     }
 
     private var symbol: String {
@@ -131,6 +138,8 @@ struct TailOpsWidgetView: View {
         switch family {
         case .systemSmall:
             return 1
+        case .systemExtraLarge:
+            return 6
         case .systemLarge:
             return 4
         default:
@@ -149,6 +158,8 @@ struct TailOpsWidgetView: View {
 
     private var rowSpacing: CGFloat {
         switch family {
+        case .systemExtraLarge:
+            return 8
         case .systemLarge:
             return 7
         default:

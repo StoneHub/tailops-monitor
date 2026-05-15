@@ -18,6 +18,7 @@
 		A10000000000000000000017 /* App/TailOpsPreferencesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* App/TailOpsPreferencesModel.swift */; };
 		A10000000000000000000018 /* App/TailOpsSettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* App/TailOpsSettingsWindowController.swift */; };
 		A10000000000000000000019 /* Xcode/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Xcode/Assets.xcassets */; };
+		A10000000000000000000020 /* Xcode/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Xcode/Assets.xcassets */; };
 		A10000000000000000000007 /* Widget/TailOpsWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */; };
 		A10000000000000000000008 /* Widget/TailOpsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* Widget/TailOpsWidget.swift */; };
 		A10000000000000000000009 /* TailOpsWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* TailOpsWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -66,7 +67,7 @@
 		A20000000000000000000019 /* Xcode/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Xcode/Assets.xcassets; sourceTree = "<group>"; };
 		A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidgetBundle.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* Widget/TailOpsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidget.swift; sourceTree = "<group>"; };
-		A20000000000000000000009 /* TailOpsMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TailOpsMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000009 /* TailOps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TailOps.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000010 /* TailOpsWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TailOpsWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000011 /* Xcode/TailOpsMacApp/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Xcode/TailOpsMacApp/Info.plist; sourceTree = "<group>"; };
 		A20000000000000000000012 /* Xcode/TailOpsMacApp/TailOpsMacApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Xcode/TailOpsMacApp/TailOpsMacApp.entitlements; sourceTree = "<group>"; };
@@ -148,7 +149,7 @@
 		A80000000000000000000005 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A20000000000000000000009 /* TailOpsMac.app */,
+				A20000000000000000000009 /* TailOps.app */,
 				A20000000000000000000010 /* TailOpsWidget.appex */,
 			);
 			name = Products;
@@ -177,7 +178,7 @@
 				A90000000000000000000002 /* TailOpsShared */,
 			);
 			productName = TailOpsMac;
-			productReference = A20000000000000000000009 /* TailOpsMac.app */;
+			productReference = A20000000000000000000009 /* TailOps.app */;
 			productType = "com.apple.product-type.application";
 		};
 		A50000000000000000000002 /* TailOpsWidget */ = {
@@ -255,6 +256,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000020 /* Xcode/Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -332,7 +334,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.tailops.monitor;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = TailOps;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
@@ -354,7 +356,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.tailops.monitor;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = TailOps;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
@@ -365,6 +367,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsWidget/TailOpsWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = N6GPP46885;
 				ENABLE_APP_SANDBOX = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -388,6 +391,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsWidget/TailOpsWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = N6GPP46885;
 				ENABLE_APP_SANDBOX = YES;
 				GENERATE_INFOPLIST_FILE = NO;

@@ -47,7 +47,7 @@ In Xcode:
 1. Select the `TailOpsMac` scheme.
 2. Select target `TailOpsMac`, open **Signing & Capabilities**, enable **Automatically manage signing**, and choose your team.
 3. Repeat for target `TailOpsWidget`.
-4. Run the `TailOpsMac` scheme.
+4. Run the `TailOpsMac` scheme. The built app product is branded as `TailOps.app`.
 5. Open macOS **Edit Widgets**, search for **TailOps**, and add the widget.
 
 For command-line verification without signing:
@@ -102,12 +102,21 @@ More detail: `platforms/macos/TailOpsMac/README.md`.
 
 As of May 15, 2026, the current branch has a widget-first native Swift macOS build. The app/widget are locally signed with a shared App Group, the widget reads cached snapshots, the hidden host app owns live Tailscale refresh and settings, and Taildrop is available through the Finder Service.
 
+The installed local debug app is `/Applications/TailOps.app`. The Xcode scheme and target remain named `TailOpsMac`, but the app bundle, widget picker label, and icon resources are branded as TailOps.
+
 Next implementation batch:
 
 1. Exercise the widget gear/settings flow in the real desktop widget after install.
 2. Polish the settings editor for custom dashboard presets and common ports.
 3. Continue right-click Taildrop polish around destination picking and transfer feedback.
 4. Decide whether any menu-bar surface is worth restoring later as optional, not primary.
+
+Recent checkpoint polish:
+
+- Widget header spacing was adjusted to avoid clipping on the desktop.
+- The widget now declares the extra-large family for more room when macOS offers it.
+- The widget extension includes the shared app icon asset catalog so the widget picker no longer falls back to a generic icon.
+- The built app product is `TailOps.app` instead of `TailOpsMac.app`.
 
 Deferred for now: ping-rate controls and TailOps Drop Zone. Drop Zone remains wishlist only.
 
