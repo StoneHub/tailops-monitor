@@ -197,6 +197,18 @@ public struct TailOpsAppPreferences: Codable, Equatable, Sendable {
     }
 }
 
+public struct TailOpsSettingsOpenRequest: Codable, Equatable, Sendable {
+    public let requestedAt: Date
+
+    public init(requestedAt: Date = Date()) {
+        self.requestedAt = requestedAt
+    }
+}
+
+public enum TailOpsSettingsOpenSignal {
+    public static let notificationName = "dev.tailops.monitor.openSettings"
+}
+
 public enum TailnetPingRoute: String, Codable, Equatable, Sendable {
     case direct
     case peerRelay

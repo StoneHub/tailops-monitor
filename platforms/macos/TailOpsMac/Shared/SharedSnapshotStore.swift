@@ -9,6 +9,9 @@ public protocol SharedSnapshotStoring {
     func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws
     func loadAppPreferences() throws -> TailOpsAppPreferences?
     func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws
+    func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest?
+    func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws
+    func clearSettingsOpenRequest() throws
 }
 
 public struct SharedSnapshotStore: SharedSnapshotStoring {
@@ -48,6 +51,19 @@ public struct SharedSnapshotStore: SharedSnapshotStoring {
         try write(data, path: "tailops-preferences.json")
     }
 
+    public func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest? {
+        try loadFirstExisting(path: "tailops-open-settings.json", as: TailOpsSettingsOpenRequest.self)
+    }
+
+    public func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws {
+        let data = try JSONEncoder.tailops.encode(request)
+        try write(data, path: "tailops-open-settings.json")
+    }
+
+    public func clearSettingsOpenRequest() throws {
+        try delete(path: "tailops-open-settings.json")
+    }
+
     private func loadFirstExisting<T: Decodable>(path: String, as type: T.Type) throws -> T? {
         for baseURL in try baseURLs() {
             let url = baseURL.appending(path: path)
@@ -77,6 +93,14 @@ public struct SharedSnapshotStore: SharedSnapshotStoring {
 
         if !didWrite, let firstError {
             throw firstError
+        }
+    }
+
+    private func delete(path: String) throws {
+        for baseURL in try baseURLs() {
+            let url = baseURL.appending(path: path)
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            try fileManager.removeItem(at: url)
         }
     }
 

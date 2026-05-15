@@ -19,6 +19,7 @@ struct TailOpsCoreValidation {
         widgetLayoutPrioritizesReachableHostsAndCountsHiddenOffline()
         widgetLayoutPrioritizesPeersBeforeThisDevice()
         try appPreferencesRoundTripThroughSharedStore()
+        try settingsOpenRequestRoundTripThroughSharedStore()
         try sharedSnapshotStoreLoadsFirstExistingFallback()
         print("TailOpsCoreValidation passed")
     }
@@ -293,6 +294,23 @@ struct TailOpsCoreValidation {
         let loaded = try store.loadAppPreferences()
 
         expect(loaded == preferences, "expected shared app preferences to round trip")
+    }
+
+    private static func settingsOpenRequestRoundTripThroughSharedStore() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "TailOpsSettingsOpenRequestValidation-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let store = SharedSnapshotStore(baseURLs: [rootURL])
+        let request = TailOpsSettingsOpenRequest(requestedAt: Date(timeIntervalSince1970: 100))
+
+        try store.saveSettingsOpenRequest(request)
+        let loadedRequest = try store.loadSettingsOpenRequest()
+        expect(loadedRequest == request, "expected settings open request to round trip")
+
+        try store.clearSettingsOpenRequest()
+        let clearedRequest = try store.loadSettingsOpenRequest()
+        expect(clearedRequest == nil, "expected settings open request to clear")
     }
 
     private static func parserSortsHostsByRecentAvailability() throws {

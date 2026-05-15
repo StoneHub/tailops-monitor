@@ -1,5 +1,7 @@
 import AppIntents
 import AppKit
+import TailOpsCore
+import TailOpsShared
 import WidgetKit
 
 public struct CopyTailnetValueIntent: AppIntent {
@@ -34,6 +36,24 @@ public struct RefreshTailOpsWidgetIntent: AppIntent {
 
     public func perform() async throws -> some IntentResult {
         WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
+        return .result()
+    }
+}
+
+public struct OpenTailOpsSettingsIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Open TailOps Settings"
+    public static let description = IntentDescription("Opens TailOps settings from the widget.")
+    public static let openAppWhenRun = true
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        try SharedSnapshotStore().saveSettingsOpenRequest(TailOpsSettingsOpenRequest())
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name(TailOpsSettingsOpenSignal.notificationName),
+            object: nil,
+            deliverImmediately: true
+        )
         return .result()
     }
 }

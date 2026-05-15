@@ -290,5 +290,8 @@ private struct PreviewSettingsStore: SharedSnapshotStoring {
     func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws {}
     func loadAppPreferences() throws -> TailOpsAppPreferences? { TailOpsAppPreferences() }
     func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws {}
+    func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest? { nil }
+    func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws {}
+    func clearSettingsOpenRequest() throws {}
 }
 #endif

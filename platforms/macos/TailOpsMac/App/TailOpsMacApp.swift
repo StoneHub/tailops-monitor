@@ -8,6 +8,21 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = TaildropServiceProvider.shared
         NSUpdateDynamicServices()
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(openSettingsWindowFromDistributedNotification),
+            name: Notification.Name(TailOpsSettingsOpenSignal.notificationName),
+            object: nil
+        )
+        Self.openSettingsWindowIfRequested()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Self.openSettingsWindowIfRequested()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        DistributedNotificationCenter.default().removeObserver(self)
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -18,9 +33,22 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
         Self.openSettingsWindow()
     }
 
+    static func openSettingsWindowIfRequested(store: SharedSnapshotStore = SharedSnapshotStore()) {
+        guard (try? store.loadSettingsOpenRequest()) != nil else {
+            return
+        }
+
+        try? store.clearSettingsOpenRequest()
+        openSettingsWindow()
+    }
+
     static func openSettingsWindow() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+
+    @objc private func openSettingsWindowFromDistributedNotification(_ notification: Notification) {
+        Self.openSettingsWindowIfRequested()
     }
 }
 

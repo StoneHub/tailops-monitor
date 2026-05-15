@@ -67,7 +67,7 @@ struct TailOpsWidgetView: View {
                     .foregroundStyle(.primary)
                     .symbolRenderingMode(.hierarchical)
                 Spacer()
-                Link(destination: URL(string: "tailops://settings")!) {
+                Button(intent: OpenTailOpsSettingsIntent()) {
                     Image(systemName: "gearshape")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
