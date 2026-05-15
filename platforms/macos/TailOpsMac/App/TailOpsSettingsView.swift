@@ -4,16 +4,22 @@ import TailOpsShared
 
 struct TailOpsSettingsView: View {
     @StateObject private var model: TailOpsActionSettingsModel
+    @StateObject private var preferencesModel: TailOpsPreferencesModel
     @State private var importExportText = ""
     @State private var showsJSONEditor = false
 
-    init(model: TailOpsActionSettingsModel = TailOpsActionSettingsModel()) {
+    init(
+        model: TailOpsActionSettingsModel = TailOpsActionSettingsModel(),
+        preferencesModel: TailOpsPreferencesModel = TailOpsPreferencesModel()
+    ) {
         _model = StateObject(wrappedValue: model)
+        _preferencesModel = StateObject(wrappedValue: preferencesModel)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
+            appControls
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
@@ -65,6 +71,35 @@ struct TailOpsSettingsView: View {
         }
     }
 
+    private var appControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("App")
+                .font(.callout.weight(.semibold))
+
+            Toggle(
+                "Launch at login",
+                isOn: Binding(
+                    get: { preferencesModel.launchAtLogin },
+                    set: { preferencesModel.setLaunchAtLogin($0) }
+                )
+            )
+
+            Toggle(
+                "Show menu bar icon",
+                isOn: Binding(
+                    get: { preferencesModel.showMenuBarIcon },
+                    set: { preferencesModel.setShowMenuBarIcon($0) }
+                )
+            )
+
+            Text("Turn off the menu bar icon for widget-only mode. Use the gear in the widget header to reopen these settings.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
     @ViewBuilder
     private var validationPanel: some View {
         if !model.validationIssues.isEmpty {
@@ -104,11 +139,20 @@ struct TailOpsSettingsView: View {
 
     private var footer: some View {
         HStack {
-            if let saveError = model.saveError {
+            if let preferenceError = preferencesModel.saveError {
+                Text(preferenceError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            } else if let saveError = model.saveError {
                 Text(saveError)
                     .font(.caption)
                     .foregroundStyle(.red)
                     .lineLimit(2)
+            } else if let preferenceMessage = preferencesModel.statusMessage {
+                Text(preferenceMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else if let importExportMessage = model.importExportMessage {
                 Text(importExportMessage)
                     .font(.caption)
@@ -234,7 +278,8 @@ private struct ActionEditorRow: View {
         model: TailOpsActionSettingsModel(
             store: PreviewSettingsStore(),
             configuration: .preview
-        )
+        ),
+        preferencesModel: TailOpsPreferencesModel(store: PreviewSettingsStore())
     )
 }
 

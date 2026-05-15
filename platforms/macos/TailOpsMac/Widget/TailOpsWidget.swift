@@ -67,6 +67,12 @@ struct TailOpsWidgetView: View {
                     .foregroundStyle(.primary)
                     .symbolRenderingMode(.hierarchical)
                 Spacer()
+                Link(destination: URL(string: "tailops://settings")!) {
+                    Image(systemName: "gearshape")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
                 Button(intent: RefreshTailOpsWidgetIntent()) {
                     Image(systemName: "arrow.clockwise")
                         .font(.caption2)

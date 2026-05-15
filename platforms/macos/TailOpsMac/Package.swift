@@ -46,6 +46,7 @@ let package = Package(
                 "TailscaleStatusProvider.swift",
                 "TailOpsActionSettingsModel.swift",
                 "TailOpsConstellationIcon.swift",
+                "TailOpsPreferencesModel.swift",
                 "TailOpsSettingsView.swift",
                 "TailOpsMenuView.swift",
                 "TailnetMonitor.swift"

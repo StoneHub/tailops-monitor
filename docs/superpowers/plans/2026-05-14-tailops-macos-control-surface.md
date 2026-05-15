@@ -29,15 +29,17 @@ Completed:
 - Widget supports small, medium, and large families.
 - Widget uses the constellation SF Symbol, avoids the inactive-focus white-pill rendering issue, prioritizes reachable hosts, and collapses extra offline hosts into a count.
 - Widget has refresh and copy intents.
+- Widget has an always-visible settings gear that opens TailOps settings through `tailops://settings`.
+- Settings include `Launch at login` and `Show menu bar icon`, enabling widget-only mode without losing a recovery path.
 - Custom host action config exists for SSH, dashboard URLs, and copy actions.
 - Root and macOS READMEs describe the native macOS product path, runtime impact, Taildrop state, and next plan.
 
 Next implementation batch:
 
 1. Add shared app preferences for launch/login/menu visibility/widget app-entry state. Done.
-2. Add `Launch at login` in settings using `ServiceManagement`.
-3. Add `Show menu bar icon` setting.
-4. Add a widget-to-app entry point instead of a hover-only gear.
+2. Add `Launch at login` in settings using `ServiceManagement`. Done.
+3. Add `Show menu bar icon` setting. Done.
+4. Add a widget-to-app entry point instead of a hover-only gear. Done.
 5. Show latest ping route and latency text in widget rows so the sparkline has context. Done, with rolling average and sample count.
 
 Secondary backlog:
