@@ -107,7 +107,7 @@ Wishlist: a temporary Finder-based `TailOps Drop Zone` could create one folder p
 
 ## Liquid Glass And Widget Rendering
 
-The widget uses WidgetKit container backgrounds and marks the background as removable so macOS can apply clear, tinted, and Liquid Glass appearances. It also uses `widgetRenderingMode` and `widgetAccentable(_:)` to keep primary content legible when the system renders the widget in accented or vibrant modes.
+The widget uses WidgetKit container backgrounds and marks the background as removable so macOS can apply clear, tinted, and Liquid Glass appearances. It also opts the widget surface, host tiles, status dots, and action chips out of accent tinting with `widgetAccentable(false)` so passive online/offline status remains colorful when the desktop widget is visible but not focused.
 
 The widget supports medium, large, and extra-large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares and may delay showing new families until WidgetKit reloads the updated extension metadata. TailOps keeps the medium widget usable as a fallback by showing two prioritized online/warning hosts, collapsing extra offline devices into a count, and moving controls into the header instead of a bottom footer. Large and extra-large families switch to a status grid: large shows up to six devices and extra-large shows up to nine devices. Grid tiles keep feature parity with row tiles by showing status, address, latency when available, and up to three quick-action buttons.
 

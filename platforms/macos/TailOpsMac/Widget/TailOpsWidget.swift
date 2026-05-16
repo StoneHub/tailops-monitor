@@ -125,6 +125,7 @@ struct TailOpsWidgetView: View {
         .containerBackground(for: .widget) {
             TailOpsWidgetBackground(renderingMode: renderingMode)
         }
+        .widgetAccentable(false)
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, verticalPadding)
     }
@@ -384,6 +385,7 @@ private struct WidgetHostStatusTile: View {
                 Circle()
                     .fill(color)
                     .frame(width: 8, height: 8)
+                    .widgetAccentable(false)
                 Text(host.name)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
@@ -419,6 +421,7 @@ private struct WidgetHostStatusTile: View {
         .padding(.horizontal, style.tileHorizontalPadding)
         .padding(.vertical, style.tileVerticalPadding)
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .widgetAccentable(false)
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(color.opacity(0.22), lineWidth: 1)
@@ -487,6 +490,7 @@ private struct WidgetHostActionRow: View {
                     Circle()
                         .fill(color(for: host.status))
                         .frame(width: 7, height: 7)
+                        .widgetAccentable(false)
                     Text(host.name)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
@@ -520,6 +524,7 @@ private struct WidgetHostActionRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, isCompact ? 5 : 6)
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .widgetAccentable(false)
         .overlay {
             if let samples = host.diagnostics?.ping?.samples {
                 PingSparklineView(samples: samples)
@@ -602,6 +607,7 @@ private struct WidgetActionChip: View {
         .frame(height: 22)
         .padding(.horizontal, showsTitle ? 7 : 2)
         .background(Color.primary.opacity(0.1), in: Capsule())
+        .widgetAccentable(false)
         .accessibilityLabel(action.title)
     }
 
