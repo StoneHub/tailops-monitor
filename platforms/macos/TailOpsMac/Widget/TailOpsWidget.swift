@@ -102,7 +102,7 @@ struct TailOpsWidgetView: View {
                 WidgetHostStatusGrid(
                     hosts: gridHosts,
                     actionCatalog: actionCatalog,
-                    columns: gridColumnCount
+                    style: gridStyle
                 )
             } else {
                 VStack(alignment: .leading, spacing: rowSpacing) {
@@ -177,6 +177,31 @@ struct TailOpsWidgetView: View {
         }
     }
 
+    private var gridStyle: WidgetHostStatusGrid.Style {
+        switch family {
+        case .systemExtraLarge:
+            return WidgetHostStatusGrid.Style(
+                columns: gridColumnCount,
+                columnSpacing: 8,
+                rowSpacing: 7,
+                tileMinHeight: 92,
+                tileHorizontalPadding: 8,
+                tileVerticalPadding: 7,
+                tileContentSpacing: 5
+            )
+        default:
+            return WidgetHostStatusGrid.Style(
+                columns: gridColumnCount,
+                columnSpacing: 8,
+                rowSpacing: 8,
+                tileMinHeight: 116,
+                tileHorizontalPadding: 9,
+                tileVerticalPadding: 8,
+                tileContentSpacing: 8
+            )
+        }
+    }
+
     private var showsHostActions: Bool {
         switch family {
         case .systemSmall:
@@ -208,8 +233,10 @@ struct TailOpsWidgetView: View {
 
     private var verticalSpacing: CGFloat {
         switch family {
-        case .systemLarge, .systemExtraLarge:
+        case .systemLarge:
             return 10
+        case .systemExtraLarge:
+            return 8
         default:
             return 6
         }
@@ -233,7 +260,7 @@ struct TailOpsWidgetView: View {
         case .systemLarge:
             return 24
         case .systemExtraLarge:
-            return 26
+            return 18
         default:
             return 14
         }
@@ -318,19 +345,29 @@ private struct WidgetOfflineSummary: View {
 private struct WidgetHostStatusGrid: View {
     let hosts: [TailnetHost]
     let actionCatalog: HostActionCatalog
-    let columns: Int
+    let style: Style
+
+    struct Style {
+        let columns: Int
+        let columnSpacing: CGFloat
+        let rowSpacing: CGFloat
+        let tileMinHeight: CGFloat
+        let tileHorizontalPadding: CGFloat
+        let tileVerticalPadding: CGFloat
+        let tileContentSpacing: CGFloat
+    }
 
     private var gridColumns: [GridItem] {
         Array(
-            repeating: GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top),
-            count: max(columns, 1)
+            repeating: GridItem(.flexible(minimum: 0), spacing: style.columnSpacing, alignment: .top),
+            count: max(style.columns, 1)
         )
     }
 
     var body: some View {
-        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 8) {
+        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: style.rowSpacing) {
             ForEach(hosts) { host in
-                WidgetHostStatusTile(host: host, actions: actionCatalog.actions(for: host))
+                WidgetHostStatusTile(host: host, actions: actionCatalog.actions(for: host), style: style)
             }
         }
     }
@@ -339,9 +376,10 @@ private struct WidgetHostStatusGrid: View {
 private struct WidgetHostStatusTile: View {
     let host: TailnetHost
     let actions: [HostAction]
+    let style: WidgetHostStatusGrid.Style
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: style.tileContentSpacing) {
             HStack(spacing: 7) {
                 Circle()
                     .fill(color)
@@ -385,9 +423,9 @@ private struct WidgetHostStatusTile: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: style.tileMinHeight, alignment: .topLeading)
+        .padding(.horizontal, style.tileHorizontalPadding)
+        .padding(.vertical, style.tileVerticalPadding)
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
