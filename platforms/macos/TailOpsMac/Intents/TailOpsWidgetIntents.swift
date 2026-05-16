@@ -81,6 +81,37 @@ public struct OpenSSHInTerminalIntent: AppIntent {
     }
 }
 
+public struct OpenDashboardURLIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Open Dashboard"
+    public static let description = IntentDescription("Opens a TailOps dashboard URL in the default browser.")
+    public static let openAppWhenRun = false
+
+    @Parameter(title: "URL")
+    public var urlString: String
+
+    public init() {
+        urlString = ""
+    }
+
+    public init(url: URL) {
+        urlString = url.absoluteString
+    }
+
+    public func perform() async throws -> some IntentResult {
+        let target = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: target),
+              ["http", "https"].contains(url.scheme?.lowercased())
+        else {
+            return .result()
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        try await NSWorkspace.shared.open(url, configuration: configuration)
+        return .result()
+    }
+}
+
 public struct OpenTailscaleAppIntent: AppIntent {
     public static let title: LocalizedStringResource = "Open Tailscale"
     public static let description = IntentDescription("Opens the Tailscale macOS app.")

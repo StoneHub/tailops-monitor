@@ -186,19 +186,23 @@ struct TailOpsWidgetView: View {
                 columnSpacing: 7,
                 rowSpacing: 6,
                 tileMinHeight: 72,
+                tileMaxHeight: nil,
                 tileHorizontalPadding: 8,
                 tileVerticalPadding: 6,
-                tileContentSpacing: 5
+                tileContentSpacing: 5,
+                showsActionTitles: true
             )
         default:
             return WidgetHostStatusGrid.Style(
                 columns: gridColumnCount,
-                columnSpacing: 8,
-                rowSpacing: 8,
-                tileMinHeight: 116,
-                tileHorizontalPadding: 9,
+                columnSpacing: 10,
+                rowSpacing: 10,
+                tileMinHeight: 102,
+                tileMaxHeight: 102,
+                tileHorizontalPadding: 10,
                 tileVerticalPadding: 8,
-                tileContentSpacing: 8
+                tileContentSpacing: 7,
+                showsActionTitles: false
             )
         }
     }
@@ -235,7 +239,7 @@ struct TailOpsWidgetView: View {
     private var verticalSpacing: CGFloat {
         switch family {
         case .systemLarge:
-            return 10
+            return 8
         case .systemExtraLarge:
             return 8
         default:
@@ -259,7 +263,7 @@ struct TailOpsWidgetView: View {
         case .systemMedium:
             return 12
         case .systemLarge:
-            return 24
+            return 18
         case .systemExtraLarge:
             return 12
         default:
@@ -314,8 +318,9 @@ private struct TailOpsWidgetBackground: View {
         if renderingMode == .fullColor {
             LinearGradient(
                 colors: [
-                    Color.primary.opacity(0.08),
-                    Color.primary.opacity(0.03)
+                    Color.green.opacity(0.15),
+                    Color.blue.opacity(0.08),
+                    Color.orange.opacity(0.08)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -353,9 +358,11 @@ private struct WidgetHostStatusGrid: View {
         let columnSpacing: CGFloat
         let rowSpacing: CGFloat
         let tileMinHeight: CGFloat
+        let tileMaxHeight: CGFloat?
         let tileHorizontalPadding: CGFloat
         let tileVerticalPadding: CGFloat
         let tileContentSpacing: CGFloat
+        let showsActionTitles: Bool
     }
 
     private var gridColumns: [GridItem] {
@@ -381,50 +388,58 @@ private struct WidgetHostStatusTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: style.tileContentSpacing) {
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(color)
-                    .frame(width: 8, height: 8)
-                    .widgetAccentable(false)
-                Text(host.name)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                Spacer(minLength: 4)
-                Text(statusText)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                if let pingText {
-                    Text(pingText)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 7) {
+                statusMarker
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(host.name)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.76)
+
+                    HStack(spacing: 5) {
+                        Text(statusText)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(color)
+                            .lineLimit(1)
+
+                        if let pingText {
+                            Text(pingText)
+                                .font(.caption2.monospacedDigit().weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
                 }
             }
 
             Text(detailText)
                 .font(.caption2.monospaced())
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
 
             HStack(spacing: 5) {
                 ForEach(actions.prefix(3), id: \.title) { action in
-                    WidgetActionChip(action: action, showsTitle: true)
+                    WidgetActionChip(action: action, showsTitle: style.showsActionTitles)
                 }
                 Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: style.tileMinHeight, alignment: .topLeading)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: style.tileMinHeight,
+            maxHeight: style.tileMaxHeight,
+            alignment: .topLeading
+        )
         .padding(.horizontal, style.tileHorizontalPadding)
         .padding(.vertical, style.tileVerticalPadding)
-        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .background(tileBackground, in: RoundedRectangle(cornerRadius: 8))
         .widgetAccentable(false)
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(color.opacity(0.22), lineWidth: 1)
+                .stroke(color.opacity(0.42), lineWidth: 1)
         }
     }
 
@@ -463,6 +478,29 @@ private struct WidgetHostStatusTile: View {
         case .offline:
             return "minus.circle.fill"
         }
+    }
+
+    private var statusMarker: some View {
+        ZStack {
+            Circle()
+                .fill(color.opacity(host.status == .offline ? 0.18 : 0.26))
+                .frame(width: 18, height: 18)
+            Image(systemName: statusIcon)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(color)
+        }
+        .widgetAccentable(false)
+    }
+
+    private var tileBackground: LinearGradient {
+        LinearGradient(
+            colors: [
+                color.opacity(host.status == .offline ? 0.09 : 0.2),
+                Color.primary.opacity(0.045)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
     private var color: Color {
@@ -525,6 +563,17 @@ private struct WidgetHostActionRow: View {
         .padding(.vertical, isCompact ? 5 : 6)
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
         .widgetAccentable(false)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(color(for: host.status).opacity(host.status == .offline ? 0.55 : 0.9))
+                .frame(width: 3)
+                .clipShape(UnevenRoundedRectangle(
+                    topLeadingRadius: 8,
+                    bottomLeadingRadius: 8,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 0
+                ))
+        }
         .overlay {
             if let samples = host.diagnostics?.ping?.samples {
                 PingSparklineView(samples: samples)
@@ -573,6 +622,11 @@ private struct WidgetActionChip: View {
     var body: some View {
         if action.kind == .ssh, let value = action.value {
             Button(intent: OpenSSHInTerminalIntent(host: value)) {
+                chipContent
+            }
+            .buttonStyle(.plain)
+        } else if action.kind == .dashboard, let url = action.url {
+            Button(intent: OpenDashboardURLIntent(url: url)) {
                 chipContent
             }
             .buttonStyle(.plain)
@@ -647,6 +701,12 @@ private struct WidgetActionChip: View {
 }
 
 #Preview("Medium", as: .systemMedium) {
+    TailOpsWidget()
+} timeline: {
+    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview)
+}
+
+#Preview("Large", as: .systemLarge) {
     TailOpsWidget()
 } timeline: {
     TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview)
