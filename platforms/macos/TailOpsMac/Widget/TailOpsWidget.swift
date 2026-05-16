@@ -60,6 +60,10 @@ struct TailOpsWidgetView: View {
         TailnetWidgetHostLayout(hosts: entry.snapshot.hosts, limit: visibleHostLimit)
     }
 
+    private var gridHosts: [TailnetHost] {
+        Array(entry.snapshot.hosts.sorted(by: gridSort).prefix(gridHostLimit))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: verticalSpacing) {
             HStack {
@@ -83,7 +87,7 @@ struct TailOpsWidgetView: View {
                     }
                     Text(entry.date, style: .time)
                         .monospacedDigit()
-                    Button(intent: OpenTailOpsSettingsIntent()) {
+                    Link(destination: TailOpsSettingsOpenSignal.url) {
                         Image(systemName: "gearshape")
                     }
                 }
@@ -94,6 +98,12 @@ struct TailOpsWidgetView: View {
 
             if entry.snapshot.hosts.isEmpty {
                 WidgetEmptyState()
+            } else if usesStatusGrid {
+                WidgetHostStatusGrid(
+                    hosts: gridHosts,
+                    actionCatalog: actionCatalog,
+                    columns: gridColumnCount
+                )
             } else {
                 VStack(alignment: .leading, spacing: rowSpacing) {
                     ForEach(layout.visibleHosts) { host in
@@ -123,6 +133,15 @@ struct TailOpsWidgetView: View {
         "point.3.connected.trianglepath.dotted"
     }
 
+    private var usesStatusGrid: Bool {
+        switch family {
+        case .systemLarge, .systemExtraLarge:
+            return true
+        default:
+            return false
+        }
+    }
+
     private var visibleHostLimit: Int {
         switch family {
         case .systemSmall:
@@ -133,6 +152,26 @@ struct TailOpsWidgetView: View {
             return 4
         case .systemLarge:
             return 2
+        default:
+            return 2
+        }
+    }
+
+    private var gridHostLimit: Int {
+        switch family {
+        case .systemExtraLarge:
+            return 9
+        case .systemLarge:
+            return 6
+        default:
+            return visibleHostLimit
+        }
+    }
+
+    private var gridColumnCount: Int {
+        switch family {
+        case .systemLarge, .systemExtraLarge:
+            return 3
         default:
             return 2
         }
@@ -199,6 +238,29 @@ struct TailOpsWidgetView: View {
             return 14
         }
     }
+
+    private func gridSort(_ lhs: TailnetHost, _ rhs: TailnetHost) -> Bool {
+        if lhs.role != rhs.role {
+            return lhs.role == .peer
+        }
+
+        if statusRank(lhs.status) != statusRank(rhs.status) {
+            return statusRank(lhs.status) < statusRank(rhs.status)
+        }
+
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+
+    private func statusRank(_ status: TailnetHost.Status) -> Int {
+        switch status {
+        case .online:
+            return 0
+        case .warning:
+            return 1
+        case .offline:
+            return 2
+        }
+    }
 }
 
 private struct WidgetEmptyState: View {
@@ -250,6 +312,135 @@ private struct WidgetOfflineSummary: View {
             Spacer()
         }
         .padding(.top, 1)
+    }
+}
+
+private struct WidgetHostStatusGrid: View {
+    let hosts: [TailnetHost]
+    let actionCatalog: HostActionCatalog
+    let columns: Int
+
+    private var gridColumns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(minimum: 0), spacing: 8, alignment: .top),
+            count: max(columns, 1)
+        )
+    }
+
+    var body: some View {
+        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 8) {
+            ForEach(hosts) { host in
+                WidgetHostStatusTile(host: host, actions: actionCatalog.actions(for: host))
+            }
+        }
+    }
+}
+
+private struct WidgetHostStatusTile: View {
+    let host: TailnetHost
+    let actions: [HostAction]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 8, height: 8)
+                Text(host.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+
+            HStack(spacing: 5) {
+                Image(systemName: statusIcon)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(color)
+                Text(statusText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if let pingText {
+                    Text(pingText)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Text(detailText)
+                .font(.caption2.monospaced())
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 5) {
+                ForEach(actions.prefix(3), id: \.title) { action in
+                    WidgetActionChip(action: action)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(color.opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    private var detailText: String {
+        host.primaryAddress ?? host.magicDNSName ?? host.operatingSystem ?? "No address"
+    }
+
+    private var pingText: String? {
+        guard host.status != .offline,
+              let latest = host.diagnostics?.ping?.latestLatencyMilliseconds
+        else {
+            return nil
+        }
+
+        let formatted = latest.formatted(.number.precision(.fractionLength(0...0)))
+        return "\(formatted) ms"
+    }
+
+    private var statusText: String {
+        switch host.status {
+        case .online:
+            return host.role == .thisDevice ? "This Mac" : "Online"
+        case .warning:
+            return "Warn"
+        case .offline:
+            return "Offline"
+        }
+    }
+
+    private var statusIcon: String {
+        switch host.status {
+        case .online:
+            return "checkmark.circle.fill"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .offline:
+            return "minus.circle.fill"
+        }
+    }
+
+    private var color: Color {
+        switch host.status {
+        case .online:
+            return .green
+        case .warning:
+            return .orange
+        case .offline:
+            return .secondary
+        }
     }
 }
 

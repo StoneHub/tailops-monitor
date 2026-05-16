@@ -30,6 +30,8 @@ final class TailOpsSettingsWindowController {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "TailOps Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.level = .floating
+        window.collectionBehavior = [.moveToActiveSpace]
         window.setContentSize(NSSize(width: 640, height: 500))
         window.minSize = NSSize(width: 560, height: 430)
         window.isReleasedWhenClosed = false
@@ -41,6 +43,7 @@ final class TailOpsSettingsWindowController {
     }
 
     private func show(_ window: NSWindow) {
+        NSApp.setActivationPolicy(.accessory)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()

@@ -61,6 +61,11 @@ struct TailOpsSettingsView: View {
             }
             Spacer()
             Button {
+                model.addHostActions()
+            } label: {
+                Label("Host", systemImage: "plus")
+            }
+            Button {
                 importExportText = model.exportJSON()
                 showsJSONEditor = true
             } label: {

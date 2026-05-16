@@ -87,13 +87,13 @@ inside the shared app group container, or the fallback `Application Support/Tail
 }
 ```
 
-`hostID` can match the host ID, display name, MagicDNS name, or Tailscale IP. A sample file lives at `config/tailops-actions.sample.json`.
+`hostID` can match the host ID, display name, MagicDNS name, or Tailscale IP. A sample file lives at `config/tailops-actions.sample.json`. The settings window also includes a `+ Host` control so custom button rows can be created even when the target device is not already represented in the imported snapshot.
 
 ## Widget-First App
 
-TailOps no longer shows a menu-bar icon by default. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear runs `OpenTailOpsSettingsIntent`, which writes a shared settings-open request and sends a distributed settings notification. A running hidden host opens settings directly from that notification; a cold-launched host reads the shared request on startup.
+TailOps no longer shows a menu-bar icon by default. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear opens `tailops://settings`, bringing the app forward and showing the floating settings window on the active Space so custom buttons stay reachable from widget-only mode.
 
-The host still registers the `tailops://settings` URL scheme for future deep-link work, but the supported widget settings path is the App Intent notification flow. This follows Apple's WidgetKit pattern: widgets run App Intents for actions, while richer UI lives in the containing app.
+The host registers the `tailops://settings` URL scheme as the supported widget-to-app settings path. Widget actions remain intentionally small: they either invoke App Intents for one-shot actions or deep-link back into the containing app when richer UI is needed.
 
 ## Taildrop
 
@@ -107,7 +107,7 @@ Wishlist: a temporary Finder-based `TailOps Drop Zone` could create one folder p
 
 The widget uses WidgetKit container backgrounds and marks the background as removable so macOS can apply clear, tinted, and Liquid Glass appearances. It also uses `widgetRenderingMode` and `widgetAccentable(_:)` to keep primary content legible when the system renders the widget in accented or vibrant modes.
 
-The widget supports medium, large, and extra-large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares and may delay showing new families until WidgetKit reloads the updated extension metadata. TailOps keeps the medium widget usable as a fallback by showing two prioritized online/warning hosts, collapsing extra offline devices into a count, and moving controls into the header instead of a bottom footer. Large and extra-large families provide more top and bottom breathing room when macOS offers them.
+The widget supports medium, large, and extra-large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares and may delay showing new families until WidgetKit reloads the updated extension metadata. TailOps keeps the medium widget usable as a fallback by showing two prioritized online/warning hosts, collapsing extra offline devices into a count, and moving controls into the header instead of a bottom footer. Large and extra-large families switch to a status grid: large shows up to six devices and extra-large shows up to nine devices. Grid tiles keep feature parity with row tiles by showing status, address, latency when available, and up to three quick-action buttons.
 
 When changing supported families or widget metadata, bump `CURRENT_PROJECT_VERSION` for both app and widget targets before installing. WidgetKit and PlugInKit cache extension metadata aggressively; removing stale DerivedData app/widget bundles and re-registering `/Applications/TailOps.app` can be required when the widget picker keeps showing an older `TailOpsMac` entry.
 
