@@ -109,7 +109,22 @@ The widget uses WidgetKit container backgrounds and marks the background as remo
 
 The widget supports medium, large, and extra-large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares and may delay showing new families until WidgetKit reloads the updated extension metadata. TailOps keeps the medium widget usable as a fallback by showing two prioritized online/warning hosts, collapsing extra offline devices into a count, and moving controls into the header instead of a bottom footer. Large and extra-large families switch to a status grid: large shows up to six devices and extra-large shows up to nine devices. Grid tiles keep feature parity with row tiles by showing status, address, latency when available, and up to three quick-action buttons.
 
-When changing supported families or widget metadata, bump `CURRENT_PROJECT_VERSION` for both app and widget targets before installing. WidgetKit and PlugInKit cache extension metadata aggressively; removing stale DerivedData app/widget bundles and re-registering `/Applications/TailOps.app` can be required when the widget picker keeps showing an older `TailOpsMac` entry.
+When changing supported families, widget metadata, or visible widget layout, bump `CURRENT_PROJECT_VERSION` for both app and widget targets before installing. WidgetKit and PlugInKit cache extension metadata and live extension processes aggressively, so a successful `ditto` to `/Applications` is not enough proof that the desktop widget has reloaded.
+
+The reliable local refresh loop after a widget build is:
+
+```text
+ditto ~/Library/Developer/Xcode/DerivedData/.../Build/Products/Debug/TailOps.app /Applications/TailOps.app
+pluginkit -r ~/Library/Developer/Xcode/DerivedData/.../Build/Products/Debug/TailOps.app/Contents/PlugIns/TailOpsWidget.appex
+rm -rf ~/Library/Developer/Xcode/DerivedData/.../Build/Products/Debug/TailOps.app ~/Library/Developer/Xcode/DerivedData/.../Build/Products/Debug/TailOpsWidget.appex
+pluginkit -a /Applications/TailOps.app/Contents/PlugIns/TailOpsWidget.appex
+lsregister -f -R -trusted /Applications/TailOps.app
+killall TailOps TailOpsWidget NotificationCenter ControlCenter Dock
+open /Applications/TailOps.app
+pluginkit -m -i dev.tailops.monitor.widget -D -vvv
+```
+
+The final `pluginkit` check should show exactly one `dev.tailops.monitor.widget`, and its path should be `/Applications/TailOps.app/Contents/PlugIns/TailOpsWidget.appex`. If a DerivedData widget remains registered or a stale `TailOpsWidget` process is still running, the visible desktop widget can keep rendering old UI even though the installed app bundle is current.
 
 The app target and widget extension both include `Xcode/Assets.xcassets` and use the shared `AppIcon` asset so Finder, Launch Services, and the widget picker display the same TailOps icon.
 

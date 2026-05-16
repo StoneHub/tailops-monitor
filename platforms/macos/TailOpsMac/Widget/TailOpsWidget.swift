@@ -182,11 +182,11 @@ struct TailOpsWidgetView: View {
         case .systemExtraLarge:
             return WidgetHostStatusGrid.Style(
                 columns: gridColumnCount,
-                columnSpacing: 8,
-                rowSpacing: 7,
-                tileMinHeight: 92,
+                columnSpacing: 7,
+                rowSpacing: 6,
+                tileMinHeight: 72,
                 tileHorizontalPadding: 8,
-                tileVerticalPadding: 7,
+                tileVerticalPadding: 6,
                 tileContentSpacing: 5
             )
         default:
@@ -223,7 +223,7 @@ struct TailOpsWidgetView: View {
     private var rowSpacing: CGFloat {
         switch family {
         case .systemExtraLarge:
-            return 8
+            return 6
         case .systemLarge:
             return 7
         default:
@@ -260,7 +260,7 @@ struct TailOpsWidgetView: View {
         case .systemLarge:
             return 24
         case .systemExtraLarge:
-            return 18
+            return 12
         default:
             return 14
         }
@@ -389,17 +389,11 @@ private struct WidgetHostStatusTile: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
-            }
-
-            HStack(spacing: 5) {
-                Image(systemName: statusIcon)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(color)
+                Spacer(minLength: 4)
                 Text(statusText)
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                Spacer(minLength: 0)
                 if let pingText {
                     Text(pingText)
                         .font(.caption2.monospacedDigit())
@@ -413,8 +407,6 @@ private struct WidgetHostStatusTile: View {
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-
-            Spacer(minLength: 0)
 
             HStack(spacing: 5) {
                 ForEach(actions.prefix(3), id: \.title) { action in
