@@ -442,10 +442,15 @@ public struct HostActionCatalog: Sendable {
 
     public func actions(for host: TailnetHost) -> [HostAction] {
         let configuredActions = configuration.actions(for: host).compactMap(Self.hostAction)
-        if !configuredActions.isEmpty {
-            return configuredActions
+        let defaultActions = Self.defaultActions(for: host)
+        return configuredActions + defaultActions.filter { defaultAction in
+            !configuredActions.contains { configuredAction in
+                Self.matchesSameTarget(configuredAction, defaultAction)
+            }
         }
+    }
 
+    private static func defaultActions(for host: TailnetHost) -> [HostAction] {
         var actions: [HostAction] = []
         let connectionName = host.magicDNSName ?? host.primaryAddress
 
@@ -475,6 +480,10 @@ public struct HostActionCatalog: Sendable {
         case .copy:
             return HostAction(emoji: quickAction.emoji, title: quickAction.title, kind: .copyAddress, url: nil, value: quickAction.target)
         }
+    }
+
+    private static func matchesSameTarget(_ lhs: HostAction, _ rhs: HostAction) -> Bool {
+        lhs.kind == rhs.kind && lhs.url == rhs.url && lhs.value == rhs.value
     }
 }
 

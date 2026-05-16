@@ -7,7 +7,8 @@ struct TailOpsCoreValidation {
     static func main() throws {
         try parserMapsSelfAndPeersIntoHostCards()
         actionCatalogBuildsSshAndDashboardLinks()
-        actionCatalogUsesConfiguredEmojiActionsBeforeDefaults()
+        actionCatalogAddsConfiguredEmojiActionsBeforeDefaults()
+        actionCatalogKeepsDefaultsWhenOnlyOneCustomActionExists()
         try actionConfigurationDecodesCustomDashboardLinks()
         actionConfigurationMatchesHostByNameMagicDNSOrAddress()
         actionConfigurationValidationReportsInvalidRows()
@@ -85,7 +86,7 @@ struct TailOpsCoreValidation {
         expect(actions[2].url == nil, "expected copy action to have no URL")
     }
 
-    private static func actionCatalogUsesConfiguredEmojiActionsBeforeDefaults() {
+    private static func actionCatalogAddsConfiguredEmojiActionsBeforeDefaults() {
         let host = TailnetHost(
             id: "openclaw",
             name: "openclaw",
@@ -110,12 +111,39 @@ struct TailOpsCoreValidation {
 
         let actions = HostActionCatalog(configuration: config).actions(for: host)
 
-        expect(actions.map(\.emoji) == ["🖥", "🧭", "📋"], "expected configured emoji actions")
-        expect(actions.map(\.title) == ["SSH", "Dash", "IP"], "expected configured action titles")
+        expect(actions.map(\.emoji) == ["🖥", "🧭", "📋"], "expected configured emoji actions without duplicate defaults")
+        expect(actions.map(\.title) == ["SSH", "Dash", "IP"], "expected configured action titles without duplicate defaults")
         expect(actions[0].url == URL(string: "ssh://openclaw.tailnet.ts.net"), "expected configured SSH URL")
         expect(actions[1].url == URL(string: "http://openclaw.tailnet.ts.net:8080"), "expected configured dashboard URL")
         expect(actions[2].kind == .copyAddress, "expected configured copy action")
         expect(actions[2].value == "100.64.0.2", "expected configured copy value")
+    }
+
+    private static func actionCatalogKeepsDefaultsWhenOnlyOneCustomActionExists() {
+        let host = TailnetHost(
+            id: "fcfdev",
+            name: "fcfdev",
+            role: .peer,
+            status: .online,
+            operatingSystem: "linux",
+            primaryAddress: "100.104.71.37",
+            magicDNSName: "fcfdev.tailnet.ts.net",
+            lastSeen: nil,
+            services: []
+        )
+        let config = TailnetActionConfiguration(hostActions: [
+            TailnetHostActionConfiguration(
+                hostID: "fcfdev",
+                actions: [
+                    TailnetQuickAction(emoji: "🌐", title: "Panel", kind: .url, target: "http://100.104.71.37:8080")
+                ]
+            )
+        ])
+
+        let actions = HostActionCatalog(configuration: config).actions(for: host)
+
+        expect(actions.map(\.title) == ["Panel", "SSH", "Copy IP"], "expected custom action plus generated defaults")
+        expect(actions.map(\.kind) == [.dashboard, .ssh, .copyAddress], "expected custom dashboard, SSH, and copy actions")
     }
 
     private static func actionConfigurationDecodesCustomDashboardLinks() throws {

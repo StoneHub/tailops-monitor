@@ -410,7 +410,7 @@ private struct WidgetHostStatusTile: View {
 
             HStack(spacing: 5) {
                 ForEach(actions.prefix(3), id: \.title) { action in
-                    WidgetActionChip(action: action)
+                    WidgetActionChip(action: action, showsTitle: true)
                 }
                 Spacer(minLength: 0)
             }
@@ -563,6 +563,7 @@ private struct WidgetHostActionRow: View {
 
 private struct WidgetActionChip: View {
     let action: HostAction
+    var showsTitle = false
 
     var body: some View {
         if action.kind == .ssh, let value = action.value {
@@ -586,12 +587,33 @@ private struct WidgetActionChip: View {
     }
 
     private var chipContent: some View {
-        Image(systemName: systemImage)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(Color.primary.opacity(0.8))
-            .frame(width: 22, height: 22)
-            .background(Color.primary.opacity(0.1), in: Circle())
-            .accessibilityLabel(action.title)
+        HStack(spacing: 4) {
+            chipIcon
+                .frame(width: 18, height: 18)
+            if showsTitle {
+                Text(action.title)
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(Color.primary.opacity(0.8))
+        .frame(height: 22)
+        .padding(.horizontal, showsTitle ? 7 : 2)
+        .background(Color.primary.opacity(0.1), in: Capsule())
+        .accessibilityLabel(action.title)
+    }
+
+    @ViewBuilder
+    private var chipIcon: some View {
+        if let emoji = action.emoji,
+           !emoji.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Text(emoji)
+                .font(.caption2)
+        } else {
+            Image(systemName: systemImage)
+        }
     }
 
     private var systemImage: String {

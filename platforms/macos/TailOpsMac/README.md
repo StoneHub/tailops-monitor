@@ -89,6 +89,8 @@ inside the shared app group container, or the fallback `Application Support/Tail
 
 `hostID` can match the host ID, display name, MagicDNS name, or Tailscale IP. A sample file lives at `config/tailops-actions.sample.json`. The settings window also includes a `+ Host` control so custom button rows can be created even when the target device is not already represented in the imported snapshot.
 
+Custom actions extend the generated per-host defaults instead of replacing them. For example, adding a dashboard link keeps TailOps' generated SSH and Copy IP buttons unless the custom action targets the same SSH host or copied address. Large and extra-large grid widgets show action emoji plus short labels so custom buttons are recognizable on the desktop; compact row widgets keep icon-only chips to preserve space.
+
 ## Widget-First App
 
 TailOps no longer shows a menu-bar icon by default. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear opens `tailops://settings`, bringing the app forward and showing the floating settings window on the active Space so custom buttons stay reachable from widget-only mode.
