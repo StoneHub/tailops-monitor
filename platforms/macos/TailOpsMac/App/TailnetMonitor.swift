@@ -17,6 +17,9 @@ final class TailnetMonitor: ObservableObject {
     private let snapshotStore: SharedSnapshotStoring
     private let actionCatalog = HostActionCatalog()
     private let maxRetainedPingSamples = 120
+    private let pingDiagnosticsMinimumInterval: TimeInterval = 60 * 60
+    private var automaticRefreshTask: Task<Void, Never>?
+    private var lastPingDiagnosticsRefreshDate: Date?
 
     init(
         statusProvider: TailscaleStatusProviding,
@@ -32,9 +35,16 @@ final class TailnetMonitor: ObservableObject {
         } else if let stored = try? snapshotStore.load() {
             snapshot = stored
         }
+        lastPingDiagnosticsRefreshDate = snapshot.hosts
+            .compactMap { $0.diagnostics?.ping?.lastUpdated }
+            .max()
         if let storedConfiguration = try? snapshotStore.loadActionConfiguration() {
             actionConfiguration = storedConfiguration
         }
+    }
+
+    deinit {
+        automaticRefreshTask?.cancel()
     }
 
     var summary: TailnetSummary {
@@ -60,7 +70,7 @@ final class TailnetMonitor: ObservableObject {
         do {
             let data = try await statusProvider.statusJSON()
             let nextSnapshot = try parser.parse(data)
-            let diagnosedSnapshot = await snapshotWithPingDiagnostics(nextSnapshot)
+            let diagnosedSnapshot = await snapshotWithPingDiagnostics(nextSnapshot, now: Date())
             snapshot = diagnosedSnapshot
             lastError = nil
             try snapshotStore.save(diagnosedSnapshot)
@@ -70,11 +80,27 @@ final class TailnetMonitor: ObservableObject {
         }
     }
 
+    func startAutomaticRefresh(every interval: Duration = .seconds(3600)) {
+        guard automaticRefreshTask == nil else { return }
+
+        automaticRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: interval)
+                } catch {
+                    break
+                }
+
+                await self?.refresh()
+            }
+        }
+    }
+
     func actions(for host: TailnetHost) -> [HostAction] {
         HostActionCatalog(configuration: actionConfiguration).actions(for: host)
     }
 
-    private func snapshotWithPingDiagnostics(_ snapshot: TailnetSnapshot) async -> TailnetSnapshot {
+    private func snapshotWithPingDiagnostics(_ snapshot: TailnetSnapshot, now: Date) async -> TailnetSnapshot {
         guard let pingProvider else { return snapshot }
 
         let existingPingByHostID = Dictionary(
@@ -82,6 +108,10 @@ final class TailnetMonitor: ObservableObject {
                 host.diagnostics?.ping.map { (host.id, $0) }
             }
         )
+        guard shouldRefreshPingDiagnostics(now: now) else {
+            return snapshotWithRetainedPingDiagnostics(snapshot, existingPingByHostID: existingPingByHostID)
+        }
+
         var diagnosedHosts: [TailnetHost] = []
         for host in snapshot.hosts {
             guard host.role == .peer, host.status == .online else {
@@ -104,6 +134,30 @@ final class TailnetMonitor: ObservableObject {
             }
         }
 
+        lastPingDiagnosticsRefreshDate = now
         return TailnetSnapshot(hosts: diagnosedHosts, generatedAt: snapshot.generatedAt)
+    }
+
+    private func shouldRefreshPingDiagnostics(now: Date) -> Bool {
+        guard let lastPingDiagnosticsRefreshDate else { return true }
+        return now.timeIntervalSince(lastPingDiagnosticsRefreshDate) >= pingDiagnosticsMinimumInterval
+    }
+
+    private func snapshotWithRetainedPingDiagnostics(
+        _ snapshot: TailnetSnapshot,
+        existingPingByHostID: [String: TailnetPingSummary]
+    ) -> TailnetSnapshot {
+        let hosts = snapshot.hosts.map { host in
+            guard host.role == .peer,
+                  host.status == .online,
+                  let existingPing = existingPingByHostID[host.id]
+            else {
+                return host
+            }
+
+            return host.withDiagnostics(TailnetHostDiagnostics(ping: existingPing))
+        }
+
+        return TailnetSnapshot(hosts: hosts, generatedAt: snapshot.generatedAt)
     }
 }

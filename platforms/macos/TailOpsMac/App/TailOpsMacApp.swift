@@ -100,6 +100,7 @@ struct TailOpsMacApp: App {
         _preferencesModel = StateObject(wrappedValue: preferencesModel)
         Task { @MainActor in
             await monitor.refresh()
+            monitor.startAutomaticRefresh()
         }
     }
 

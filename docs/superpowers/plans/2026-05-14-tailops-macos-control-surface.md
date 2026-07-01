@@ -56,15 +56,15 @@ Deferred:
 
 Current refresh behavior:
 
-- The widget timeline reloads every 5 minutes from `tailops-snapshot.json`.
+- The widget timeline reloads hourly from `tailops-snapshot.json`.
 - The widget does not run `tailscale status` or `tailscale ping`.
-- The app refreshes on launch and when the refresh button is pressed.
+- The app refreshes on launch, hourly while alive, and when the refresh button is pressed.
 - Each app refresh runs `tailscale status --json`.
-- For each online peer, each app refresh runs `tailscale ping --c 6 --timeout 1500ms --until-direct=false <host>`.
+- At most once per hour, each online peer gets `tailscale ping --c 6 --timeout 1500ms --until-direct=false <host>`.
 - The app retains up to 120 recent ping samples per host in the shared snapshot, so the widget can show the latest route/latency plus an average without running network checks itself.
 - The widget extension includes the shared `AppIcon` asset catalog, and the app/widget bundle names both resolve to `TailOps`.
 
-The current idle impact is therefore near zero beyond WidgetKit reading a small JSON file. The active refresh cost is one `tailscale status` command plus six ping samples per online peer.
+The current idle impact is therefore near zero beyond WidgetKit reading a small JSON file. The active refresh cost is one `tailscale status` command, plus no more than one hourly burst of six ping samples per online peer.
 
 ## Files
 

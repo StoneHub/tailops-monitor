@@ -122,14 +122,14 @@ Deferred for now: ping-rate controls and TailOps Drop Zone. Drop Zone remains wi
 
 ## macOS Runtime Impact
 
-The WidgetKit extension is passive. It reads the cached shared snapshot and asks WidgetKit for another timeline in about five minutes. It does not run `tailscale`, keep a backend alive, or ping hosts.
+The WidgetKit extension is passive. It reads the cached shared snapshot and asks WidgetKit for another timeline in about one hour. It does not run `tailscale`, keep a backend alive, or ping hosts.
 
-The hidden host app is the active side. It refreshes on app launch and when the user presses refresh from the widget. A refresh currently runs:
+The hidden host app is the active side. It refreshes on app launch, on an hourly automatic cadence while the app is alive, and when the user presses refresh from the widget. A refresh currently runs:
 
 - one `tailscale status --json`;
-- six `tailscale ping` samples for each online peer.
+- at most once per hour, six `tailscale ping` samples for each online peer.
 
-For a small tailnet this is low impact. Ping rate controls are not in the next implementation batch; keep evaluating the default after the widget shows clearer ping context.
+Repeated refreshes inside the one-hour ping window retain cached ping diagnostics instead of running another ping burst. Idle impact should stay low even if the host app remains alive for widget support.
 
 ## Verify The Swift Platform
 

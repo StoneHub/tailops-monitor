@@ -136,16 +136,16 @@ Host SSH chips run `OpenSSHInTerminalIntent`, which opens `ssh://<host>` explici
 
 ## Runtime Impact
 
-The widget itself does not ping. It reloads the cached snapshot from the shared App Group on its WidgetKit timeline, currently every five minutes.
+The widget itself does not ping. It reloads the cached snapshot from the shared App Group on its WidgetKit timeline, currently every hour.
 
-The app does the active refresh work. It refreshes on launch and when the refresh button is pressed. Each refresh currently runs:
+The app does the active refresh work. It refreshes on launch, once per hour while the app remains alive, and when the refresh button is pressed. Each refresh currently runs:
 
 ```text
 tailscale status --json
 tailscale ping --c 6 --timeout 1500ms --until-direct=false <online-peer>
 ```
 
-Only online peers are pinged. With two online peers, one refresh means twelve ping samples total. Idle impact is therefore near zero; active impact is proportional to the number of online peers. Ping rate controls are intentionally deferred for now.
+Only online peers are pinged, and ping diagnostics are throttled to at most once per hour. With two online peers, one ping refresh means twelve ping samples total. Refreshes inside the one-hour window keep cached ping diagnostics instead of running another ping burst.
 
 ## Sandbox Note
 
