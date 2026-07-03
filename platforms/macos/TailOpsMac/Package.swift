@@ -49,6 +49,9 @@ let package = Package(
                 "TailOpsPreferencesModel.swift",
                 "TailOpsSettingsView.swift",
                 "TailOpsSettingsWindowController.swift",
+                "TailOpsWormholeCommandRunner.swift",
+                "TailOpsWormholePendingSignalService.swift",
+                "TailOpsWormholeWindowController.swift",
                 "TailOpsMenuView.swift",
                 "TailnetMonitor.swift"
             ]

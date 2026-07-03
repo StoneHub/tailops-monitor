@@ -152,3 +152,51 @@ public struct OpenTailOpsSettingsIntent: AppIntent {
         return .result()
     }
 }
+
+public struct OpenTailOpsWormholeIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Open TailOps Wormhole"
+    public static let description = IntentDescription("Opens TailOps Wormhole send or receive controls.")
+    public static let openAppWhenRun = true
+
+    @Parameter(title: "Mode")
+    public var mode: String
+
+    @Parameter(title: "Contact ID")
+    public var contactID: String
+
+    @Parameter(title: "Pending Transfer ID")
+    public var pendingTransferID: String
+
+    public init() {
+        mode = TailOpsWormholeOpenRequest.Mode.receive.rawValue
+        contactID = ""
+        pendingTransferID = ""
+    }
+
+    public init(
+        mode: TailOpsWormholeOpenRequest.Mode,
+        contactID: String? = nil,
+        pendingTransferID: String? = nil
+    ) {
+        self.mode = mode.rawValue
+        self.contactID = contactID ?? ""
+        self.pendingTransferID = pendingTransferID ?? ""
+    }
+
+    public func perform() async throws -> some IntentResult {
+        let requestMode = TailOpsWormholeOpenRequest.Mode(rawValue: mode) ?? .receive
+        let cleanContactID = contactID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPendingTransferID = pendingTransferID.trimmingCharacters(in: .whitespacesAndNewlines)
+        try SharedSnapshotStore().saveWormholeOpenRequest(TailOpsWormholeOpenRequest(
+            mode: requestMode,
+            contactID: cleanContactID.isEmpty ? nil : cleanContactID,
+            pendingTransferID: cleanPendingTransferID.isEmpty ? nil : cleanPendingTransferID
+        ))
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name(TailOpsWormholeSignal.notificationName),
+            object: nil,
+            deliverImmediately: true
+        )
+        return .result()
+    }
+}

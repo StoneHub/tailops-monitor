@@ -11,6 +11,7 @@ The older browser dashboard is still included as a full-screen visualization and
 - Uses a hidden native host app for refresh, settings, App Group sharing, and Finder Services.
 - Adds passive ping context for online peers when the host app refreshes, then exposes the cached result in the widget.
 - Adds Taildrop shortcuts through menu-row file drops and a Finder Service.
+- Plans cross-account file send/receive through Magic Wormhole pairing, with Taildrop kept for same-account devices.
 - Lets you configure custom actions for each host:
   - `ssh`: opens `ssh://host`.
   - `url`: opens HTTP dashboards, admin pages, Home Assistant, OpenClaw, router UIs, logs, and other web tools.
@@ -32,9 +33,16 @@ docs/assets/                      Visual references and dashboard captures
 
 Requirements:
 
-- macOS with Xcode installed.
+- macOS 14 or newer with Xcode 16 or newer installed.
 - Tailscale CLI available as `tailscale`.
 - An Apple ID in Xcode for local development signing.
+- Optional for the planned cross-account file handoff path: Magic Wormhole installed as `wormhole`.
+
+Install the current external Wormhole dependency for local trials with:
+
+```bash
+brew install magic-wormhole
+```
 
 Open the real app/widget project:
 
@@ -50,12 +58,14 @@ In Xcode:
 4. Run the `TailOpsMac` scheme. The built app product is branded as `TailOps.app`.
 5. Open macOS **Edit Widgets**, search for **TailOps**, and add the widget.
 
-For command-line verification without signing:
+For command-line compile verification without signing:
 
 ```bash
 cd platforms/macos/TailOpsMac
 xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
+
+That command proves the project compiles. It does not prove the live desktop widget can read the signed App Group; for widget testing, run from Xcode with your Apple Development team selected for both `TailOpsMac` and `TailOpsWidget`.
 
 ## Custom Widget Actions
 
@@ -90,9 +100,11 @@ The macOS implementation avoids a Node backend:
 
 - `TailOpsCore` parses Tailscale status and models hosts/actions.
 - `TailOpsShared` stores snapshots and action config for app/widget sharing.
-- `TailOpsIntents` provides widget App Intents for copy, refresh, settings, and opening Tailscale.
-- `TailOpsMac` is the hidden SwiftUI host app for refresh, settings, and Finder Services.
+- `TailOpsIntents` provides widget App Intents for copy, refresh, settings, Wormhole, and opening Tailscale.
+- `TailOpsMac` is the hidden SwiftUI host app for refresh, settings, Wormhole, and Finder Services.
 - `TailOpsWidget` is the WidgetKit extension.
+
+Magic Wormhole is not bundled yet. TailOps detects `wormhole` on `PATH` or in common Homebrew locations and shows setup instructions when missing. Bundling remains possible, but should be treated as a separate packaging task because the reference Wormhole CLI is a Python tool with native crypto dependencies that must be signed per architecture inside the app bundle.
 
 The widget uses WidgetKit container backgrounds, removable backgrounds, `widgetRenderingMode`, and `widgetAccentable(_:)` so macOS can apply modern tinted and Liquid Glass widget appearances.
 
@@ -108,7 +120,7 @@ Next implementation batch:
 
 1. Exercise the widget gear/settings flow in the real desktop widget after install.
 2. Polish the settings editor for custom dashboard presets and common ports.
-3. Continue right-click Taildrop polish around destination picking and transfer feedback.
+3. Exercise the Wormhole setup gate and first send/receive window from the installed app.
 4. Decide whether any menu-bar surface is worth restoring later as optional, not primary.
 
 Recent checkpoint polish:
@@ -167,7 +179,7 @@ GET /.well-known/agent.json
 
 The server reads live Tailscale hosts through `tailscale status --json`. It can also pull ASUSWRT router telemetry through Home Assistant when `TAILOPS_HA_URL` and `TAILOPS_HA_TOKEN` are set.
 
-Run the Node test suite with:
+The browser dashboard needs Node 18 or newer for built-in `fetch`. Run the Node test suite with:
 
 ```bash
 npm test
@@ -195,3 +207,7 @@ This is intended to evolve into an MCP resource/tool so local AI agents can disc
 Wishlist: a Finder-based TailOps Drop Zone for easier Taildrop sends.
 
 Detailed plan: `docs/superpowers/plans/2026-05-14-tailops-macos-control-surface.md`.
+
+File-send upgrade plan: `docs/superpowers/plans/2026-07-03-tailops-file-send-upgrade.html`.
+
+First-run audit for Monroe/Ben trial setup: `docs/superpowers/plans/2026-07-03-tailops-first-run-audit.md`.

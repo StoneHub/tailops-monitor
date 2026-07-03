@@ -336,6 +336,13 @@ private struct PreviewSettingsStore: SharedSnapshotStoring {
     func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws {}
     func loadAppPreferences() throws -> TailOpsAppPreferences? { TailOpsAppPreferences() }
     func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws {}
+    func loadWormholeConfiguration() throws -> TailOpsWormholeConfiguration? { TailOpsWormholeConfiguration() }
+    func saveWormholeConfiguration(_ configuration: TailOpsWormholeConfiguration) throws {}
+    func loadWormholeOpenRequest() throws -> TailOpsWormholeOpenRequest? { nil }
+    func saveWormholeOpenRequest(_ request: TailOpsWormholeOpenRequest) throws {}
+    func clearWormholeOpenRequest() throws {}
+    func loadWormholePendingTransfers() throws -> [TailOpsWormholePendingTransfer] { [] }
+    func saveWormholePendingTransfers(_ transfers: [TailOpsWormholePendingTransfer]) throws {}
     func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest? { nil }
     func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws {}
     func clearSettingsOpenRequest() throws {}

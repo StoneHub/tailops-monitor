@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A50000000000000000000001"
-               BuildableName = "TailOpsMac.app"
+               BuildableName = "TailOps.app"
                BlueprintName = "TailOpsMac"
                ReferencedContainer = "container:TailOpsMac.xcodeproj">
             </BuildableReference>
@@ -45,7 +45,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A50000000000000000000001"
-            BuildableName = "TailOpsMac.app"
+            BuildableName = "TailOps.app"
             BlueprintName = "TailOpsMac"
             ReferencedContainer = "container:TailOpsMac.xcodeproj">
          </BuildableReference>
@@ -62,7 +62,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A50000000000000000000001"
-            BuildableName = "TailOpsMac.app"
+            BuildableName = "TailOps.app"
             BlueprintName = "TailOpsMac"
             ReferencedContainer = "container:TailOpsMac.xcodeproj">
          </BuildableReference>

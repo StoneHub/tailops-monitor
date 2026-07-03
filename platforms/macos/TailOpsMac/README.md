@@ -34,13 +34,15 @@ $(TeamIdentifierPrefix)group.dev.tailops.monitor
 
 At runtime, a locally signed build resolves this to a value like `N6GPP46885.group.dev.tailops.monitor`. `SharedSnapshotStore` reads the signed App Group entitlement first and keeps a legacy fallback for older local builds that wrote to `group.dev.tailops.monitor`.
 
-For local command-line verification without signing:
+For local command-line compile verification without signing:
 
 ```bash
 xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
-For normal Xcode Run, select your Apple Development team for the app and widget targets so Xcode can sign the App Group entitlement.
+That command is compile-only. It does not validate the signed App Group or live WidgetKit behavior.
+
+For normal Xcode Run, select your Apple Development team for both the app and widget targets so Xcode can sign the App Group entitlement. The checked-in project intentionally leaves `DEVELOPMENT_TEAM` blank so a fresh clone is not pinned to another developer's team.
 
 If rebuilding this project manually, the intended target layout is:
 
@@ -102,8 +104,23 @@ The host registers the `tailops://settings` URL scheme as the supported widget-t
 TailOps currently exposes Taildrop through Finder:
 
 - Finder can show a `Send with TailOps` Service for selected files. The service opens a Taildrop destination picker backed by `tailscale file cp --targets`.
+- Host rows accept dropped files and send them with `tailscale file cp`.
 
-Wishlist: a temporary Finder-based `TailOps Drop Zone` could create one folder per available Taildrop target, then send files dropped into a device folder. A real mounted volume or File Provider extension remains possible later, but the watched-folder design is smaller and more reliable for a local utility.
+Cross-account file-send path: TailOps includes a Wormhole send/receive window backed by paired contacts and deterministic transfer codes. Use Magic Wormhole for simple prompt files, Markdown, rich text, and images when Ben can click receive. Keep Taildrop for same-account devices only. Use SFTP or a future token-authenticated TailOps Inbox receiver only if unattended drops become necessary.
+
+TailOps also runs a tiny pending-transfer signal listener on TCP `39117`. When Monroe starts a Wormhole send, TailOps sends Ben's TailOps a signed pending notice over Tailscale with the filename, sender, code, and expiration. The notice does not contain file data; the file still moves through Magic Wormhole. Ben's widget can use that notice to glow the paired computer card and open the receive flow.
+
+Plan: `../../../docs/superpowers/plans/2026-07-03-tailops-file-send-upgrade.html`.
+
+Magic Wormhole is not bundled in TailOps yet. For the first local trials, install it separately:
+
+```bash
+brew install magic-wormhole
+```
+
+Bundling is possible because Magic Wormhole is MIT-licensed, but the reference CLI is Python-based and depends on native crypto libraries. A bundled version should be a separately signed helper under `Contents/Helpers` or `Contents/Resources`, with per-architecture build artifacts and a clear update process. Do not block the first TailOps Wormhole UI on that packaging work.
+
+If `wormhole` is missing, open `tailops://wormhole` or the widget Wormhole button and TailOps will show the setup gate with the Homebrew install command. Once installed, the same window can save a shared pairing, pick a file to send, or receive into `~/Desktop/TailOps Inbox`.
 
 ## Liquid Glass And Widget Rendering
 
@@ -113,12 +130,23 @@ The widget supports medium, large, and extra-large families. It is not freely re
 
 When changing supported families, widget metadata, or visible widget layout, bump `CURRENT_PROJECT_VERSION` for both app and widget targets before installing. WidgetKit and PlugInKit cache extension metadata and live extension processes aggressively, so a successful `ditto` to `/Applications` is not enough proof that the desktop widget has reloaded.
 
-The reliable local refresh loop after a widget build is:
+The reliable local refresh loop after a widget build starts by resolving the exact app product from the current build:
 
-```text
-ditto ~/Library/Developer/Xcode/DerivedData/.../Build/Products/Debug/TailOps.app /Applications/TailOps.app
-pluginkit -r ~/Library/Developer/Xcode/DerivedData/.../Build/Products/Debug/TailOps.app/Contents/PlugIns/TailOpsWidget.appex
-rm -rf ~/Library/Developer/Xcode/DerivedData/.../Build/Products/Debug/TailOps.app ~/Library/Developer/Xcode/DerivedData/.../Build/Products/Debug/TailOpsWidget.appex
+```bash
+BUILD_SETTINGS="$(mktemp)"
+xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Debug -showBuildSettings > "$BUILD_SETTINGS"
+TARGET_BUILD_DIR="$(awk -F'= ' '/ TARGET_BUILD_DIR = / {print $2; exit}' "$BUILD_SETTINGS")"
+FULL_PRODUCT_NAME="$(awk -F'= ' '/ FULL_PRODUCT_NAME = / {print $2; exit}' "$BUILD_SETTINGS")"
+BUILT_APP="$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME"
+test -d "$BUILT_APP" && echo "$BUILT_APP"
+```
+
+Then install and refresh from that resolved product path only:
+
+```bash
+ditto "$BUILT_APP" /Applications/TailOps.app
+pluginkit -r "$BUILT_APP/Contents/PlugIns/TailOpsWidget.appex"
+rm -rf "$BUILT_APP" "$TARGET_BUILD_DIR/TailOpsWidget.appex"
 pluginkit -a /Applications/TailOps.app/Contents/PlugIns/TailOpsWidget.appex
 lsregister -f -R -trusted /Applications/TailOps.app
 killall TailOps TailOpsWidget NotificationCenter ControlCenter Dock
@@ -152,7 +180,11 @@ Only online peers are pinged, and ping diagnostics are throttled to at most once
 The app currently reads Tailscale through:
 
 ```text
-/usr/bin/env tailscale status --json
+/usr/local/bin/tailscale status --json
+/Applications/Tailscale.app/Contents/MacOS/tailscale status --json
+/Applications/Tailscale.app/Contents/MacOS/Tailscale status --json
+/opt/homebrew/bin/tailscale status --json
+/usr/bin/tailscale status --json
 ```
 
 That is the simplest and lowest-risk first step for a local developer utility. A sandboxed App Store build should not rely on launching arbitrary command-line tools. For that path, replace `ProcessTailscaleStatusProvider` with an XPC helper or a signed privileged helper.
@@ -199,7 +231,7 @@ The planned order is:
 
 1. Manually verify the widget gear in the live desktop widget after each install.
 2. Improve dashboard action presets and common-port helpers in settings.
-3. Continue Finder Taildrop destination and transfer feedback polish.
+3. Add the Wormhole send/receive window from the July 3 file-send plan.
 4. Keep menu-bar UI as optional future scope only if the widget cannot cover a workflow.
 
 Wishlist: TailOps Drop Zone.

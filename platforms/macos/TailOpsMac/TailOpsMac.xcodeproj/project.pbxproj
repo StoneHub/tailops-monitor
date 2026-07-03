@@ -17,6 +17,9 @@
 		A10000000000000000000016 /* App/TaildropServiceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* App/TaildropServiceProvider.swift */; };
 		A10000000000000000000017 /* App/TailOpsPreferencesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* App/TailOpsPreferencesModel.swift */; };
 		A10000000000000000000018 /* App/TailOpsSettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* App/TailOpsSettingsWindowController.swift */; };
+		A10000000000000000000021 /* App/TailOpsWormholeCommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* App/TailOpsWormholeCommandRunner.swift */; };
+		A10000000000000000000022 /* App/TailOpsWormholeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* App/TailOpsWormholeWindowController.swift */; };
+		A10000000000000000000023 /* App/TailOpsWormholePendingSignalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* App/TailOpsWormholePendingSignalService.swift */; };
 		A10000000000000000000019 /* Xcode/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Xcode/Assets.xcassets */; };
 		A10000000000000000000020 /* Xcode/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Xcode/Assets.xcassets */; };
 		A10000000000000000000007 /* Widget/TailOpsWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */; };
@@ -64,6 +67,9 @@
 		A20000000000000000000016 /* App/TaildropServiceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TaildropServiceProvider.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* App/TailOpsPreferencesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsPreferencesModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000018 /* App/TailOpsSettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsSettingsWindowController.swift; sourceTree = "<group>"; };
+		A20000000000000000000020 /* App/TailOpsWormholeCommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsWormholeCommandRunner.swift; sourceTree = "<group>"; };
+		A20000000000000000000021 /* App/TailOpsWormholeWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsWormholeWindowController.swift; sourceTree = "<group>"; };
+		A20000000000000000000022 /* App/TailOpsWormholePendingSignalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsWormholePendingSignalService.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* Xcode/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Xcode/Assets.xcassets; sourceTree = "<group>"; };
 		A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidgetBundle.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* Widget/TailOpsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidget.swift; sourceTree = "<group>"; };
@@ -121,6 +127,9 @@
 				A20000000000000000000016 /* App/TaildropServiceProvider.swift */,
 				A20000000000000000000017 /* App/TailOpsPreferencesModel.swift */,
 				A20000000000000000000018 /* App/TailOpsSettingsWindowController.swift */,
+				A20000000000000000000020 /* App/TailOpsWormholeCommandRunner.swift */,
+				A20000000000000000000022 /* App/TailOpsWormholePendingSignalService.swift */,
+				A20000000000000000000021 /* App/TailOpsWormholeWindowController.swift */,
 			);
 			name = App;
 			sourceTree = "<group>";
@@ -277,6 +286,9 @@
 				A10000000000000000000016 /* App/TaildropServiceProvider.swift in Sources */,
 				A10000000000000000000017 /* App/TailOpsPreferencesModel.swift in Sources */,
 				A10000000000000000000018 /* App/TailOpsSettingsWindowController.swift in Sources */,
+				A10000000000000000000021 /* App/TailOpsWormholeCommandRunner.swift in Sources */,
+				A10000000000000000000023 /* App/TailOpsWormholePendingSignalService.swift in Sources */,
+				A10000000000000000000022 /* App/TailOpsWormholeWindowController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -317,6 +329,23 @@
 			};
 			name = Debug;
 		};
+		AB0000000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 		AB0000000000000000000004 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -324,7 +353,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				DEVELOPMENT_TEAM = N6GPP46885;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Xcode/TailOpsMacApp/Info.plist;
@@ -346,7 +375,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				DEVELOPMENT_TEAM = N6GPP46885;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Xcode/TailOpsMacApp/Info.plist;
@@ -368,7 +397,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				DEVELOPMENT_TEAM = N6GPP46885;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Xcode/TailOpsWidget/Info.plist;
@@ -392,7 +421,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				DEVELOPMENT_TEAM = N6GPP46885;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Xcode/TailOpsWidget/Info.plist;
@@ -416,6 +445,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AB0000000000000000000002 /* Debug */,
+				AB0000000000000000000009 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

@@ -23,11 +23,20 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
             name: Notification.Name(TailOpsSettingsOpenSignal.notificationName),
             object: nil
         )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(openWormholeWindowFromDistributedNotification),
+            name: Notification.Name(TailOpsWormholeSignal.notificationName),
+            object: nil
+        )
         Self.openSettingsWindowIfRequested()
+        Self.openWormholeWindowIfRequested()
+        TailOpsWormholePendingSignalServer.shared.start()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
         Self.openSettingsWindowIfRequested()
+        Self.openWormholeWindowIfRequested()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -39,11 +48,16 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard urls.contains(where: { $0.scheme == "tailops" && $0.host == "settings" }) else {
-            return
+        for url in urls where url.scheme == "tailops" {
+            switch url.host {
+            case "settings":
+                Self.openSettingsWindow()
+            case "wormhole":
+                Self.openWormholeWindow()
+            default:
+                continue
+            }
         }
-
-        Self.openSettingsWindow()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -64,21 +78,47 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
         TailOpsSettingsWindowController.shared.show()
     }
 
+    static func openWormholeWindowIfRequested(store: SharedSnapshotStore = SharedSnapshotStore()) {
+        guard let request = try? store.loadWormholeOpenRequest() else {
+            return
+        }
+
+        try? store.clearWormholeOpenRequest()
+        openWormholeWindow(request: request)
+    }
+
+    static func openWormholeWindow(request: TailOpsWormholeOpenRequest? = nil) {
+        TailOpsWormholeWindowController.shared.show(request: request)
+    }
+
     @objc private func openSettingsWindowFromDistributedNotification(_ notification: Notification) {
         try? SharedSnapshotStore().clearSettingsOpenRequest()
         Self.openSettingsWindow()
     }
 
+    @objc private func openWormholeWindowFromDistributedNotification(_ notification: Notification) {
+        let store = SharedSnapshotStore()
+        let request = try? store.loadWormholeOpenRequest()
+        try? store.clearWormholeOpenRequest()
+        Self.openWormholeWindow(request: request)
+    }
+
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
         guard let urlString = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
               let url = URL(string: urlString),
-              url.scheme == "tailops",
-              url.host == "settings"
+              url.scheme == "tailops"
         else {
             return
         }
 
-        Self.openSettingsWindow()
+        switch url.host {
+        case "settings":
+            Self.openSettingsWindow()
+        case "wormhole":
+            Self.openWormholeWindow()
+        default:
+            return
+        }
     }
 }
 

@@ -6,6 +6,7 @@ import TailOpsShared
 struct TailOpsCoreValidation {
     static func main() throws {
         try parserMapsSelfAndPeersIntoHostCards()
+        try parserCleansTailscaleDuplicateDisplaySuffix()
         actionCatalogBuildsSshAndDashboardLinks()
         actionCatalogAddsConfiguredEmojiActionsBeforeDefaults()
         actionCatalogKeepsDefaultsWhenOnlyOneCustomActionExists()
@@ -20,6 +21,11 @@ struct TailOpsCoreValidation {
         widgetLayoutPrioritizesReachableHostsAndCountsHiddenOffline()
         widgetLayoutPrioritizesPeersBeforeThisDevice()
         try appPreferencesRoundTripThroughSharedStore()
+        wormholeCodeFactoryDerivesSharedWindowCodes()
+        try wormholeConfigurationRoundTripThroughSharedStore()
+        try wormholeOpenRequestRoundTripThroughSharedStore()
+        try wormholePendingTransfersRoundTripThroughSharedStore()
+        wormholeOpenSignalUsesTailOpsURLScheme()
         try settingsOpenRequestRoundTripThroughSharedStore()
         settingsOpenSignalUsesTailOpsURLScheme()
         try sharedSnapshotStoreLoadsFirstExistingFallback()
@@ -61,6 +67,29 @@ struct TailOpsCoreValidation {
         expect(snapshot.hosts[1].role == .peer, "expected peer host role")
         expect(snapshot.hosts[1].status == .offline, "expected peer offline status")
         expect(snapshot.hosts[1].lastSeen == ISO8601DateFormatter().date(from: "2026-05-14T18:30:00Z"), "expected parsed last seen date")
+    }
+
+    private static func parserCleansTailscaleDuplicateDisplaySuffix() throws {
+        let json = """
+        {
+          "Peer": {
+            "peer-1": {
+              "ID": "peer-1",
+              "HostName": "Benjamin’s MacBook Pro (2)",
+              "DNSName": "benjamins-macbook-pro-2.tailnet.ts.net.",
+              "TailscaleIPs": ["100.126.20.113"],
+              "Online": true,
+              "OS": "macOS"
+            }
+          }
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try TailnetSnapshotParser().parse(json)
+
+        expect(snapshot.hosts[0].name == "Benjamin’s MacBook Pro", "expected duplicate suffix to be hidden from display name")
+        expect(snapshot.hosts[0].magicDNSName == "benjamins-macbook-pro-2.tailnet.ts.net", "expected MagicDNS name to stay exact")
+        expect(snapshot.hosts[0].primaryAddress == "100.126.20.113", "expected transfer address to stay exact")
     }
 
     private static func actionCatalogBuildsSshAndDashboardLinks() {
@@ -325,6 +354,105 @@ struct TailOpsCoreValidation {
         expect(loaded == preferences, "expected shared app preferences to round trip")
     }
 
+    private static func wormholeCodeFactoryDerivesSharedWindowCodes() {
+        let monroeContact = TailOpsWormholeContact(
+            id: "ben",
+            displayName: "Ben",
+            pairingID: "monroe-ben",
+            sharedSecret: "tailops test secret"
+        )
+        let benContact = TailOpsWormholeContact(
+            id: "monroe",
+            displayName: "Monroe",
+            pairingID: "monroe-ben",
+            sharedSecret: "tailops test secret"
+        )
+        let factory = TailOpsWormholeCodeFactory(windowDuration: 900)
+        let date = Date(timeIntervalSince1970: 1_800)
+
+        let senderCode = factory.code(for: monroeContact, date: date)
+        let receiverCode = factory.code(for: benContact, date: date.addingTimeInterval(60))
+        let nextWindowCode = factory.code(for: monroeContact, date: date.addingTimeInterval(901))
+        let candidates = factory.candidateCodes(for: benContact, date: date.addingTimeInterval(901), skewTolerance: 1)
+
+        expect(senderCode.code == receiverCode.code, "expected paired contacts to derive the same current Wormhole code")
+        expect(senderCode.code != nextWindowCode.code, "expected next transfer window to derive a fresh code")
+        expect(candidates.map(\.code).contains(senderCode.code), "expected receiver candidates to tolerate adjacent clock windows")
+        expect(senderCode.code.split(separator: "-").count == 5, "expected numeric nameplate plus four words")
+    }
+
+    private static func wormholeConfigurationRoundTripThroughSharedStore() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "TailOpsWormholeValidation-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let store = SharedSnapshotStore(baseURLs: [rootURL])
+        let configuration = TailOpsWormholeConfiguration(
+            contacts: [
+                TailOpsWormholeContact(
+                    id: "ben",
+                    displayName: "Ben",
+                    pairingID: "monroe-ben",
+                    sharedSecret: "tailops setup phrase",
+                    createdAt: Date(timeIntervalSince1970: 100)
+                )
+            ],
+            inboxPath: "~/Desktop/TailOps Inbox"
+        )
+
+        try store.saveWormholeConfiguration(configuration)
+        let loaded = try store.loadWormholeConfiguration()
+
+        expect(loaded == configuration, "expected Wormhole pairing configuration to round trip")
+        expect(loaded?.contact(id: "ben")?.displayName == "Ben", "expected paired contact lookup by id")
+    }
+
+    private static func wormholeOpenRequestRoundTripThroughSharedStore() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "TailOpsWormholeOpenValidation-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let store = SharedSnapshotStore(baseURLs: [rootURL])
+        let request = TailOpsWormholeOpenRequest(
+            mode: .receive,
+            contactID: "monroe",
+            requestedAt: Date(timeIntervalSince1970: 100)
+        )
+
+        try store.saveWormholeOpenRequest(request)
+        let loadedRequest = try store.loadWormholeOpenRequest()
+        expect(loadedRequest == request, "expected Wormhole open request to round trip")
+
+        try store.clearWormholeOpenRequest()
+        let clearedRequest = try store.loadWormholeOpenRequest()
+        expect(clearedRequest == nil, "expected Wormhole open request to clear")
+    }
+
+    private static func wormholePendingTransfersRoundTripThroughSharedStore() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "TailOpsWormholePendingValidation-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let store = SharedSnapshotStore(baseURLs: [rootURL])
+        let transfer = TailOpsWormholePendingTransfer(
+            id: "transfer-1",
+            contactID: "ben",
+            pairingID: "monroe-ben",
+            senderName: "Monroe",
+            fileName: "prompt.md",
+            fileSizeBytes: 42,
+            code: "520-mesa-saddle-bridge-valley",
+            direction: .incoming,
+            createdAt: Date(timeIntervalSince1970: 100),
+            expiresAt: Date(timeIntervalSince1970: 2_000_000_000)
+        )
+
+        try store.saveWormholePendingTransfers([transfer])
+        let loaded = try store.loadWormholePendingTransfers()
+
+        expect(loaded == [transfer], "expected Wormhole pending transfer to round trip")
+    }
+
     private static func settingsOpenRequestRoundTripThroughSharedStore() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appending(path: "TailOpsSettingsOpenRequestValidation-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -345,6 +473,11 @@ struct TailOpsCoreValidation {
     private static func settingsOpenSignalUsesTailOpsURLScheme() {
         expect(TailOpsSettingsOpenSignal.url.scheme == "tailops", "expected settings URL to use tailops scheme")
         expect(TailOpsSettingsOpenSignal.url.host == "settings", "expected settings URL to target settings")
+    }
+
+    private static func wormholeOpenSignalUsesTailOpsURLScheme() {
+        expect(TailOpsWormholeSignal.url.scheme == "tailops", "expected wormhole URL to use tailops scheme")
+        expect(TailOpsWormholeSignal.url.host == "wormhole", "expected wormhole URL to target wormhole")
     }
 
     private static func parserSortsHostsByRecentAvailability() throws {
@@ -454,6 +587,7 @@ struct TailOpsCoreValidation {
     private static func taildropTargetsParserReadsAvailableAndOfflineTargets() {
         let output = """
         100.104.71.37\tfcfdev
+        100.126.20.113\tBenjamin’s MacBook Pro (2)
         100.83.152.74\tpixel-6a\toffline; last seen 20h27m0s ago
         """
 
@@ -462,6 +596,7 @@ struct TailOpsCoreValidation {
         expect(
             targets == [
                 TaildropTarget(address: "100.104.71.37", name: "fcfdev", isAvailable: true),
+                TaildropTarget(address: "100.126.20.113", name: "Benjamin’s MacBook Pro", isAvailable: true),
                 TaildropTarget(address: "100.83.152.74", name: "pixel-6a", detail: "offline; last seen 20h27m0s ago", isAvailable: false)
             ],
             "expected parsed Taildrop targets"

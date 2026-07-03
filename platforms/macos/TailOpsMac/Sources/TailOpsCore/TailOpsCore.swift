@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
@@ -210,6 +211,197 @@ public enum TailOpsSettingsOpenSignal {
     public static let url = URL(string: "tailops://settings")!
 }
 
+public enum TailOpsWormholeSignal {
+    public static let notificationName = "dev.tailops.monitor.openWormhole"
+    public static let url = URL(string: "tailops://wormhole")!
+}
+
+public struct TailOpsWormholeOpenRequest: Codable, Equatable, Sendable {
+    public enum Mode: String, Codable, Equatable, Sendable {
+        case send
+        case receive
+    }
+
+    public let mode: Mode
+    public let contactID: String?
+    public let pendingTransferID: String?
+    public let requestedAt: Date
+
+    public init(mode: Mode, contactID: String? = nil, pendingTransferID: String? = nil, requestedAt: Date = Date()) {
+        self.mode = mode
+        self.contactID = contactID
+        self.pendingTransferID = pendingTransferID
+        self.requestedAt = requestedAt
+    }
+}
+
+public struct TailOpsWormholeConfiguration: Codable, Equatable, Sendable {
+    public let contacts: [TailOpsWormholeContact]
+    public let inboxPath: String
+    public let pendingSignalPort: Int?
+
+    public init(
+        contacts: [TailOpsWormholeContact] = [],
+        inboxPath: String = "~/Desktop/TailOps Inbox",
+        pendingSignalPort: Int? = 39117
+    ) {
+        self.contacts = contacts
+        self.inboxPath = inboxPath
+        self.pendingSignalPort = pendingSignalPort
+    }
+
+    public func contact(id: String) -> TailOpsWormholeContact? {
+        contacts.first { $0.id == id }
+    }
+}
+
+public struct TailOpsWormholePendingTransfer: Codable, Equatable, Identifiable, Sendable {
+    public enum Direction: String, Codable, Equatable, Sendable {
+        case outgoing
+        case incoming
+    }
+
+    public let id: String
+    public let contactID: String?
+    public let pairingID: String
+    public let senderName: String
+    public let fileName: String
+    public let fileSizeBytes: Int64?
+    public let code: String
+    public let direction: Direction
+    public let createdAt: Date
+    public let expiresAt: Date
+
+    public init(
+        id: String = UUID().uuidString,
+        contactID: String?,
+        pairingID: String,
+        senderName: String,
+        fileName: String,
+        fileSizeBytes: Int64? = nil,
+        code: String,
+        direction: Direction,
+        createdAt: Date = Date(),
+        expiresAt: Date
+    ) {
+        self.id = id
+        self.contactID = contactID
+        self.pairingID = pairingID
+        self.senderName = senderName
+        self.fileName = fileName
+        self.fileSizeBytes = fileSizeBytes
+        self.code = code
+        self.direction = direction
+        self.createdAt = createdAt
+        self.expiresAt = expiresAt
+    }
+
+    public func isExpired(at date: Date = Date()) -> Bool {
+        expiresAt <= date
+    }
+}
+
+public struct TailOpsWormholeContact: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let displayName: String
+    public let pairingID: String
+    public let sharedSecret: String
+    public let createdAt: Date
+
+    public init(
+        id: String,
+        displayName: String,
+        pairingID: String,
+        sharedSecret: String,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.pairingID = pairingID
+        self.sharedSecret = sharedSecret
+        self.createdAt = createdAt
+    }
+}
+
+public struct TailOpsWormholeTransferCode: Codable, Equatable, Sendable {
+    public let code: String
+    public let validFrom: Date
+    public let validUntil: Date
+
+    public init(code: String, validFrom: Date, validUntil: Date) {
+        self.code = code
+        self.validFrom = validFrom
+        self.validUntil = validUntil
+    }
+}
+
+public struct TailOpsWormholeCodeFactory: Sendable {
+    public let windowDuration: TimeInterval
+
+    public init(windowDuration: TimeInterval = 900) {
+        self.windowDuration = max(windowDuration, 60)
+    }
+
+    public func code(
+        for contact: TailOpsWormholeContact,
+        date: Date = Date(),
+        purpose: String = "file-transfer-v1"
+    ) -> TailOpsWormholeTransferCode {
+        code(for: contact, windowIndex: windowIndex(for: date), purpose: purpose)
+    }
+
+    public func candidateCodes(
+        for contact: TailOpsWormholeContact,
+        date: Date = Date(),
+        skewTolerance: Int = 1,
+        purpose: String = "file-transfer-v1"
+    ) -> [TailOpsWormholeTransferCode] {
+        let currentWindow = windowIndex(for: date)
+        let tolerance = max(skewTolerance, 0)
+        return (-tolerance...tolerance).map { offset in
+            code(for: contact, windowIndex: currentWindow + Int64(offset), purpose: purpose)
+        }
+    }
+
+    private func code(
+        for contact: TailOpsWormholeContact,
+        windowIndex: Int64,
+        purpose: String
+    ) -> TailOpsWormholeTransferCode {
+        let secret = SymmetricKey(data: Data(contact.sharedSecret.utf8))
+        let message = "\(purpose):\(contact.pairingID):\(windowIndex)"
+        let digest = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: secret)
+        let bytes = Array(digest)
+        let nameplate = Int(bytes[0]) << 8 | Int(bytes[1])
+        let words = stride(from: 2, to: 10, by: 2).map { offset in
+            let value = Int(bytes[offset]) << 8 | Int(bytes[offset + 1])
+            return Self.wordList[value % Self.wordList.count]
+        }
+        let code = ([String((nameplate % 999) + 1)] + words).joined(separator: "-")
+        let validFrom = Date(timeIntervalSince1970: TimeInterval(windowIndex) * windowDuration)
+        return TailOpsWormholeTransferCode(
+            code: code,
+            validFrom: validFrom,
+            validUntil: validFrom.addingTimeInterval(windowDuration)
+        )
+    }
+
+    private func windowIndex(for date: Date) -> Int64 {
+        Int64(floor(date.timeIntervalSince1970 / windowDuration))
+    }
+
+    private static let wordList = [
+        "amber", "anchor", "apple", "atlas", "baker", "beacon", "berry", "bridge",
+        "cable", "cedar", "clover", "copper", "delta", "drift", "ember", "falcon",
+        "field", "forest", "garden", "glade", "harbor", "hollow", "island", "jacket",
+        "kernel", "lantern", "maple", "meadow", "mesa", "mirror", "north", "novel",
+        "ocean", "orbit", "paper", "pepper", "pilot", "prairie", "quartz", "quiet",
+        "raven", "river", "rocket", "saddle", "silver", "signal", "stone", "summit",
+        "thread", "timber", "tunnel", "valley", "velvet", "violet", "walnut", "wander",
+        "water", "willow", "window", "winter", "yellow", "yonder", "zenith", "zero"
+    ]
+}
+
 public enum TailnetPingRoute: String, Codable, Equatable, Sendable {
     case direct
     case peerRelay
@@ -248,7 +440,7 @@ public struct TaildropTargetsParser: Sendable {
         let detail = fields.count >= 3 && !fields[2].isEmpty ? fields[2] : nil
         return TaildropTarget(
             address: fields[0],
-            name: fields[1],
+            name: TailnetDisplayName.cleaned(fields[1]) ?? fields[1],
             detail: detail,
             isAvailable: !(detail?.localizedCaseInsensitiveContains("offline") ?? false)
         )
@@ -543,14 +735,15 @@ public struct TailnetSnapshotParser: Sendable {
     }
 
     private static func host(from node: TailscaleNode, role: TailnetHost.Role) -> TailnetHost {
-        TailnetHost(
+        let magicDNSName = normalizedDNSName(node.dnsName)
+        return TailnetHost(
             id: node.id ?? node.publicKey ?? node.dnsName ?? node.hostName ?? UUID().uuidString,
-            name: node.hostName ?? normalizedDNSName(node.dnsName) ?? "Unknown host",
+            name: TailnetDisplayName.cleaned(node.hostName) ?? magicDNSName ?? "Unknown host",
             role: role,
             status: node.online == true ? .online : .offline,
             operatingSystem: node.os,
             primaryAddress: node.tailscaleIPs?.first,
-            magicDNSName: normalizedDNSName(node.dnsName),
+            magicDNSName: magicDNSName,
             lastSeen: node.lastSeen.flatMap(parseDate),
             services: []
         )
@@ -571,6 +764,36 @@ public struct TailnetSnapshotParser: Sendable {
         let fractionalSeconds = ISO8601DateFormatter()
         fractionalSeconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return fractionalSeconds.date(from: value)
+    }
+}
+
+enum TailnetDisplayName {
+    static func cleaned(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmingTailscaleDuplicateSuffix(from: trimmed)
+    }
+
+    private static func trimmingTailscaleDuplicateSuffix(from value: String) -> String {
+        guard value.hasSuffix(")") else { return value }
+        let closeParenthesis = value.index(before: value.endIndex)
+        guard let openParenthesis = value[..<closeParenthesis].lastIndex(of: "(") else {
+            return value
+        }
+
+        let prefix = value[..<openParenthesis]
+        guard prefix.hasSuffix(" ") else { return value }
+
+        let suffixStart = value.index(after: openParenthesis)
+        let suffix = value[suffixStart..<closeParenthesis]
+        guard !suffix.isEmpty,
+              suffix.unicodeScalars.allSatisfy({ CharacterSet.decimalDigits.contains($0) })
+        else {
+            return value
+        }
+
+        return prefix.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

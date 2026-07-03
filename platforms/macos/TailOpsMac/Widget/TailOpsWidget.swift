@@ -21,21 +21,39 @@ struct TailOpsEntry: TimelineEntry {
     let date: Date
     let snapshot: TailnetSnapshot
     let actionConfiguration: TailnetActionConfiguration
+    let wormholeConfiguration: TailOpsWormholeConfiguration
+    let pendingWormholeTransfers: [TailOpsWormholePendingTransfer]
 }
 
 struct TailOpsTimelineProvider: TimelineProvider {
     func placeholder(in context: Context) -> TailOpsEntry {
-        TailOpsEntry(date: Date(), snapshot: .preview, actionConfiguration: .preview)
+        TailOpsEntry(
+            date: Date(),
+            snapshot: TailnetSnapshot(hosts: []),
+            actionConfiguration: TailnetActionConfiguration(),
+            wormholeConfiguration: TailOpsWormholeConfiguration(),
+            pendingWormholeTransfers: []
+        )
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TailOpsEntry) -> Void) {
-        completion(TailOpsEntry(date: Date(), snapshot: loadSnapshot(), actionConfiguration: loadActionConfiguration()))
+        completion(entry())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TailOpsEntry>) -> Void) {
-        let entry = TailOpsEntry(date: Date(), snapshot: loadSnapshot(), actionConfiguration: loadActionConfiguration())
+        let entry = entry()
         let nextRefresh = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)
         completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
+    }
+
+    private func entry() -> TailOpsEntry {
+        TailOpsEntry(
+            date: Date(),
+            snapshot: loadSnapshot(),
+            actionConfiguration: loadActionConfiguration(),
+            wormholeConfiguration: loadWormholeConfiguration(),
+            pendingWormholeTransfers: loadPendingWormholeTransfers()
+        )
     }
 
     private func loadSnapshot() -> TailnetSnapshot {
@@ -43,7 +61,15 @@ struct TailOpsTimelineProvider: TimelineProvider {
     }
 
     private func loadActionConfiguration() -> TailnetActionConfiguration {
-        (try? SharedSnapshotStore().loadActionConfiguration()) ?? .preview
+        (try? SharedSnapshotStore().loadActionConfiguration()) ?? TailnetActionConfiguration()
+    }
+
+    private func loadWormholeConfiguration() -> TailOpsWormholeConfiguration {
+        (try? SharedSnapshotStore().loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+    }
+
+    private func loadPendingWormholeTransfers() -> [TailOpsWormholePendingTransfer] {
+        (try? SharedSnapshotStore().loadWormholePendingTransfers()) ?? []
     }
 }
 
@@ -102,6 +128,8 @@ struct TailOpsWidgetView: View {
                 WidgetHostStatusGrid(
                     hosts: gridHosts,
                     actionCatalog: actionCatalog,
+                    wormholeConfiguration: entry.wormholeConfiguration,
+                    pendingTransfers: entry.pendingWormholeTransfers,
                     style: gridStyle
                 )
             } else {
@@ -110,6 +138,10 @@ struct TailOpsWidgetView: View {
                         WidgetHostActionRow(
                             host: host,
                             actions: actionCatalog.actions(for: host),
+                            wormholeContact: entry.wormholeConfiguration.contact(for: host),
+                            pendingTransfer: entry.pendingWormholeTransfers.pendingTransfer(
+                                for: entry.wormholeConfiguration.contact(for: host)
+                            ),
                             showsActions: showsHostActions,
                             isCompact: usesCompactRows
                         )
@@ -351,6 +383,8 @@ private struct WidgetOfflineSummary: View {
 private struct WidgetHostStatusGrid: View {
     let hosts: [TailnetHost]
     let actionCatalog: HostActionCatalog
+    let wormholeConfiguration: TailOpsWormholeConfiguration
+    let pendingTransfers: [TailOpsWormholePendingTransfer]
     let style: Style
 
     struct Style {
@@ -375,7 +409,13 @@ private struct WidgetHostStatusGrid: View {
     var body: some View {
         LazyVGrid(columns: gridColumns, alignment: .leading, spacing: style.rowSpacing) {
             ForEach(hosts) { host in
-                WidgetHostStatusTile(host: host, actions: actionCatalog.actions(for: host), style: style)
+                WidgetHostStatusTile(
+                    host: host,
+                    actions: actionCatalog.actions(for: host),
+                    wormholeContact: wormholeConfiguration.contact(for: host),
+                    pendingTransfer: pendingTransfers.pendingTransfer(for: wormholeConfiguration.contact(for: host)),
+                    style: style
+                )
             }
         }
     }
@@ -384,6 +424,8 @@ private struct WidgetHostStatusGrid: View {
 private struct WidgetHostStatusTile: View {
     let host: TailnetHost
     let actions: [HostAction]
+    let wormholeContact: TailOpsWormholeContact?
+    let pendingTransfer: TailOpsWormholePendingTransfer?
     let style: WidgetHostStatusGrid.Style
 
     var body: some View {
@@ -420,7 +462,24 @@ private struct WidgetHostStatusTile: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
 
+            if let pendingTransfer {
+                Text("Pending \(pendingTransfer.fileName)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+
             HStack(spacing: 5) {
+                if let wormholeContact {
+                    WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: style.showsActionTitles)
+                    WidgetWormholeChip(
+                        mode: .receive,
+                        contact: wormholeContact,
+                        pendingTransfer: pendingTransfer,
+                        showsTitle: style.showsActionTitles
+                    )
+                }
                 ForEach(actions.prefix(3), id: \.title) { action in
                     WidgetActionChip(action: action, showsTitle: style.showsActionTitles)
                 }
@@ -439,7 +498,12 @@ private struct WidgetHostStatusTile: View {
         .widgetAccentable(false)
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(color.opacity(0.42), lineWidth: 1)
+                .stroke(
+                    pendingTransfer == nil
+                        ? (wormholeContact == nil ? color.opacity(0.42) : Color.accentColor.opacity(0.72))
+                        : Color.accentColor.opacity(0.95),
+                    lineWidth: pendingTransfer == nil ? (wormholeContact == nil ? 1 : 1.5) : 2
+                )
         }
     }
 
@@ -518,6 +582,8 @@ private struct WidgetHostStatusTile: View {
 private struct WidgetHostActionRow: View {
     let host: TailnetHost
     let actions: [HostAction]
+    let wormholeContact: TailOpsWormholeContact?
+    let pendingTransfer: TailOpsWormholePendingTransfer?
     let showsActions: Bool
     let isCompact: Bool
 
@@ -539,6 +605,12 @@ private struct WidgetHostActionRow: View {
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if let pendingTransfer {
+                    Text("Pending \(pendingTransfer.fileName)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 6)
@@ -553,6 +625,10 @@ private struct WidgetHostActionRow: View {
 
             if showsActions {
                 HStack(spacing: 4) {
+                    if let wormholeContact {
+                        WidgetWormholeChip(mode: .send, contact: wormholeContact)
+                        WidgetWormholeChip(mode: .receive, contact: wormholeContact, pendingTransfer: pendingTransfer)
+                    }
                     ForEach(actions.prefix(2), id: \.title) { action in
                         WidgetActionChip(action: action)
                     }
@@ -575,13 +651,19 @@ private struct WidgetHostActionRow: View {
                 ))
         }
         .overlay {
-            if let samples = host.diagnostics?.ping?.samples {
-                PingSparklineView(samples: samples)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 3)
-                    .opacity(0.11)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .allowsHitTesting(false)
+            ZStack {
+                if let samples = host.diagnostics?.ping?.samples {
+                    PingSparklineView(samples: samples)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 3)
+                        .opacity(0.11)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .allowsHitTesting(false)
+                }
+                if wormholeContact != nil {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.accentColor.opacity(pendingTransfer == nil ? 0.62 : 0.95), lineWidth: pendingTransfer == nil ? 1.25 : 2)
+                }
             }
         }
     }
@@ -612,6 +694,124 @@ private struct WidgetHostActionRow: View {
         case .offline:
             return .red
         }
+    }
+}
+
+private struct WidgetWormholeChip: View {
+    let mode: TailOpsWormholeOpenRequest.Mode
+    let contact: TailOpsWormholeContact
+    var pendingTransfer: TailOpsWormholePendingTransfer?
+    var showsTitle = false
+
+    var body: some View {
+        Button(intent: OpenTailOpsWormholeIntent(
+            mode: mode,
+            contactID: contact.id,
+            pendingTransferID: mode == .receive ? pendingTransfer?.id : nil
+        )) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .frame(width: 18, height: 18)
+                if showsTitle {
+                    Text(title)
+                        .font(.caption2.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+            }
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Color.accentColor)
+            .frame(height: 22)
+            .padding(.horizontal, showsTitle ? 7 : 2)
+            .background(Color.accentColor.opacity(pendingTransfer == nil ? 0.14 : 0.28), in: Capsule())
+            .widgetAccentable(false)
+            .accessibilityLabel("\(title) with \(contact.displayName)")
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var title: String {
+        switch mode {
+        case .send:
+            return "Send"
+        case .receive:
+            return "Receive"
+        }
+    }
+
+    private var systemImage: String {
+        switch mode {
+        case .send:
+            return "paperplane"
+        case .receive:
+            return "tray.and.arrow.down"
+        }
+    }
+}
+
+private extension [TailOpsWormholePendingTransfer] {
+    func pendingTransfer(for contact: TailOpsWormholeContact?) -> TailOpsWormholePendingTransfer? {
+        guard let contact else { return nil }
+        return first {
+            !$0.isExpired()
+                && ($0.contactID == contact.id || $0.pairingID == contact.pairingID)
+                && $0.direction == .incoming
+        }
+    }
+
+    static var previewBen: [TailOpsWormholePendingTransfer] {
+        [
+            TailOpsWormholePendingTransfer(
+                contactID: "ben",
+                pairingID: "monroe-ben",
+                senderName: "Monroe",
+                fileName: "prompt.md",
+                fileSizeBytes: 2048,
+                code: "520-mesa-saddle-bridge-valley",
+                direction: .incoming,
+                expiresAt: Date().addingTimeInterval(900)
+            )
+        ]
+    }
+}
+
+private extension TailOpsWormholeConfiguration {
+    func contact(for host: TailnetHost) -> TailOpsWormholeContact? {
+        contacts.first { contact in
+            let hostTokens = [
+                host.name,
+                host.magicDNSName ?? "",
+                host.primaryAddress ?? ""
+            ].map(Self.normalized)
+            let contactTokens = [
+                contact.displayName,
+                contact.pairingID
+            ].map(Self.normalized)
+
+            return contactTokens.contains { contactToken in
+                guard contactToken.count >= 3 else { return false }
+                return hostTokens.contains { hostToken in
+                    hostToken.contains(contactToken) || contactToken.contains(hostToken)
+                }
+            }
+        }
+    }
+
+    static var previewBen: TailOpsWormholeConfiguration {
+        TailOpsWormholeConfiguration(contacts: [
+            TailOpsWormholeContact(
+                id: "ben",
+                displayName: "Ben",
+                pairingID: "monroe-ben",
+                sharedSecret: "preview-secret"
+            )
+        ])
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
     }
 }
 
@@ -690,25 +890,31 @@ private struct WidgetActionChip: View {
 
 #if DEBUG
 #Preview("Widget View") {
-    TailOpsWidgetView(entry: TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview))
+    TailOpsWidgetView(entry: TailOpsEntry(
+        date: .now,
+        snapshot: .preview,
+        actionConfiguration: .preview,
+        wormholeConfiguration: .previewBen,
+        pendingWormholeTransfers: .previewBen
+    ))
         .frame(width: 340, height: 240)
 }
 
 #Preview("Small", as: .systemSmall) {
     TailOpsWidget()
 } timeline: {
-    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview)
+    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
 }
 
 #Preview("Medium", as: .systemMedium) {
     TailOpsWidget()
 } timeline: {
-    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview)
+    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
 }
 
 #Preview("Large", as: .systemLarge) {
     TailOpsWidget()
 } timeline: {
-    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview)
+    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
 }
 #endif

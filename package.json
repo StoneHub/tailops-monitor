@@ -4,6 +4,9 @@
   "private": false,
   "type": "module",
   "description": "Ambient Tailscale device performance dashboard with a machine-readable agent phonebook.",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "test": "node --test tests/*.test.js",
     "serve": "node server.js"

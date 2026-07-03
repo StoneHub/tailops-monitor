@@ -9,6 +9,13 @@ public protocol SharedSnapshotStoring {
     func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws
     func loadAppPreferences() throws -> TailOpsAppPreferences?
     func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws
+    func loadWormholeConfiguration() throws -> TailOpsWormholeConfiguration?
+    func saveWormholeConfiguration(_ configuration: TailOpsWormholeConfiguration) throws
+    func loadWormholeOpenRequest() throws -> TailOpsWormholeOpenRequest?
+    func saveWormholeOpenRequest(_ request: TailOpsWormholeOpenRequest) throws
+    func clearWormholeOpenRequest() throws
+    func loadWormholePendingTransfers() throws -> [TailOpsWormholePendingTransfer]
+    func saveWormholePendingTransfers(_ transfers: [TailOpsWormholePendingTransfer]) throws
     func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest?
     func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws
     func clearSettingsOpenRequest() throws
@@ -49,6 +56,41 @@ public struct SharedSnapshotStore: SharedSnapshotStoring {
     public func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws {
         let data = try JSONEncoder.tailops.encode(preferences)
         try write(data, path: "tailops-preferences.json")
+    }
+
+    public func loadWormholeConfiguration() throws -> TailOpsWormholeConfiguration? {
+        try loadFirstExisting(path: "tailops-wormhole.json", as: TailOpsWormholeConfiguration.self)
+    }
+
+    public func saveWormholeConfiguration(_ configuration: TailOpsWormholeConfiguration) throws {
+        let data = try JSONEncoder.tailops.encode(configuration)
+        try write(data, path: "tailops-wormhole.json")
+    }
+
+    public func loadWormholeOpenRequest() throws -> TailOpsWormholeOpenRequest? {
+        try loadFirstExisting(path: "tailops-open-wormhole.json", as: TailOpsWormholeOpenRequest.self)
+    }
+
+    public func saveWormholeOpenRequest(_ request: TailOpsWormholeOpenRequest) throws {
+        let data = try JSONEncoder.tailops.encode(request)
+        try write(data, path: "tailops-open-wormhole.json")
+    }
+
+    public func clearWormholeOpenRequest() throws {
+        try delete(path: "tailops-open-wormhole.json")
+    }
+
+    public func loadWormholePendingTransfers() throws -> [TailOpsWormholePendingTransfer] {
+        try loadFirstExisting(
+            path: "tailops-wormhole-pending.json",
+            as: [TailOpsWormholePendingTransfer].self
+        )?.filter { !$0.isExpired() } ?? []
+    }
+
+    public func saveWormholePendingTransfers(_ transfers: [TailOpsWormholePendingTransfer]) throws {
+        let activeTransfers = transfers.filter { !$0.isExpired() }
+        let data = try JSONEncoder.tailops.encode(activeTransfers)
+        try write(data, path: "tailops-wormhole-pending.json")
     }
 
     public func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest? {

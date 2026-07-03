@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TailOps Wormhole File Send Upgrade Plan</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --accent: #1f8f4d;
+      --border: color-mix(in srgb, CanvasText 18%, transparent);
+      --muted: color-mix(in srgb, CanvasText 64%, transparent);
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+      margin: 0;
+      padding: 32px;
+      background: Canvas;
+      color: CanvasText;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+    }
+    h1, h2 {
+      line-height: 1.1;
+    }
+    h1 {
+      margin-bottom: 8px;
+    }
+    .meta {
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    section {
+      border-top: 1px solid var(--border);
+      padding-top: 18px;
+      margin-top: 24px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.95em;
+    }
+    .decision {
+      border-left: 4px solid var(--accent);
+      padding: 10px 14px;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>TailOps Wormhole File Send Upgrade Plan</h1>
+  <p class="meta">Created 2026-07-03 for the macOS widget-first TailOps app. Updated after confirming cross-account Taildrop and Taildrive are not the right fit.</p>
+
+  <section>
+    <h2>Decision</h2>
+    <p class="decision">
+      Build <strong>Send via Wormhole</strong> and <strong>Receive via Wormhole</strong> controls backed by Magic Wormhole. Taildrop and Taildrive are not suitable for Monroe-to-Ben cross-account sends. SFTP remains a later unattended-drop option, but Wormhole is the simplest no-password path when Ben can click receive.
+    </p>
+  </section>
+
+  <section>
+    <h2>Current State</h2>
+    <ul>
+      <li>TailOps still has same-account Taildrop through Finder and row drops.</li>
+      <li>Ben's Mac is visible in Tailscale status, but not in <code>tailscale file cp --targets</code> because Taildrop is personal-device-only.</li>
+      <li>Taildrive shared-machine limitations make it a poor cross-account drop path for this workflow.</li>
+      <li><code>wormhole</code> is not installed on Monroe's Mac as of this plan update, so runtime UI must show a clear install/setup gate.</li>
+      <li>The widget itself should stay passive; any file picker, receive sheet, or transfer process should run in the host app.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Permission Gates</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Gate</th>
+          <th>Impact</th>
+          <th>Required UX</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Live participation</td>
+          <td>Magic Wormhole expects both clients to run around the same time and stay running until transfer completion.</td>
+          <td>Show "Waiting for Ben" / "Waiting for Monroe" and allow cancel/retry.</td>
+        </tr>
+        <tr>
+          <td>Install dependency</td>
+          <td>Both Macs need the <code>wormhole</code> CLI or a bundled implementation.</td>
+          <td>Detect missing <code>wormhole</code> and show exact install/setup instructions instead of failing silently.</td>
+        </tr>
+        <tr>
+          <td>One-time codes</td>
+          <td>Wormhole codes are intended to be one-time. Do not reuse a static PIN for every transfer.</td>
+          <td>Use a one-time setup secret, then derive fresh per-window transfer codes.</td>
+        </tr>
+        <tr>
+          <td>Receive folder</td>
+          <td>Ben should control where received files land.</td>
+          <td>Default to <code>~/Desktop/TailOps Inbox</code> and create it if missing.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Implementation Steps</h2>
+    <ol>
+      <li class="done">Done: add core models for paired Wormhole contacts, shared setup secret, inbox path, and widget-to-host open requests.</li>
+      <li class="done">Done: add deterministic code derivation: setup secret plus pairing ID plus transfer time window produces <code>number-word-word-word-word</code>.</li>
+      <li class="done">Done: add a host-app Wormhole runner around <code>wormhole send --code &lt;code&gt; &lt;file&gt;</code> and <code>wormhole receive --accept-file &lt;code&gt;</code>.</li>
+      <li class="done">Done: add a floating Wormhole window with Send and Receive modes.</li>
+      <li class="done">Done: add widget/AppIntent buttons that only open the host app Wormhole window.</li>
+      <li class="done">Done: add signed pending-transfer notices over Tailscale so a paired computer card can glow before receive starts.</li>
+      <li>Add QR setup and cancellation; current setup UI uses shared text fields and a generated setup secret.</li>
+      <li>Update install verification once the real app includes the Wormhole window.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Packaging Decision</h2>
+    <p>
+      First local trials should require <code>wormhole</code> to be installed separately, usually with <code>brew install magic-wormhole</code>. TailOps should detect the missing executable and show the exact setup step.
+    </p>
+    <p>
+      Bundling remains feasible because Magic Wormhole is MIT-licensed, but the reference implementation is a Python CLI with native crypto dependencies. Treat bundling as a later packaging task: build per architecture, place the signed helper inside the app bundle, verify notarization, and keep the helper update path explicit.
+    </p>
+  </section>
+
+  <section>
+    <h2>Widget Behavior</h2>
+    <ul>
+      <li>Do not run file pickers or Wormhole processes inside the WidgetKit extension.</li>
+      <li>Use <code>OpenTailOpsWormholeIntent</code> to write <code>tailops-open-wormhole.json</code>, post a distributed notification, and open the host app.</li>
+      <li>Keep widget labels short: <code>Send</code> and <code>Receive</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Counterpoint</h2>
+    <p>
+      Wormhole is not unattended. If Monroe needs to drop files while Ben is away, use an SFTP key to a dedicated drop account or a future token-authenticated TailOps Inbox receiver. Those paths are more setup-heavy and should stay separate from the first Wormhole slice.
+    </p>
+  </section>
+
+  <section>
+    <h2>References</h2>
+    <ul>
+      <li><a href="https://tailscale.com/docs/features/taildrop">Tailscale Taildrop docs</a></li>
+      <li><a href="https://tailscale.com/docs/features/taildrive">Tailscale Taildrive docs</a></li>
+      <li><a href="https://magic-wormhole.readthedocs.io/en/latest/using-the-cli.html">Magic Wormhole CLI docs</a></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
