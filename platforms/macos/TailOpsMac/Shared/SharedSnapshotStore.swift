@@ -151,25 +151,13 @@ public struct SharedSnapshotStore: SharedSnapshotStoring {
             return baseURLOverride
         }
 
-        let appGroupURLs = Self.appGroupIdentifierCandidates.reduce(into: [URL?]()) { urls, identifier in
-            urls.append(fileManager.containerURL(forSecurityApplicationGroupIdentifier: identifier))
-            urls.append(explicitAppGroupURL(identifier: identifier))
+        let appGroupURLs = Self.appGroupIdentifierCandidates.map {
+            fileManager.containerURL(forSecurityApplicationGroupIdentifier: $0)
         }
 
         return (appGroupURLs + [Optional(fallbackApplicationSupportURL())])
             .compactMap(\.self)
             .deduplicatedByPath()
-    }
-
-    private func explicitAppGroupURL(identifier: String) -> URL? {
-        guard let home = fileManager.homeDirectoryForCurrentUser.path.removingPercentEncoding else {
-            return nil
-        }
-
-        return URL(fileURLWithPath: home)
-            .appending(path: "Library", directoryHint: .isDirectory)
-            .appending(path: "Group Containers", directoryHint: .isDirectory)
-            .appending(path: identifier, directoryHint: .isDirectory)
     }
 
     private func fallbackApplicationSupportURL() -> URL {

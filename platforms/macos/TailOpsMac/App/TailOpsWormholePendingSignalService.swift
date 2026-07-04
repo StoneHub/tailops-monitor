@@ -37,47 +37,81 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
 
     private func handle(_ connection: NWConnection) {
         connection.start(queue: queue)
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, _, _ in
-            guard let self, let data, !data.isEmpty else {
+        receiveRequest(from: connection, buffer: Data())
+    }
+
+    private func receiveRequest(from connection: NWConnection, buffer: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
+            guard let self else {
                 connection.cancel()
+                return
+            }
+
+            guard error == nil else {
+                connection.cancel()
+                return
+            }
+
+            var requestData = buffer
+            if let data {
+                requestData.append(data)
+            }
+
+            guard !requestData.isEmpty else {
+                connection.cancel()
+                return
+            }
+
+            guard Self.isCompleteRequest(requestData) else {
+                if isComplete {
+                    self.sendResponse("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n", on: connection)
+                    return
+                }
+                self.receiveRequest(from: connection, buffer: requestData)
                 return
             }
 
             let responseStatus: String
             do {
-                try self.accept(data)
+                try self.accept(requestData)
                 responseStatus = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
             } catch {
                 responseStatus = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
             }
 
-            connection.send(content: Data(responseStatus.utf8), completion: .contentProcessed { _ in
-                connection.cancel()
-            })
+            self.sendResponse(responseStatus, on: connection)
         }
     }
 
+    private func sendResponse(_ responseStatus: String, on connection: NWConnection) {
+        connection.send(content: Data(responseStatus.utf8), completion: .contentProcessed { _ in
+            connection.cancel()
+        })
+    }
+
     private func accept(_ data: Data) throws {
-        guard let request = String(data: data, encoding: .utf8),
-              request.hasPrefix("POST /wormhole/pending "),
-              let headerRange = request.range(of: "\r\n\r\n")
+        let separator = Data("\r\n\r\n".utf8)
+        guard let separatorRange = data.range(of: separator),
+              let headerText = String(data: data[..<separatorRange.lowerBound], encoding: .utf8),
+              headerText.hasPrefix("POST /wormhole/pending ")
         else {
             throw TailOpsWormholePendingSignalError.invalidRequest
         }
 
-        let headerText = String(request[..<headerRange.lowerBound])
         let headers = Self.headers(from: headerText)
         guard let signature = headers["x-tailops-signature"] else {
             throw TailOpsWormholePendingSignalError.invalidSignature
         }
 
-        let bodyStart = request.distance(from: request.startIndex, to: headerRange.upperBound)
-        let body = data.dropFirst(bodyStart)
-        let payload = try Self.decoder.decode(TailOpsWormholePendingSignalPayload.self, from: Data(body))
+        let contentLength = headers["content-length"].flatMap(Int.init) ?? 0
+        let bodyStart = separatorRange.upperBound
+        let body = data[bodyStart..<min(bodyStart + contentLength, data.count)]
+        let bodyData = Data(body)
+        let payload = try Self.decoder.decode(TailOpsWormholePendingSignalPayload.self, from: bodyData)
 
         let configuration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
         guard let contact = configuration.contacts.first(where: { $0.pairingID == payload.transfer.pairingID }),
-              Self.signature(for: Data(body), secret: contact.sharedSecret) == signature
+              Self.signature(for: bodyData, secret: contact.sharedSecret) == signature
         else {
             throw TailOpsWormholePendingSignalError.invalidSignature
         }
@@ -103,13 +137,27 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
 
     private static func headers(from headerText: String) -> [String: String] {
         var headers: [String: String] = [:]
-        for line in headerText.split(separator: "\r\n").dropFirst() {
+        for line in headerText.components(separatedBy: "\r\n").dropFirst() {
             let parts = line.split(separator: ":", maxSplits: 1)
             guard parts.count == 2 else { continue }
             headers[parts[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()] =
                 parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return headers
+    }
+
+    private static func isCompleteRequest(_ data: Data) -> Bool {
+        let separator = Data("\r\n\r\n".utf8)
+        guard let separatorRange = data.range(of: separator),
+              let headerText = String(data: data[..<separatorRange.lowerBound], encoding: .utf8)
+        else {
+            return false
+        }
+
+        let headers = headers(from: headerText)
+        let contentLength = headers["content-length"].flatMap(Int.init) ?? 0
+        let bodyStart = separatorRange.upperBound
+        return data.count >= bodyStart + contentLength
     }
 
     fileprivate static func signature(for data: Data, secret: String) -> String {
@@ -142,26 +190,23 @@ struct TailOpsWormholePendingSignalClient {
 
     func publish(_ transfer: TailOpsWormholePendingTransfer, to contact: TailOpsWormholeContact) async {
         guard let host = destinationHost(for: contact),
-              let address = host.primaryAddress ?? host.magicDNSName,
-              let url = pendingURL(address: address)
+              let address = host.primaryAddress ?? host.magicDNSName
         else {
             return
         }
 
         let payload = TailOpsWormholePendingSignalPayload(transfer: transfer)
         guard let body = try? TailOpsWormholePendingSignalServer.encoder.encode(payload) else { return }
+        let configuration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+        let port = configuration.pendingSignalPort ?? 39117
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 4
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(
+        await Self.sendRawPendingRequest(
+            body: body,
+            signature:
             TailOpsWormholePendingSignalServer.signature(for: body, secret: contact.sharedSecret),
-            forHTTPHeaderField: "X-TailOps-Signature"
+            address: address,
+            port: port
         )
-        request.httpBody = body
-
-        _ = try? await URLSession.shared.data(for: request)
     }
 
     private func destinationHost(for contact: TailOpsWormholeContact) -> TailnetHost? {
@@ -186,17 +231,50 @@ struct TailOpsWormholePendingSignalClient {
         }
     }
 
-    private func pendingURL(address: String) -> URL? {
-        let configuration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
-        let port = configuration.pendingSignalPort ?? 39117
-        let host = address.contains(":") && !address.hasPrefix("[") ? "[\(address)]" : address
-        return URL(string: "http://\(host):\(port)/wormhole/pending")
-    }
-
     private static func normalized(_ value: String) -> String {
         value
             .lowercased()
             .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private static func sendRawPendingRequest(
+        body: Data,
+        signature: String,
+        address: String,
+        port: Int
+    ) async {
+        await Task.detached(priority: .utility) {
+            var readStream: Unmanaged<CFReadStream>?
+            var writeStream: Unmanaged<CFWriteStream>?
+            CFStreamCreatePairWithSocketToHost(nil, address as CFString, UInt32(port), &readStream, &writeStream)
+            guard let stream = writeStream?.takeRetainedValue() as OutputStream? else { return }
+
+            let header = [
+                "POST /wormhole/pending HTTP/1.1",
+                "Host: \(address):\(port)",
+                "Content-Type: application/json",
+                "X-TailOps-Signature: \(signature)",
+                "Content-Length: \(body.count)",
+                "Connection: close",
+                "",
+                ""
+            ].joined(separator: "\r\n")
+            var requestData = Data(header.utf8)
+            requestData.append(body)
+
+            stream.open()
+            defer { stream.close() }
+
+            var offset = 0
+            let bytes = [UInt8](requestData)
+            while offset < bytes.count {
+                let written = bytes.withUnsafeBufferPointer { pointer in
+                    stream.write(pointer.baseAddress!.advanced(by: offset), maxLength: bytes.count - offset)
+                }
+                guard written > 0 else { break }
+                offset += written
+            }
+        }.value
     }
 }
 

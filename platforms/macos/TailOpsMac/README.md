@@ -32,7 +32,7 @@ The targets are configured with a team-prefixed App Group at signing time:
 $(TeamIdentifierPrefix)group.dev.tailops.monitor
 ```
 
-At runtime, a locally signed build resolves this to a value like `N6GPP46885.group.dev.tailops.monitor`. `SharedSnapshotStore` reads the signed App Group entitlement first and keeps a legacy fallback for older local builds that wrote to `group.dev.tailops.monitor`.
+At runtime, a locally signed build resolves this to a value like `N6GPP46885.group.dev.tailops.monitor`. `SharedSnapshotStore` reads the signed App Group entitlement and falls back to app support storage for unsigned command-line verification.
 
 For local command-line compile verification without signing:
 

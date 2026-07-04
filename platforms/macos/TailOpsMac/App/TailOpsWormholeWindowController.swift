@@ -276,11 +276,17 @@ final class TailOpsWormholeModel: ObservableObject {
             status = .failed("Save a Wormhole pairing first.")
             return
         }
-        publishPendingTransfer(fileURL: selectedFileURL)
+        let pendingTransfer = publishPendingTransfer(fileURL: selectedFileURL)
 
         Task {
-            await runTransfer(title: "Sending \(selectedFileURL.lastPathComponent)") {
+            let didComplete = await runTransfer(
+                title: "Sending \(selectedFileURL.lastPathComponent)",
+                successMessage: "Sent \(selectedFileURL.lastPathComponent) to \(selectedContactName)."
+            ) {
                 try await self.runner.send(fileURL: selectedFileURL, code: code)
+            }
+            if didComplete, let pendingTransfer {
+                clearPendingTransfer(id: pendingTransfer.id)
             }
         }
     }
@@ -298,7 +304,10 @@ final class TailOpsWormholeModel: ObservableObject {
 
         let inboxURL = URL(fileURLWithPath: resolvedInboxPath)
         Task {
-            await runTransfer(title: "Receiving into \(inboxURL.path)") {
+            _ = await runTransfer(
+                title: "Receiving into \(inboxURL.path)",
+                successMessage: "Received file in \(inboxURL.path)."
+            ) {
                 try await self.runner.receive(code: code, inboxURL: inboxURL)
             }
         }
@@ -306,29 +315,30 @@ final class TailOpsWormholeModel: ObservableObject {
 
     private func runTransfer(
         title: String,
+        successMessage: String,
         operation: @MainActor @escaping () async throws -> TailOpsWormholeCommandResult
-    ) async {
+    ) async -> Bool {
         status = .running(title)
         lastOutput = ""
 
         do {
             let result = try await operation()
             lastOutput = result.output
-            status = .succeeded(result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? "Wormhole transfer complete."
-                : result.output)
+            status = .succeeded(successMessage)
+            return true
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             lastOutput = message
             status = .failed(message)
+            return false
         }
     }
 
-    private func publishPendingTransfer(fileURL: URL) {
+    private func publishPendingTransfer(fileURL: URL) -> TailOpsWormholePendingTransfer? {
         guard let selectedContact,
               let code = currentCode
         else {
-            return
+            return nil
         }
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.int64Value
@@ -355,6 +365,18 @@ final class TailOpsWormholeModel: ObservableObject {
 
         Task {
             await TailOpsWormholePendingSignalClient(store: store).publish(transfer, to: selectedContact)
+        }
+        return transfer
+    }
+
+    private func clearPendingTransfer(id: String) {
+        do {
+            var transfers = try store.loadWormholePendingTransfers()
+            transfers.removeAll { $0.id == id }
+            try store.saveWormholePendingTransfers(transfers)
+            pendingTransfers = transfers
+        } catch {
+            status = .failed(error.localizedDescription)
         }
     }
 }
