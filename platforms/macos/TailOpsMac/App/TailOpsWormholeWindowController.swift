@@ -51,7 +51,7 @@ final class TailOpsWormholeWindowController {
 }
 
 @MainActor
-final class TailOpsWormholeModel: ObservableObject {
+final class TailOpsWormholeModel: NSObject, ObservableObject {
     @Published private(set) var configuration: TailOpsWormholeConfiguration
     @Published private(set) var executable: TailOpsWormholeExecutable?
     @Published var mode: TailOpsWormholeOpenRequest.Mode
@@ -59,12 +59,16 @@ final class TailOpsWormholeModel: ObservableObject {
     @Published var selectedFileURL: URL?
     @Published var displayName: String
     @Published var pairingID: String
+    @Published var tailnetNodeID: String
     @Published var sharedSecret: String
     @Published var inboxPath: String
+    @Published private(set) var availableTailnetPeers: [TailnetHost]
     @Published private(set) var pendingTransfers: [TailOpsWormholePendingTransfer]
     @Published private(set) var selectedPendingTransferID: String?
     @Published private(set) var status: Status
     @Published private(set) var lastOutput: String
+    @Published private(set) var signalDeliveryError: String?
+    @Published private(set) var signalServiceError: String?
 
     enum Status: Equatable {
         case ready
@@ -74,32 +78,85 @@ final class TailOpsWormholeModel: ObservableObject {
     }
 
     private let store: SharedSnapshotStore
+    private let secretStore: any TailOpsWormholeSecretStoring
     private let runner: TailOpsWormholeCommandRunner
     private let codeFactory: TailOpsWormholeCodeFactory
 
     init(
         store: SharedSnapshotStore = SharedSnapshotStore(),
+        secretStore: any TailOpsWormholeSecretStoring = TailOpsWormholeSecretStore(),
         runner: TailOpsWormholeCommandRunner = TailOpsWormholeCommandRunner(),
         codeFactory: TailOpsWormholeCodeFactory = TailOpsWormholeCodeFactory()
     ) {
         self.store = store
+        self.secretStore = secretStore
         self.runner = runner
         self.codeFactory = codeFactory
 
-        let loadedConfiguration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+        let loadedConfiguration: TailOpsWormholeConfiguration
+        let loadError: String?
+        do {
+            loadedConfiguration = try store.loadWormholeConfigurationMigratingSecrets(to: secretStore)
+                ?? TailOpsWormholeConfiguration()
+            loadError = nil
+        } catch {
+            loadedConfiguration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+            loadError = "Wormhole pairing migration failed: \(error.localizedDescription)"
+        }
         configuration = loadedConfiguration
         executable = runner.discoverExecutable()
         mode = .receive
         selectedContactID = loadedConfiguration.contacts.first?.id
         selectedFileURL = nil
-        displayName = loadedConfiguration.contacts.first?.displayName ?? "Ben"
-        pairingID = loadedConfiguration.contacts.first?.pairingID ?? "monroe-ben"
-        sharedSecret = loadedConfiguration.contacts.first?.sharedSecret ?? ""
+        displayName = loadedConfiguration.contacts.first?.displayName ?? "Paired Mac"
+        pairingID = loadedConfiguration.contacts.first?.pairingID ?? ""
+        tailnetNodeID = loadedConfiguration.contacts.first?.tailnetNodeID ?? ""
+        let initialSecret: String
+        let secretLoadError: String?
+        if let firstContact = loadedConfiguration.contacts.first {
+            do {
+                if let secret = try secretStore.secret(for: firstContact.id) {
+                    initialSecret = secret
+                    secretLoadError = nil
+                } else {
+                    initialSecret = ""
+                    secretLoadError = TailOpsWormholeSecretUnavailableError(
+                        contactName: firstContact.displayName
+                    ).localizedDescription
+                }
+            } catch {
+                initialSecret = ""
+                secretLoadError = error.localizedDescription
+            }
+        } else {
+            initialSecret = ""
+            secretLoadError = nil
+        }
+        sharedSecret = initialSecret
         inboxPath = loadedConfiguration.inboxPath
+        availableTailnetPeers = ((try? store.load())?.hosts ?? [])
+            .filter { $0.role == .peer }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         pendingTransfers = (try? store.loadWormholePendingTransfers()) ?? []
         selectedPendingTransferID = nil
-        status = .ready
+        status = (loadError ?? secretLoadError).map(Status.failed) ?? .ready
         lastOutput = ""
+        signalDeliveryError = nil
+        signalServiceError = nil
+        super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(signalServiceDidFail(_:)),
+            name: .tailOpsWormholeSignalServiceFailed,
+            object: nil
+        )
+    }
+
+    @objc nonisolated private func signalServiceDidFail(_ notification: Notification) {
+        let message = notification.object as? String
+        Task { @MainActor [weak self, message] in
+            self?.signalServiceError = message
+        }
     }
 
     var selectedContact: TailOpsWormholeContact? {
@@ -111,8 +168,10 @@ final class TailOpsWormholeModel: ObservableObject {
     }
 
     var currentCode: TailOpsWormholeTransferCode? {
-        guard let selectedContact else { return nil }
-        return codeFactory.code(for: selectedContact)
+        guard let selectedContact,
+              let secret = try? requiredSecret(for: selectedContact)
+        else { return nil }
+        return codeFactory.code(for: selectedContact, sharedSecret: secret)
     }
 
     var selectedPendingTransfer: TailOpsWormholePendingTransfer? {
@@ -127,7 +186,14 @@ final class TailOpsWormholeModel: ObservableObject {
     }
 
     var receiveCode: String? {
-        selectedPendingTransfer?.code ?? currentCode?.code
+        guard let selectedContact,
+              let secret = try? requiredSecret(for: selectedContact)
+        else { return nil }
+        return codeFactory.code(
+            for: selectedContact,
+            sharedSecret: secret,
+            date: selectedPendingTransfer?.createdAt ?? Date()
+        ).code
     }
 
     var setupCommand: String {
@@ -140,7 +206,7 @@ final class TailOpsWormholeModel: ObservableObject {
         let cleanSecret = sharedSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         return """
         TailOps Wormhole setup
-        Name: \(cleanName.isEmpty ? "Ben" : cleanName)
+        Name: \(cleanName.isEmpty ? "Paired Mac" : cleanName)
         Pairing ID: \(cleanPairingID)
         Setup Secret: \(cleanSecret)
         Inbox: \(inboxPath)
@@ -173,11 +239,35 @@ final class TailOpsWormholeModel: ObservableObject {
     }
 
     func reload() {
-        configuration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+        do {
+            configuration = try store.loadWormholeConfigurationMigratingSecrets(to: secretStore)
+                ?? TailOpsWormholeConfiguration()
+        } catch {
+            configuration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+            status = .failed("Wormhole pairing migration failed: \(error.localizedDescription)")
+        }
         pendingTransfers = (try? store.loadWormholePendingTransfers()) ?? []
+        availableTailnetPeers = ((try? store.load())?.hosts ?? [])
+            .filter { $0.role == .peer }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         executable = runner.discoverExecutable()
         if selectedContactID == nil || configuration.contact(id: selectedContactID ?? "") == nil {
             selectedContactID = configuration.contacts.first?.id
+        }
+        if let selectedContact {
+            tailnetNodeID = selectedContact.tailnetNodeID ?? ""
+            do {
+                sharedSecret = try secretStore.secret(for: selectedContact.id) ?? ""
+                if sharedSecret.isEmpty {
+                    status = .failed(
+                        TailOpsWormholeSecretUnavailableError(contactName: selectedContact.displayName)
+                            .localizedDescription
+                    )
+                }
+            } catch {
+                sharedSecret = ""
+                status = .failed(error.localizedDescription)
+            }
         }
         inboxPath = configuration.inboxPath
     }
@@ -185,6 +275,20 @@ final class TailOpsWormholeModel: ObservableObject {
     func checkAgain() {
         executable = runner.discoverExecutable()
         status = executable == nil ? .failed("wormhole is still missing.") : .ready
+    }
+
+    func selectContact(id: String) {
+        guard let contact = configuration.contact(id: id) else { return }
+        selectedContactID = id
+        displayName = contact.displayName
+        pairingID = contact.pairingID
+        tailnetNodeID = contact.tailnetNodeID ?? ""
+        do {
+            sharedSecret = try secretStore.secret(for: contact.id) ?? ""
+        } catch {
+            sharedSecret = ""
+            status = .failed(error.localizedDescription)
+        }
     }
 
     func copyInstallCommand() {
@@ -203,7 +307,7 @@ final class TailOpsWormholeModel: ObservableObject {
 
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(setupText, forType: .string)
-        status = .succeeded("Copied Ben's setup text.")
+        status = .succeeded("Copied pairing setup.")
     }
 
     func openHomebrewFormula() {
@@ -220,8 +324,9 @@ final class TailOpsWormholeModel: ObservableObject {
         let cleanName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanPairingID = pairingID.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanSecret = sharedSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanName.isEmpty, !cleanPairingID.isEmpty, !cleanSecret.isEmpty else {
-            status = .failed("Name, pairing ID, and setup secret are required.")
+        let cleanNodeID = tailnetNodeID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty, !cleanPairingID.isEmpty, !cleanSecret.isEmpty, !cleanNodeID.isEmpty else {
+            status = .failed("Name, pairing ID, setup secret, and Tailnet node ID are required.")
             return
         }
 
@@ -230,7 +335,7 @@ final class TailOpsWormholeModel: ObservableObject {
             id: configuration.contacts.first { $0.displayName == cleanName }?.id ?? UUID().uuidString,
             displayName: cleanName,
             pairingID: cleanPairingID,
-            sharedSecret: cleanSecret
+            tailnetNodeID: cleanNodeID
         )
         let updatedConfiguration = TailOpsWormholeConfiguration(
             contacts: existing + [contact],
@@ -241,6 +346,7 @@ final class TailOpsWormholeModel: ObservableObject {
         )
 
         do {
+            try secretStore.save(secret: cleanSecret, for: contact.id)
             try store.saveWormholeConfiguration(updatedConfiguration)
             configuration = updatedConfiguration
             selectedContactID = contact.id
@@ -272,18 +378,46 @@ final class TailOpsWormholeModel: ObservableObject {
             status = .failed("Choose a file first.")
             return
         }
-        guard let code = currentCode?.code else {
+        guard let selectedContact else {
             status = .failed("Save a Wormhole pairing first.")
             return
         }
-        let pendingTransfer = publishPendingTransfer(fileURL: selectedFileURL)
+        let createdAt = Date()
+        let transferCode: TailOpsWormholeTransferCode
+        do {
+            let secret = try requiredSecret(for: selectedContact)
+            transferCode = codeFactory.code(
+                for: selectedContact,
+                sharedSecret: secret,
+                date: createdAt
+            )
+        } catch {
+            status = .failed(error.localizedDescription)
+            return
+        }
+        let pendingTransfer = createPendingTransfer(
+            fileURL: selectedFileURL,
+            createdAt: createdAt,
+            expiresAt: transferCode.validUntil
+        )
 
         Task {
+            signalDeliveryError = nil
+            if let pendingTransfer {
+                do {
+                    _ = try await TailOpsWormholePendingSignalClient(
+                        store: store,
+                        secretStore: secretStore
+                    ).publish(pendingTransfer, to: selectedContact)
+                } catch {
+                    signalDeliveryError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
             let didComplete = await runTransfer(
                 title: "Sending \(selectedFileURL.lastPathComponent)",
                 successMessage: "Sent \(selectedFileURL.lastPathComponent) to \(selectedContactName)."
             ) {
-                try await self.runner.send(fileURL: selectedFileURL, code: code)
+                try await self.runner.send(fileURL: selectedFileURL, code: transferCode.code)
             }
             if didComplete, let pendingTransfer {
                 clearPendingTransfer(id: pendingTransfer.id)
@@ -298,7 +432,7 @@ final class TailOpsWormholeModel: ObservableObject {
 
     func receiveIntoInbox() {
         guard let code = receiveCode else {
-            status = .failed("Save a Wormhole pairing first.")
+            status = .failed("Save a Wormhole pairing with an available Keychain secret first.")
             return
         }
 
@@ -334,12 +468,12 @@ final class TailOpsWormholeModel: ObservableObject {
         }
     }
 
-    private func publishPendingTransfer(fileURL: URL) -> TailOpsWormholePendingTransfer? {
-        guard let selectedContact,
-              let code = currentCode
-        else {
-            return nil
-        }
+    private func createPendingTransfer(
+        fileURL: URL,
+        createdAt: Date,
+        expiresAt: Date
+    ) -> TailOpsWormholePendingTransfer? {
+        guard let selectedContact else { return nil }
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.int64Value
         let transfer = TailOpsWormholePendingTransfer(
@@ -348,9 +482,9 @@ final class TailOpsWormholeModel: ObservableObject {
             senderName: Host.current().localizedName ?? NSFullUserName(),
             fileName: fileURL.lastPathComponent,
             fileSizeBytes: fileSize,
-            code: code.code,
             direction: .outgoing,
-            expiresAt: code.validUntil
+            createdAt: createdAt,
+            expiresAt: expiresAt
         )
 
         do {
@@ -363,10 +497,14 @@ final class TailOpsWormholeModel: ObservableObject {
             status = .failed(error.localizedDescription)
         }
 
-        Task {
-            await TailOpsWormholePendingSignalClient(store: store).publish(transfer, to: selectedContact)
-        }
         return transfer
+    }
+
+    private func requiredSecret(for contact: TailOpsWormholeContact) throws -> String {
+        guard let secret = try secretStore.secret(for: contact.id), !secret.isEmpty else {
+            throw TailOpsWormholeSecretUnavailableError(contactName: contact.displayName)
+        }
+        return secret
     }
 
     private func clearPendingTransfer(id: String) {
@@ -378,6 +516,14 @@ final class TailOpsWormholeModel: ObservableObject {
         } catch {
             status = .failed(error.localizedDescription)
         }
+    }
+}
+
+private struct TailOpsWormholeSecretUnavailableError: LocalizedError {
+    let contactName: String
+
+    var errorDescription: String? {
+        "The setup secret for \(contactName) is unavailable in Keychain. Enter it again and save the pairing."
     }
 }
 
@@ -475,7 +621,7 @@ struct TailOpsWormholeView: View {
                 if !model.configuration.contacts.isEmpty {
                     Picker("Contact", selection: Binding(
                         get: { model.selectedContactID ?? "" },
-                        set: { model.selectedContactID = $0 }
+                        set: { model.selectContact(id: $0) }
                     )) {
                         ForEach(model.configuration.contacts) { contact in
                             Text(contact.displayName).tag(contact.id)
@@ -490,14 +636,30 @@ struct TailOpsWormholeView: View {
                 GridRow {
                     Text("Name")
                         .foregroundStyle(.secondary)
-                    TextField("Ben", text: $model.displayName)
+                    TextField("Paired Mac", text: $model.displayName)
                         .textFieldStyle(.roundedBorder)
                 }
                 GridRow {
                     Text("Pairing ID")
                         .foregroundStyle(.secondary)
-                    TextField("monroe-ben", text: $model.pairingID)
+                    TextField("shared-pairing", text: $model.pairingID)
                         .textFieldStyle(.roundedBorder)
+                }
+                GridRow {
+                    Text("Tailnet Node ID")
+                        .foregroundStyle(.secondary)
+                    if model.availableTailnetPeers.isEmpty {
+                        TextField("Stable peer ID from tailscale status", text: $model.tailnetNodeID)
+                            .textFieldStyle(.roundedBorder)
+                    } else {
+                        Picker("Tailnet peer", selection: $model.tailnetNodeID) {
+                            Text("Choose a peer").tag("")
+                            ForEach(model.availableTailnetPeers) { host in
+                                Text(host.name).tag(host.id)
+                            }
+                        }
+                        .labelsHidden()
+                    }
                 }
                 GridRow {
                     Text("Setup Secret")
@@ -505,9 +667,9 @@ struct TailOpsWormholeView: View {
                     HStack {
                         Group {
                             if showsSetupSecret {
-                                TextField("Shared once with Ben", text: $model.sharedSecret)
+                                TextField("Shared once with paired Mac", text: $model.sharedSecret)
                             } else {
-                                SecureField("Shared once with Ben", text: $model.sharedSecret)
+                                SecureField("Shared once with paired Mac", text: $model.sharedSecret)
                             }
                         }
                         .textFieldStyle(.roundedBorder)
@@ -542,7 +704,7 @@ struct TailOpsWormholeView: View {
                 Button {
                     model.copySetupText()
                 } label: {
-                    Label("Copy Setup for Ben", systemImage: "doc.on.doc")
+                    Label("Copy Setup", systemImage: "doc.on.doc")
                 }
                 Spacer()
                 if let code = model.currentCode {
@@ -653,22 +815,38 @@ struct TailOpsWormholeView: View {
 
     @ViewBuilder
     private var statusView: some View {
-        switch model.status {
-        case .ready:
-            EmptyView()
-        case .running(let message):
-            HStack(spacing: 10) {
-                ProgressView()
-                    .controlSize(.small)
-                Text(message)
-                    .font(.callout)
+        VStack(alignment: .leading, spacing: 8) {
+            switch model.status {
+            case .ready:
+                EmptyView()
+            case .running(let message):
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(message)
+                        .font(.callout)
+                }
+                .padding(12)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            case .succeeded(let message):
+                statusMessage(message, systemImage: "checkmark.circle.fill", color: .green)
+            case .failed(let message):
+                statusMessage(message, systemImage: "exclamationmark.triangle.fill", color: .orange)
             }
-            .padding(12)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-        case .succeeded(let message):
-            statusMessage(message, systemImage: "checkmark.circle.fill", color: .green)
-        case .failed(let message):
-            statusMessage(message, systemImage: "exclamationmark.triangle.fill", color: .orange)
+            if let signalDeliveryError = model.signalDeliveryError {
+                statusMessage(
+                    "File transfer continues, but the paired Mac was not notified: \(signalDeliveryError)",
+                    systemImage: "bell.slash.fill",
+                    color: .orange
+                )
+            }
+            if let signalServiceError = model.signalServiceError {
+                statusMessage(
+                    signalServiceError,
+                    systemImage: "network.slash",
+                    color: .orange
+                )
+            }
         }
     }
 

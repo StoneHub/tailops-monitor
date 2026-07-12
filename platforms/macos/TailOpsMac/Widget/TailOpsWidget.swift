@@ -21,6 +21,7 @@ struct TailOpsEntry: TimelineEntry {
     let date: Date
     let snapshot: TailnetSnapshot
     let actionConfiguration: TailnetActionConfiguration
+    let refreshHealth: TailOpsRefreshHealth
     let wormholeConfiguration: TailOpsWormholeConfiguration
     let pendingWormholeTransfers: [TailOpsWormholePendingTransfer]
 }
@@ -31,6 +32,7 @@ struct TailOpsTimelineProvider: TimelineProvider {
             date: Date(),
             snapshot: TailnetSnapshot(hosts: []),
             actionConfiguration: TailnetActionConfiguration(),
+            refreshHealth: TailOpsRefreshHealth(),
             wormholeConfiguration: TailOpsWormholeConfiguration(),
             pendingWormholeTransfers: []
         )
@@ -42,7 +44,7 @@ struct TailOpsTimelineProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TailOpsEntry>) -> Void) {
         let entry = entry()
-        let nextRefresh = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)
+        let nextRefresh = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date().addingTimeInterval(900)
         completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
     }
 
@@ -51,6 +53,7 @@ struct TailOpsTimelineProvider: TimelineProvider {
             date: Date(),
             snapshot: loadSnapshot(),
             actionConfiguration: loadActionConfiguration(),
+            refreshHealth: loadRefreshHealth(),
             wormholeConfiguration: loadWormholeConfiguration(),
             pendingWormholeTransfers: loadPendingWormholeTransfers()
         )
@@ -62,6 +65,10 @@ struct TailOpsTimelineProvider: TimelineProvider {
 
     private func loadActionConfiguration() -> TailnetActionConfiguration {
         (try? SharedSnapshotStore().loadActionConfiguration()) ?? TailnetActionConfiguration()
+    }
+
+    private func loadRefreshHealth() -> TailOpsRefreshHealth {
+        (try? SharedSnapshotStore().loadRefreshHealth()) ?? TailOpsRefreshHealth()
     }
 
     private func loadWormholeConfiguration() -> TailOpsWormholeConfiguration {
@@ -111,8 +118,12 @@ struct TailOpsWidgetView: View {
                     Button(intent: RefreshTailOpsWidgetIntent()) {
                         Image(systemName: "arrow.clockwise")
                     }
-                    Text(entry.date, style: .time)
-                        .monospacedDigit()
+                    WidgetSnapshotFreshness(
+                        generatedAt: entry.snapshot.generatedAt,
+                        refreshHealth: entry.refreshHealth,
+                        referenceDate: entry.date,
+                        hasSnapshot: !entry.snapshot.hosts.isEmpty
+                    )
                     Link(destination: TailOpsSettingsOpenSignal.url) {
                         Image(systemName: "gearshape")
                     }
@@ -324,6 +335,77 @@ struct TailOpsWidgetView: View {
         case .offline:
             return 2
         }
+    }
+}
+
+private struct WidgetSnapshotFreshness: View {
+    let generatedAt: Date
+    let refreshHealth: TailOpsRefreshHealth
+    let referenceDate: Date
+    let hasSnapshot: Bool
+
+    private let staleInterval: TimeInterval = 90 * 60
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if refreshHealth.hasFailedSinceLastSuccess {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text("Failed")
+            } else if isRefreshActive {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("Refreshing")
+            } else if isStale {
+                Image(systemName: "clock.badge.exclamationmark")
+                Text("Stale")
+            }
+
+            if hasSnapshot {
+                if showsStateLabel {
+                    Text("·")
+                }
+                Text(generatedAt, style: .relative)
+                    .monospacedDigit()
+            } else {
+                Text("No data")
+            }
+        }
+        .foregroundStyle(showsWarning ? Color.orange : Color.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var isStale: Bool {
+        hasSnapshot && referenceDate.timeIntervalSince(generatedAt) >= staleInterval
+    }
+
+    private var showsStateLabel: Bool {
+        refreshHealth.hasFailedSinceLastSuccess || isRefreshActive || isStale
+    }
+
+    private var showsWarning: Bool {
+        refreshHealth.hasFailedSinceLastSuccess || isStale
+    }
+
+    private var isRefreshActive: Bool {
+        refreshHealth.isRefreshInProgress(at: referenceDate)
+    }
+
+    private var accessibilityText: String {
+        guard hasSnapshot else { return "No tailnet snapshot available" }
+        let age = RelativeDateTimeFormatter().localizedString(for: generatedAt, relativeTo: referenceDate)
+        if refreshHealth.hasFailedSinceLastSuccess {
+            return "Refresh failed. Snapshot generated \(age)"
+        }
+        if isRefreshActive {
+            return "Refreshing. Snapshot generated \(age)"
+        }
+        if isStale {
+            return "Snapshot stale. Generated \(age)"
+        }
+        return "Snapshot generated \(age)"
     }
 }
 
@@ -767,7 +849,6 @@ private extension [TailOpsWormholePendingTransfer] {
                 senderName: "Monroe",
                 fileName: "prompt.md",
                 fileSizeBytes: 2048,
-                code: "520-mesa-saddle-bridge-valley",
                 direction: .incoming,
                 expiresAt: Date().addingTimeInterval(900)
             )
@@ -777,24 +858,7 @@ private extension [TailOpsWormholePendingTransfer] {
 
 private extension TailOpsWormholeConfiguration {
     func contact(for host: TailnetHost) -> TailOpsWormholeContact? {
-        contacts.first { contact in
-            let hostTokens = [
-                host.name,
-                host.magicDNSName ?? "",
-                host.primaryAddress ?? ""
-            ].map(Self.normalized)
-            let contactTokens = [
-                contact.displayName,
-                contact.pairingID
-            ].map(Self.normalized)
-
-            return contactTokens.contains { contactToken in
-                guard contactToken.count >= 3 else { return false }
-                return hostTokens.contains { hostToken in
-                    hostToken.contains(contactToken) || contactToken.contains(hostToken)
-                }
-            }
-        }
+        contacts.first { $0.tailnetNodeID == host.id }
     }
 
     static var previewBen: TailOpsWormholeConfiguration {
@@ -803,15 +867,9 @@ private extension TailOpsWormholeConfiguration {
                 id: "ben",
                 displayName: "Ben",
                 pairingID: "monroe-ben",
-                sharedSecret: "preview-secret"
+                tailnetNodeID: "peer-ben"
             )
         ])
-    }
-
-    private static func normalized(_ value: String) -> String {
-        value
-            .lowercased()
-            .filter { $0.isLetter || $0.isNumber }
     }
 }
 
@@ -894,6 +952,7 @@ private struct WidgetActionChip: View {
         date: .now,
         snapshot: .preview,
         actionConfiguration: .preview,
+        refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now),
         wormholeConfiguration: .previewBen,
         pendingWormholeTransfers: .previewBen
     ))
@@ -903,18 +962,18 @@ private struct WidgetActionChip: View {
 #Preview("Small", as: .systemSmall) {
     TailOpsWidget()
 } timeline: {
-    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
+    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now), wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
 }
 
 #Preview("Medium", as: .systemMedium) {
     TailOpsWidget()
 } timeline: {
-    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
+    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now), wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
 }
 
 #Preview("Large", as: .systemLarge) {
     TailOpsWidget()
 } timeline: {
-    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
+    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now), wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
 }
 #endif

@@ -28,6 +28,8 @@ struct TailOpsCoreValidation {
         wormholeOpenSignalUsesTailOpsURLScheme()
         try settingsOpenRequestRoundTripThroughSharedStore()
         settingsOpenSignalUsesTailOpsURLScheme()
+        try refreshRequestAndHealthRoundTripThroughSharedStore()
+        refreshHealthReportsCurrentState()
         try sharedSnapshotStoreLoadsFirstExistingFallback()
         print("TailOpsCoreValidation passed")
     }
@@ -358,22 +360,25 @@ struct TailOpsCoreValidation {
         let monroeContact = TailOpsWormholeContact(
             id: "ben",
             displayName: "Ben",
-            pairingID: "monroe-ben",
-            sharedSecret: "tailops test secret"
+            pairingID: "monroe-ben"
         )
         let benContact = TailOpsWormholeContact(
             id: "monroe",
             displayName: "Monroe",
-            pairingID: "monroe-ben",
-            sharedSecret: "tailops test secret"
+            pairingID: "monroe-ben"
         )
         let factory = TailOpsWormholeCodeFactory(windowDuration: 900)
         let date = Date(timeIntervalSince1970: 1_800)
 
-        let senderCode = factory.code(for: monroeContact, date: date)
-        let receiverCode = factory.code(for: benContact, date: date.addingTimeInterval(60))
-        let nextWindowCode = factory.code(for: monroeContact, date: date.addingTimeInterval(901))
-        let candidates = factory.candidateCodes(for: benContact, date: date.addingTimeInterval(901), skewTolerance: 1)
+        let senderCode = factory.code(for: monroeContact, sharedSecret: "tailops test secret", date: date)
+        let receiverCode = factory.code(for: benContact, sharedSecret: "tailops test secret", date: date.addingTimeInterval(60))
+        let nextWindowCode = factory.code(for: monroeContact, sharedSecret: "tailops test secret", date: date.addingTimeInterval(901))
+        let candidates = factory.candidateCodes(
+            for: benContact,
+            sharedSecret: "tailops test secret",
+            date: date.addingTimeInterval(901),
+            skewTolerance: 1
+        )
 
         expect(senderCode.code == receiverCode.code, "expected paired contacts to derive the same current Wormhole code")
         expect(senderCode.code != nextWindowCode.code, "expected next transfer window to derive a fresh code")
@@ -393,7 +398,6 @@ struct TailOpsCoreValidation {
                     id: "ben",
                     displayName: "Ben",
                     pairingID: "monroe-ben",
-                    sharedSecret: "tailops setup phrase",
                     createdAt: Date(timeIntervalSince1970: 100)
                 )
             ],
@@ -441,7 +445,6 @@ struct TailOpsCoreValidation {
             senderName: "Monroe",
             fileName: "prompt.md",
             fileSizeBytes: 42,
-            code: "520-mesa-saddle-bridge-valley",
             direction: .incoming,
             createdAt: Date(timeIntervalSince1970: 100),
             expiresAt: Date(timeIntervalSince1970: 2_000_000_000)
@@ -473,6 +476,56 @@ struct TailOpsCoreValidation {
     private static func settingsOpenSignalUsesTailOpsURLScheme() {
         expect(TailOpsSettingsOpenSignal.url.scheme == "tailops", "expected settings URL to use tailops scheme")
         expect(TailOpsSettingsOpenSignal.url.host == "settings", "expected settings URL to target settings")
+    }
+
+    private static func refreshRequestAndHealthRoundTripThroughSharedStore() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "TailOpsRefreshValidation-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let store = SharedSnapshotStore(baseURLs: [rootURL])
+        let request = TailOpsRefreshRequest(requestedAt: Date(timeIntervalSince1970: 100))
+        let health = TailOpsRefreshHealth(
+            lastAttemptAt: Date(timeIntervalSince1970: 300),
+            lastSuccessAt: Date(timeIntervalSince1970: 200),
+            lastError: "Tailscale unavailable"
+        )
+
+        try store.saveRefreshRequest(request)
+        try store.saveRefreshHealth(health)
+        let loadedRequest = try store.loadRefreshRequest()
+        let loadedHealth = try store.loadRefreshHealth()
+        expect(loadedRequest == request, "expected refresh request to round trip")
+        expect(loadedHealth == health, "expected refresh health to round trip")
+
+        try store.clearRefreshRequest()
+        let clearedRequest = try store.loadRefreshRequest()
+        expect(clearedRequest == nil, "expected refresh request to clear")
+    }
+
+    private static func refreshHealthReportsCurrentState() {
+        let successful = TailOpsRefreshHealth(
+            lastAttemptAt: Date(timeIntervalSince1970: 100),
+            lastSuccessAt: Date(timeIntervalSince1970: 100)
+        )
+        let refreshing = TailOpsRefreshHealth(
+            lastAttemptAt: Date(timeIntervalSince1970: 200),
+            lastSuccessAt: Date(timeIntervalSince1970: 100)
+        )
+        let failed = TailOpsRefreshHealth(
+            lastAttemptAt: Date(timeIntervalSince1970: 200),
+            lastSuccessAt: Date(timeIntervalSince1970: 100),
+            lastError: "failure"
+        )
+
+        expect(!successful.isRefreshInProgress, "expected successful refresh to be settled")
+        expect(refreshing.isRefreshInProgress, "expected newer attempt without a result to be in progress")
+        expect(
+            !refreshing.isRefreshInProgress(at: Date(timeIntervalSince1970: 400)),
+            "expected an abandoned refresh attempt to time out"
+        )
+        expect(failed.hasFailedSinceLastSuccess, "expected newer failed attempt to be visible")
+        expect(!failed.isRefreshInProgress, "expected failed refresh not to remain in progress")
     }
 
     private static func wormholeOpenSignalUsesTailOpsURLScheme() {

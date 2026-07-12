@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Node and macOS validation
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run Node tests
+        run: npm test
+
+      - name: Run Swift tests
+        working-directory: platforms/macos/TailOpsMac
+        run: swift test
+
+      - name: Run Swift core validation
+        working-directory: platforms/macos/TailOpsMac
+        run: swift run TailOpsCoreValidation
+
+      - name: Build SwiftPM app views
+        working-directory: platforms/macos/TailOpsMac
+        run: swift build --target TailOpsMacViews
+
+      - name: Build SwiftPM widget views
+        working-directory: platforms/macos/TailOpsMac
+        run: swift build --target TailOpsWidgetViews
+
+      - name: Build unsigned Xcode Debug app
+        working-directory: platforms/macos/TailOpsMac
+        run: >-
+          xcodebuild
+          -project TailOpsMac.xcodeproj
+          -scheme TailOpsMac
+          -configuration Debug
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+      - name: Build unsigned Xcode Release app
+        working-directory: platforms/macos/TailOpsMac
+        run: >-
+          xcodebuild
+          -project TailOpsMac.xcodeproj
+          -scheme TailOpsMac
+          -configuration Release
+          CODE_SIGNING_ALLOWED=NO
+          build

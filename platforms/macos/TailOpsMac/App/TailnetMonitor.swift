@@ -5,7 +5,7 @@ import TailOpsShared
 import WidgetKit
 
 @MainActor
-final class TailnetMonitor: ObservableObject {
+final class TailnetMonitor: NSObject, ObservableObject {
     @Published private(set) var snapshot = TailnetSnapshot(hosts: [])
     @Published private(set) var actionConfiguration = TailnetActionConfiguration()
     @Published private(set) var isRefreshing = false
@@ -20,6 +20,7 @@ final class TailnetMonitor: ObservableObject {
     private let pingDiagnosticsMinimumInterval: TimeInterval = 60 * 60
     private var automaticRefreshTask: Task<Void, Never>?
     private var lastPingDiagnosticsRefreshDate: Date?
+    private var refreshRequestedWhileRefreshing = false
 
     init(
         statusProvider: TailscaleStatusProviding,
@@ -30,6 +31,7 @@ final class TailnetMonitor: ObservableObject {
         self.statusProvider = statusProvider
         self.pingProvider = pingProvider
         self.snapshotStore = snapshotStore
+        super.init()
         if let initialSnapshot {
             snapshot = initialSnapshot
         } else if let stored = try? snapshotStore.load() {
@@ -41,10 +43,17 @@ final class TailnetMonitor: ObservableObject {
         if let storedConfiguration = try? snapshotStore.loadActionConfiguration() {
             actionConfiguration = storedConfiguration
         }
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(refreshFromDistributedNotification),
+            name: Notification.Name(TailOpsRefreshSignal.notificationName),
+            object: nil
+        )
     }
 
     deinit {
         automaticRefreshTask?.cancel()
+        DistributedNotificationCenter.default().removeObserver(self)
     }
 
     var summary: TailnetSummary {
@@ -63,9 +72,18 @@ final class TailnetMonitor: ObservableObject {
     }
 
     func refresh() async {
-        guard !isRefreshing else { return }
+        guard !isRefreshing else {
+            refreshRequestedWhileRefreshing = true
+            return
+        }
         isRefreshing = true
-        defer { isRefreshing = false }
+        let attemptAt = Date()
+        let previousHealth = try? snapshotStore.loadRefreshHealth()
+        try? snapshotStore.saveRefreshHealth(TailOpsRefreshHealth(
+            lastAttemptAt: attemptAt,
+            lastSuccessAt: previousHealth?.lastSuccessAt
+        ))
+        WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
 
         do {
             let data = try await statusProvider.statusJSON()
@@ -74,10 +92,37 @@ final class TailnetMonitor: ObservableObject {
             snapshot = diagnosedSnapshot
             lastError = nil
             try snapshotStore.save(diagnosedSnapshot)
+            try snapshotStore.saveRefreshHealth(TailOpsRefreshHealth(
+                lastAttemptAt: attemptAt,
+                lastSuccessAt: Date()
+            ))
             WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
         } catch {
             lastError = error.localizedDescription
+            try? snapshotStore.saveRefreshHealth(TailOpsRefreshHealth(
+                lastAttemptAt: attemptAt,
+                lastSuccessAt: previousHealth?.lastSuccessAt,
+                lastError: error.localizedDescription
+            ))
+            WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
         }
+
+        isRefreshing = false
+        if refreshRequestedWhileRefreshing {
+            refreshRequestedWhileRefreshing = false
+            await refresh()
+        }
+    }
+
+    @discardableResult
+    func refreshIfRequested() async -> Bool {
+        guard (try? snapshotStore.loadRefreshRequest()) != nil else {
+            return false
+        }
+
+        try? snapshotStore.clearRefreshRequest()
+        await refresh()
+        return true
     }
 
     func startAutomaticRefresh(every interval: Duration = .seconds(3600)) {
@@ -98,6 +143,12 @@ final class TailnetMonitor: ObservableObject {
 
     func actions(for host: TailnetHost) -> [HostAction] {
         HostActionCatalog(configuration: actionConfiguration).actions(for: host)
+    }
+
+    @objc private func refreshFromDistributedNotification(_ notification: Notification) {
+        Task { @MainActor [weak self] in
+            await self?.refreshIfRequested()
+        }
     }
 
     private func snapshotWithPingDiagnostics(_ snapshot: TailnetSnapshot, now: Date) async -> TailnetSnapshot {

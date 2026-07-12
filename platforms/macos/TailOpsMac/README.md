@@ -5,7 +5,8 @@ Pure Swift macOS platform slice for a low-impact TailOps WidgetKit desktop widge
 ## Shape
 
 - `Sources/TailOpsCore`: testable Swift package core for parsing `tailscale status --json`, host status, summaries, and host actions.
-- `Sources/TailOpsCoreValidation`: executable validation runner for this environment, because the installed command-line Swift toolchain does not expose `XCTest` or Swift `Testing`.
+- `Tests/TailOpsCoreTests`: focused XCTest regressions for parsing, widget prioritization, refresh health, and shared-store persistence.
+- `Sources/TailOpsCoreValidation`: broader executable compatibility validation retained alongside XCTest.
 - `App`: SwiftUI host app source. It owns refresh, runs `tailscale status --json`, gathers ping diagnostics for online peers, writes a cached snapshot, opens settings, and provides Finder Services.
 - `Widget`: WidgetKit source. It reads the cached snapshot and shows the most useful reachable hosts first.
 - `Shared`: source files that should be included in both the app target and the widget extension target.
@@ -106,9 +107,9 @@ TailOps currently exposes Taildrop through Finder:
 - Finder can show a `Send with TailOps` Service for selected files. The service opens a Taildrop destination picker backed by `tailscale file cp --targets`.
 - Host rows accept dropped files and send them with `tailscale file cp`.
 
-Cross-account file-send path: TailOps includes a Wormhole send/receive window backed by paired contacts and deterministic transfer codes. Use Magic Wormhole for simple prompt files, Markdown, rich text, and images when Ben can click receive. Keep Taildrop for same-account devices only. Use SFTP or a future token-authenticated TailOps Inbox receiver only if unattended drops become necessary.
+Cross-account file-send path: TailOps includes a Wormhole send/receive window backed by paired contacts and deterministic transfer codes. Use Magic Wormhole for simple prompt files, Markdown, rich text, and images when the paired user can click receive. Keep Taildrop for same-account devices only. Use SFTP or a future token-authenticated TailOps Inbox receiver only if unattended drops become necessary.
 
-TailOps also runs a tiny pending-transfer signal listener on TCP `39117`. When Monroe starts a Wormhole send, TailOps sends Ben's TailOps a signed pending notice over Tailscale with the filename, sender, code, and expiration. The notice does not contain file data; the file still moves through Magic Wormhole. Ben's widget can use that notice to glow the paired computer card and open the receive flow.
+TailOps also runs a bounded pending-transfer signal listener on TCP `39117`. A signed V1 notice contains only sender/file metadata and expiration—never file data or the Wormhole transfer code. Secrets remain in the device-local Keychain, routing uses an exact saved Tailnet node ID, and the receiver enforces constant-time HMAC verification, expiry and replay checks, connection/request limits, and a matching JSON acknowledgement. Both Macs must run the hardened V1 protocol.
 
 Plan: `../../../docs/superpowers/plans/2026-07-03-tailops-file-send-upgrade.html`.
 
@@ -192,10 +193,11 @@ That is the simplest and lowest-risk first step for a local developer utility. A
 ## Verify Core
 
 ```bash
+swift test
 swift run TailOpsCoreValidation
 ```
 
-Expected output:
+The XCTest target covers focused regressions while the validation executable keeps the broader legacy checks. Expected validation-runner output:
 
 ```text
 TailOpsCoreValidation passed
@@ -231,7 +233,7 @@ The planned order is:
 
 1. Manually verify the widget gear in the live desktop widget after each install.
 2. Improve dashboard action presets and common-port helpers in settings.
-3. Add the Wormhole send/receive window from the July 3 file-send plan.
+3. Exercise the hardened Wormhole send/receive path between two updated Macs.
 4. Keep menu-bar UI as optional future scope only if the widget cannot cover a workflow.
 
 Wishlist: TailOps Drop Zone.

@@ -180,8 +180,17 @@ function getAgentCard(request) {
   };
 }
 
-export function createTailopsServer() {
+function corsHeaders(request, corsOrigin) {
+  if (!corsOrigin || request.headers.origin !== corsOrigin) return {};
+  return {
+    "access-control-allow-origin": corsOrigin,
+    vary: "Origin",
+  };
+}
+
+export function createTailopsServer({ corsOrigin = null } = {}) {
   return createServer(async (request, response) => {
+    const crossOriginHeaders = corsHeaders(request, corsOrigin);
     const result = resolveStaticRequest(request.url ?? "/");
     if (result.kind === "not-found") {
       response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
@@ -195,14 +204,14 @@ export function createTailopsServer() {
         response.writeHead(200, {
           "content-type": result.contentType,
           "cache-control": "no-store",
-          "access-control-allow-origin": "*",
+          ...crossOriginHeaders,
         });
         response.end(JSON.stringify(telemetry, null, 2));
       } catch (error) {
         response.writeHead(503, {
           "content-type": "application/json; charset=utf-8",
           "cache-control": "no-store",
-          "access-control-allow-origin": "*",
+          ...crossOriginHeaders,
         });
         response.end(JSON.stringify({ schema: "tailops.telemetry.v1", source: "unavailable", error: error.message }, null, 2));
       }
@@ -213,7 +222,7 @@ export function createTailopsServer() {
       response.writeHead(200, {
         "content-type": result.contentType,
         "cache-control": "no-store",
-        "access-control-allow-origin": "*",
+        ...crossOriginHeaders,
       });
       response.end(JSON.stringify(getAgentCard(request), null, 2));
       return;
@@ -224,7 +233,7 @@ export function createTailopsServer() {
       response.writeHead(200, {
         "content-type": result.contentType,
         "cache-control": result.kind === "agents" ? "no-store" : "no-cache",
-        "access-control-allow-origin": "*",
+        ...crossOriginHeaders,
       });
       response.end(content);
     } catch {
@@ -233,4 +242,3 @@ export function createTailopsServer() {
     }
   });
 }
-

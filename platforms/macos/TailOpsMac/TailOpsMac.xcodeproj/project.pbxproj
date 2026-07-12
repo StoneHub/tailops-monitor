@@ -20,6 +20,7 @@
 		A10000000000000000000021 /* App/TailOpsWormholeCommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* App/TailOpsWormholeCommandRunner.swift */; };
 		A10000000000000000000022 /* App/TailOpsWormholeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* App/TailOpsWormholeWindowController.swift */; };
 		A10000000000000000000023 /* App/TailOpsWormholePendingSignalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* App/TailOpsWormholePendingSignalService.swift */; };
+		A10000000000000000000024 /* App/BoundedProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* App/BoundedProcessRunner.swift */; };
 		A10000000000000000000019 /* Xcode/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Xcode/Assets.xcassets */; };
 		A10000000000000000000020 /* Xcode/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Xcode/Assets.xcassets */; };
 		A10000000000000000000007 /* Widget/TailOpsWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */; };
@@ -70,6 +71,7 @@
 		A20000000000000000000020 /* App/TailOpsWormholeCommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsWormholeCommandRunner.swift; sourceTree = "<group>"; };
 		A20000000000000000000021 /* App/TailOpsWormholeWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsWormholeWindowController.swift; sourceTree = "<group>"; };
 		A20000000000000000000022 /* App/TailOpsWormholePendingSignalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsWormholePendingSignalService.swift; sourceTree = "<group>"; };
+		A20000000000000000000023 /* App/BoundedProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/BoundedProcessRunner.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* Xcode/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Xcode/Assets.xcassets; sourceTree = "<group>"; };
 		A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidgetBundle.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* Widget/TailOpsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidget.swift; sourceTree = "<group>"; };
@@ -117,6 +119,7 @@
 		A80000000000000000000002 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				A20000000000000000000023 /* App/BoundedProcessRunner.swift */,
 				A20000000000000000000001 /* App/TailOpsMacApp.swift */,
 				A20000000000000000000002 /* App/TailscaleStatusProvider.swift */,
 				A20000000000000000000003 /* App/TailOpsSettingsView.swift */,
@@ -276,6 +279,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000024 /* App/BoundedProcessRunner.swift in Sources */,
 				A10000000000000000000001 /* App/TailOpsMacApp.swift in Sources */,
 				A10000000000000000000002 /* App/TailscaleStatusProvider.swift in Sources */,
 				A10000000000000000000003 /* App/TailOpsSettingsView.swift in Sources */,
@@ -351,7 +355,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsMacApp/TailOpsMacApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -373,7 +377,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsMacApp/TailOpsMacApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -395,7 +399,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsWidget/TailOpsWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -419,7 +423,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsWidget/TailOpsWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;

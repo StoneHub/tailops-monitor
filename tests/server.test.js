@@ -1,6 +1,73 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveStaticRequest } from "../src/server.js";
+import { once } from "node:events";
+import { isLoopbackHost, resolveServerConfig } from "../server.js";
+import { createTailopsServer, resolveStaticRequest } from "../src/server.js";
+
+async function withServer(options, callback) {
+  const server = createTailopsServer(options);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    await callback(`http://127.0.0.1:${address.port}`);
+  } finally {
+    const closed = once(server, "close");
+    server.close();
+    await closed;
+  }
+}
+
+test("resolveServerConfig defaults to loopback with CORS disabled", () => {
+  assert.deepEqual(resolveServerConfig({}), {
+    host: "127.0.0.1",
+    port: 4173,
+    corsOrigin: null,
+  });
+});
+
+test("resolveServerConfig accepts explicit network and CORS configuration", () => {
+  assert.deepEqual(
+    resolveServerConfig({
+      HOST: "0.0.0.0",
+      PORT: "8080",
+      TAILOPS_CORS_ORIGIN: "https://console.example.test",
+    }),
+    {
+      host: "0.0.0.0",
+      port: 8080,
+      corsOrigin: "https://console.example.test",
+    },
+  );
+  assert.equal(isLoopbackHost("127.0.0.1"), true);
+  assert.equal(isLoopbackHost("0.0.0.0"), false);
+});
+
+test("HTTP responses do not allow cross-origin access by default", async () => {
+  await withServer({}, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/.well-known/agent.json`, {
+      headers: { origin: "https://console.example.test" },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("access-control-allow-origin"), null);
+  });
+});
+
+test("HTTP responses allow only the explicitly configured CORS origin", async () => {
+  await withServer({ corsOrigin: "https://console.example.test" }, async (baseUrl) => {
+    const allowed = await fetch(`${baseUrl}/.well-known/agent.json`, {
+      headers: { origin: "https://console.example.test" },
+    });
+    const denied = await fetch(`${baseUrl}/.well-known/agent.json`, {
+      headers: { origin: "https://other.example.test" },
+    });
+
+    assert.equal(allowed.headers.get("access-control-allow-origin"), "https://console.example.test");
+    assert.equal(allowed.headers.get("vary"), "Origin");
+    assert.equal(denied.headers.get("access-control-allow-origin"), null);
+  });
+});
 
 test("resolveStaticRequest maps /api/agents to JSON response metadata", () => {
   const result = resolveStaticRequest("/api/agents");

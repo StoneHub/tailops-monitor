@@ -11,7 +11,7 @@ The older browser dashboard is still included as a full-screen visualization and
 - Uses a hidden native host app for refresh, settings, App Group sharing, and Finder Services.
 - Adds passive ping context for online peers when the host app refreshes, then exposes the cached result in the widget.
 - Adds Taildrop shortcuts through menu-row file drops and a Finder Service.
-- Plans cross-account file send/receive through Magic Wormhole pairing, with Taildrop kept for same-account devices.
+- Adds cross-account file send/receive through Magic Wormhole pairing, with Taildrop kept for same-account devices.
 - Lets you configure custom actions for each host:
   - `ssh`: opens `ssh://host`.
   - `url`: opens HTTP dashboards, admin pages, Home Assistant, OpenClaw, router UIs, logs, and other web tools.
@@ -106,6 +106,8 @@ The macOS implementation avoids a Node backend:
 
 Magic Wormhole is not bundled yet. TailOps detects `wormhole` on `PATH` or in common Homebrew locations and shows setup instructions when missing. Bundling remains possible, but should be treated as a separate packaging task because the reference Wormhole CLI is a Python tool with native crypto dependencies that must be signed per architecture inside the app bundle.
 
+Wormhole pairing secrets live only in the device-local macOS Keychain. Widget-readable configuration contains non-secret contact metadata, pending notices never contain transfer codes, and delivery notices are accepted only after bounded request validation, constant-time HMAC verification, expiry/replay checks, and an exact Tailnet node match. Both Macs must run the hardened V1 protocol; there is no insecure legacy fallback.
+
 The widget uses WidgetKit container backgrounds, removable backgrounds, `widgetRenderingMode`, and `widgetAccentable(_:)` so macOS can apply modern tinted and Liquid Glass widget appearances.
 
 More detail: `platforms/macos/TailOpsMac/README.md`.
@@ -120,7 +122,7 @@ Next implementation batch:
 
 1. Exercise the widget gear/settings flow in the real desktop widget after install.
 2. Polish the settings editor for custom dashboard presets and common ports.
-3. Exercise the Wormhole setup gate and first send/receive window from the installed app.
+3. Exercise a hardened V1 Wormhole send/receive between two updated Macs.
 4. Decide whether any menu-bar surface is worth restoring later as optional, not primary.
 
 Recent checkpoint polish:
@@ -147,11 +149,15 @@ Repeated refreshes inside the one-hour ping window retain cached ping diagnostic
 
 ```bash
 cd platforms/macos/TailOpsMac
+swift test
 swift run TailOpsCoreValidation
 swift build --target TailOpsMacViews
 swift build --target TailOpsWidgetViews
 xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Debug CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Release CODE_SIGNING_ALLOWED=NO build
 ```
+
+`swift test` runs the focused XCTest regression suite. `TailOpsCoreValidation` remains the broader compatibility check. GitHub Actions runs these gates together with the Node suite and both unsigned Xcode configurations on pull requests and pushes to `main`.
 
 ## Browser Dashboard
 
@@ -178,6 +184,20 @@ GET /.well-known/agent.json
 ```
 
 The server reads live Tailscale hosts through `tailscale status --json`. It can also pull ASUSWRT router telemetry through Home Assistant when `TAILOPS_HA_URL` and `TAILOPS_HA_TOKEN` are set.
+
+By default, the server binds only to `127.0.0.1` and does not send CORS headers. To make it reachable from a trusted LAN or tailnet, explicitly set `HOST`; the server will print a warning because these endpoints do not have application-level authentication:
+
+```bash
+HOST=0.0.0.0 npm run serve
+```
+
+If a separate browser origin must call the API, allow that exact origin with `TAILOPS_CORS_ORIGIN`:
+
+```bash
+TAILOPS_CORS_ORIGIN=https://console.example.test npm run serve
+```
+
+Do not expose the browser server to the public internet without adding authentication.
 
 The browser dashboard needs Node 18 or newer for built-in `fetch`. Run the Node test suite with:
 

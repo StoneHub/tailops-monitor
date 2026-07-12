@@ -41,6 +41,7 @@ let package = Package(
             path: "App",
             exclude: ["TailOpsMacApp.swift"],
             sources: [
+                "BoundedProcessRunner.swift",
                 "DesignPreviewGallery.swift",
                 "TaildropServiceProvider.swift",
                 "TailscaleStatusProvider.swift",
@@ -65,6 +66,16 @@ let package = Package(
                 "TailOpsWidget.swift"
             ]
         ),
-        .executableTarget(name: "TailOpsCoreValidation", dependencies: ["TailOpsCore", "TailOpsShared"])
+        .executableTarget(name: "TailOpsCoreValidation", dependencies: ["TailOpsCore", "TailOpsShared"]),
+        .testTarget(
+            name: "TailOpsCoreTests",
+            dependencies: ["TailOpsCore", "TailOpsShared"],
+            path: "Tests/TailOpsCoreTests"
+        ),
+        .testTarget(
+            name: "TailOpsMacViewsTests",
+            dependencies: ["TailOpsCore", "TailOpsShared", "TailOpsMacViews"],
+            path: "Tests/TailOpsMacViewsTests"
+        )
     ]
 )
