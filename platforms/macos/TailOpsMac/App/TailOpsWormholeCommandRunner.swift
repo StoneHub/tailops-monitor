@@ -43,9 +43,11 @@ enum TailOpsWormholeCommandError: LocalizedError, Equatable {
 @MainActor
 struct TailOpsWormholeCommandRunner {
     static let installCommand = "brew install magic-wormhole"
+    private static let commandTimeout: TimeInterval = 15 * 60
 
     private let fileManager: FileManager
     private let environment: [String: String]
+    private let processRunner = BoundedProcessRunner()
 
     init(
         fileManager: FileManager = .default,
@@ -112,14 +114,37 @@ struct TailOpsWormholeCommandRunner {
         workingDirectory: URL
     ) async throws -> TailOpsWormholeCommandResult {
         let environment = commandEnvironment()
-        return try await Task.detached(priority: .userInitiated) {
-            try runBlocking(
+        let processResult: BoundedProcessResult
+        do {
+            processResult = try await processRunner.run(
                 executableURL: executable.url,
                 arguments: arguments,
                 workingDirectory: workingDirectory,
-                environment: environment
+                environment: environment,
+                timeout: Self.commandTimeout,
+                maximumStandardOutputBytes: 8_000,
+                maximumStandardErrorBytes: 8_000
             )
-        }.value
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw TailOpsWormholeCommandError.launchFailed(error.localizedDescription)
+        }
+
+        let combinedOutput = processResult.stdout + processResult.stderr
+        let output = String(decoding: combinedOutput, as: UTF8.self)
+        let result = TailOpsWormholeCommandResult(
+            executablePath: executable.url.path,
+            arguments: arguments,
+            exitCode: processResult.terminationStatus,
+            output: String(output.suffix(8_000))
+        )
+
+        guard result.succeeded else {
+            throw TailOpsWormholeCommandError.failed(exitCode: result.exitCode, output: result.output)
+        }
+
+        return result
     }
 
     private func commandEnvironment() -> [String: String] {
@@ -135,52 +160,4 @@ struct TailOpsWormholeCommandRunner {
         commandEnvironment["PATH"] = mergedPaths.joined(separator: ":")
         return commandEnvironment
     }
-}
-
-private func runBlocking(
-    executableURL: URL,
-    arguments: [String],
-    workingDirectory: URL,
-    environment: [String: String]
-) throws -> TailOpsWormholeCommandResult {
-    let outputURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("tailops-wormhole-\(UUID().uuidString).log")
-    FileManager.default.createFile(atPath: outputURL.path, contents: nil)
-
-    let outputHandle = try FileHandle(forWritingTo: outputURL)
-    defer {
-        try? outputHandle.close()
-        try? FileManager.default.removeItem(at: outputURL)
-    }
-
-    let process = Process()
-    process.executableURL = executableURL
-    process.arguments = arguments
-    process.currentDirectoryURL = workingDirectory
-    process.environment = environment
-    process.standardOutput = outputHandle
-    process.standardError = outputHandle
-
-    do {
-        try process.run()
-    } catch {
-        throw TailOpsWormholeCommandError.launchFailed(error.localizedDescription)
-    }
-
-    process.waitUntilExit()
-    try? outputHandle.synchronize()
-    let outputData = (try? Data(contentsOf: outputURL)) ?? Data()
-    let output = String(decoding: outputData, as: UTF8.self)
-    let result = TailOpsWormholeCommandResult(
-        executablePath: executableURL.path,
-        arguments: arguments,
-        exitCode: process.terminationStatus,
-        output: String(output.suffix(8_000))
-    )
-
-    guard result.succeeded else {
-        throw TailOpsWormholeCommandError.failed(exitCode: result.exitCode, output: result.output)
-    }
-
-    return result
 }

@@ -206,6 +206,47 @@ public struct TailOpsSettingsOpenRequest: Codable, Equatable, Sendable {
     }
 }
 
+public struct TailOpsRefreshRequest: Codable, Equatable, Sendable {
+    public let requestedAt: Date
+
+    public init(requestedAt: Date = Date()) {
+        self.requestedAt = requestedAt
+    }
+}
+
+public struct TailOpsRefreshHealth: Codable, Equatable, Sendable {
+    public let lastAttemptAt: Date?
+    public let lastSuccessAt: Date?
+    public let lastError: String?
+
+    public init(lastAttemptAt: Date? = nil, lastSuccessAt: Date? = nil, lastError: String? = nil) {
+        self.lastAttemptAt = lastAttemptAt
+        self.lastSuccessAt = lastSuccessAt
+        self.lastError = lastError
+    }
+
+    public var hasFailedSinceLastSuccess: Bool {
+        guard lastError != nil, let lastAttemptAt else { return false }
+        guard let lastSuccessAt else { return true }
+        return lastAttemptAt > lastSuccessAt
+    }
+
+    public var isRefreshInProgress: Bool {
+        guard lastError == nil, let lastAttemptAt else { return false }
+        guard let lastSuccessAt else { return true }
+        return lastAttemptAt > lastSuccessAt
+    }
+
+    public func isRefreshInProgress(at date: Date, timeout: TimeInterval = 120) -> Bool {
+        guard isRefreshInProgress, let lastAttemptAt else { return false }
+        return date.timeIntervalSince(lastAttemptAt) < timeout
+    }
+}
+
+public enum TailOpsRefreshSignal {
+    public static let notificationName = "dev.tailops.monitor.refresh"
+}
+
 public enum TailOpsSettingsOpenSignal {
     public static let notificationName = "dev.tailops.monitor.openSettings"
     public static let url = URL(string: "tailops://settings")!
@@ -267,7 +308,6 @@ public struct TailOpsWormholePendingTransfer: Codable, Equatable, Identifiable, 
     public let senderName: String
     public let fileName: String
     public let fileSizeBytes: Int64?
-    public let code: String
     public let direction: Direction
     public let createdAt: Date
     public let expiresAt: Date
@@ -279,7 +319,6 @@ public struct TailOpsWormholePendingTransfer: Codable, Equatable, Identifiable, 
         senderName: String,
         fileName: String,
         fileSizeBytes: Int64? = nil,
-        code: String,
         direction: Direction,
         createdAt: Date = Date(),
         expiresAt: Date
@@ -290,7 +329,6 @@ public struct TailOpsWormholePendingTransfer: Codable, Equatable, Identifiable, 
         self.senderName = senderName
         self.fileName = fileName
         self.fileSizeBytes = fileSizeBytes
-        self.code = code
         self.direction = direction
         self.createdAt = createdAt
         self.expiresAt = expiresAt
@@ -305,21 +343,31 @@ public struct TailOpsWormholeContact: Codable, Equatable, Identifiable, Sendable
     public let id: String
     public let displayName: String
     public let pairingID: String
-    public let sharedSecret: String
+    public let tailnetNodeID: String?
     public let createdAt: Date
 
     public init(
         id: String,
         displayName: String,
         pairingID: String,
-        sharedSecret: String,
+        tailnetNodeID: String? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
         self.displayName = displayName
         self.pairingID = pairingID
-        self.sharedSecret = sharedSecret
+        self.tailnetNodeID = tailnetNodeID
         self.createdAt = createdAt
+    }
+}
+
+public struct TailOpsWormholeSignalReplayRecord: Codable, Equatable, Sendable {
+    public let messageID: String
+    public let expiresAt: Date
+
+    public init(messageID: String, expiresAt: Date) {
+        self.messageID = messageID
+        self.expiresAt = expiresAt
     }
 }
 
@@ -344,14 +392,21 @@ public struct TailOpsWormholeCodeFactory: Sendable {
 
     public func code(
         for contact: TailOpsWormholeContact,
+        sharedSecret: String,
         date: Date = Date(),
         purpose: String = "file-transfer-v1"
     ) -> TailOpsWormholeTransferCode {
-        code(for: contact, windowIndex: windowIndex(for: date), purpose: purpose)
+        code(
+            for: contact,
+            sharedSecret: sharedSecret,
+            windowIndex: windowIndex(for: date),
+            purpose: purpose
+        )
     }
 
     public func candidateCodes(
         for contact: TailOpsWormholeContact,
+        sharedSecret: String,
         date: Date = Date(),
         skewTolerance: Int = 1,
         purpose: String = "file-transfer-v1"
@@ -359,16 +414,22 @@ public struct TailOpsWormholeCodeFactory: Sendable {
         let currentWindow = windowIndex(for: date)
         let tolerance = max(skewTolerance, 0)
         return (-tolerance...tolerance).map { offset in
-            code(for: contact, windowIndex: currentWindow + Int64(offset), purpose: purpose)
+            code(
+                for: contact,
+                sharedSecret: sharedSecret,
+                windowIndex: currentWindow + Int64(offset),
+                purpose: purpose
+            )
         }
     }
 
     private func code(
         for contact: TailOpsWormholeContact,
+        sharedSecret: String,
         windowIndex: Int64,
         purpose: String
     ) -> TailOpsWormholeTransferCode {
-        let secret = SymmetricKey(data: Data(contact.sharedSecret.utf8))
+        let secret = SymmetricKey(data: Data(sharedSecret.utf8))
         let message = "\(purpose):\(contact.pairingID):\(windowIndex)"
         let digest = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: secret)
         let bytes = Array(digest)

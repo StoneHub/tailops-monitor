@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TailOps Trust Hardening Plan</title>
+  <style>
+    :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    body { max-width: 980px; margin: 0 auto; padding: 32px 20px 72px; line-height: 1.5; }
+    h1, h2 { line-height: 1.15; }
+    .lede { font-size: 1.12rem; color: #6b7280; }
+    .gate { border-left: 4px solid #f59e0b; padding: 10px 14px; background: color-mix(in srgb, #f59e0b 10%, transparent); }
+    table { width: 100%; border-collapse: collapse; margin: 18px 0 28px; }
+    th, td { text-align: left; vertical-align: top; padding: 10px; border-bottom: 1px solid #9ca3af55; }
+    code { font-family: ui-monospace, SFMono-Regular, monospace; }
+    .done { color: #16a34a; }
+  </style>
+</head>
+<body>
+  <h1>TailOps Trust Hardening</h1>
+  <p class="lede">Branch: <code>codex/tailops-trust-hardening</code>. Objective: make the widget honest, the local server safe by default, and command execution bounded before adding more product surface.</p>
+
+  <div class="gate">
+    <strong>Scope gate:</strong> this tranche does not bundle Magic Wormhole, redesign the full settings surface, or add a transfer center. The security follow-on was subsequently completed on the same branch after explicit approval.
+  </div>
+
+  <h2>Parallel lanes</h2>
+  <table>
+    <thead><tr><th>Lane</th><th>Scope</th><th>Acceptance</th></tr></thead>
+    <tbody>
+      <tr><td>Browser safety</td><td>Loopback default, explicit LAN opt-in, restrictive CORS, HTTP integration coverage.</td><td>Default server is unreachable through non-loopback binding; existing local workflow remains one command.</td></tr>
+      <tr><td>Widget truth</td><td>Widget refresh requests host telemetry; persist refresh health; display snapshot age and stale/error state.</td><td>The refresh control cannot merely repaint cached data, and the widget never labels old data as newly updated.</td></tr>
+      <tr><td>Process reliability</td><td>Shared asynchronous runner with concurrent pipe draining, timeout, cancellation, and bounded captured output.</td><td>Tailscale and Wormhole processes cannot wait forever or deadlock on full pipes.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Integration gates</h2>
+  <ol>
+    <li>Review the combined diff for scope collisions and public API drift.</li>
+    <li>Run Node tests, Swift validation/tests, and Debug/Release unsigned builds in the visible integrated terminal.</li>
+    <li>For installed-app proof, resolve the exact Xcode product path, install it, compare executable hashes, relaunch, verify the running path, and confirm one PlugInKit widget registration from <code>/Applications</code>.</li>
+    <li>Do not push or open a pull request until Monroe approves after local validation.</li>
+  </ol>
+
+  <h2>Validation status</h2>
+  <ul>
+    <li class="done">Node suite: 28 passed, 0 failed.</li>
+    <li class="done">Swift XCTest suites: 12 passed, 0 failed.</li>
+    <li class="done"><code>TailOpsCoreValidation</code>: passed.</li>
+    <li class="done">SwiftPM <code>TailOpsMacViews</code> and <code>TailOpsWidgetViews</code>: built successfully.</li>
+    <li class="done">Unsigned Xcode Debug and Release: built successfully.</li>
+    <li class="done">Signed build 8 installed from the resolved Xcode product; executable hashes match and the running path is <code>/Applications/TailOps.app</code>.</li>
+    <li class="done">PlugInKit shows one widget registration from <code>/Applications</code>.</li>
+    <li class="done">Legacy secrets migrated to device-only Keychain; all shared JSON copies contain neither <code>sharedSecret</code> nor pending transfer codes.</li>
+  </ul>
+
+  <h2>Completed security follow-on</h2>
+  <ul>
+    <li class="done">Moved Wormhole pairing secrets to Keychain and scrubbed legacy JSON copies.</li>
+    <li class="done">Removed transfer codes from shared persistence and pending notices.</li>
+    <li class="done">Hardened the V1 pending-signal listener with exact peer identity, replay and expiry validation, delivery acknowledgements, and resource limits.</li>
+    <li class="done">Added proper Swift test targets and pull-request/main CI gates.</li>
+  </ul>
+</body>
+</html>

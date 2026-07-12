@@ -29,13 +29,18 @@ public struct CopyTailnetValueIntent: AppIntent {
 
 public struct RefreshTailOpsWidgetIntent: AppIntent {
     public static let title: LocalizedStringResource = "Refresh TailOps Widget"
-    public static let description = IntentDescription("Asks WidgetKit to reload TailOps widget timelines.")
-    public static let openAppWhenRun = false
+    public static let description = IntentDescription("Asks the TailOps app to fetch fresh tailnet status.")
+    public static let openAppWhenRun = true
 
     public init() {}
 
     public func perform() async throws -> some IntentResult {
-        WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
+        try SharedSnapshotStore().saveRefreshRequest(TailOpsRefreshRequest())
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name(TailOpsRefreshSignal.notificationName),
+            object: nil,
+            deliverImmediately: true
+        )
         return .result()
     }
 }

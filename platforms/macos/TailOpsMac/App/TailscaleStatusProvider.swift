@@ -59,7 +59,7 @@ struct ProcessTaildropFileTransferProvider: TaildropFileTransferProviding {
             "cp",
             fileURL.path,
             "\(target):"
-        ])
+        ], timeout: 10 * 60)
     }
 
     func send(fileURLs: [URL], to target: TaildropTarget) async throws {
@@ -68,7 +68,7 @@ struct ProcessTaildropFileTransferProvider: TaildropFileTransferProviding {
         _ = try await runner.run(arguments: [
             "file",
             "cp"
-        ] + fileURLs.map(\.path) + ["\(target.address):"])
+        ] + fileURLs.map(\.path) + ["\(target.address):"], timeout: 10 * 60)
     }
 }
 
@@ -84,6 +84,7 @@ struct ProcessTaildropTargetProvider: TaildropTargetProviding {
 }
 
 struct TailscaleCommandRunner: Sendable {
+    private let processRunner = BoundedProcessRunner()
     private let candidateExecutablePaths = [
         "/usr/local/bin/tailscale",
         "/Applications/Tailscale.app/Contents/MacOS/tailscale",
@@ -92,35 +93,40 @@ struct TailscaleCommandRunner: Sendable {
         "/usr/bin/tailscale",
     ]
 
-    func run(arguments: [String]) async throws -> (stdout: Data, stderr: Data) {
-        try await Task.detached(priority: .utility) {
-            guard let executableURL = candidateExecutablePaths
-                .map(URL.init(fileURLWithPath:))
-                .first(where: { FileManager.default.isExecutableFile(atPath: $0.path) })
-            else {
-                throw TailscaleStatusError.executableNotFound(candidateExecutablePaths)
-            }
+    func run(
+        arguments: [String],
+        timeout: TimeInterval = 20
+    ) async throws -> (stdout: Data, stderr: Data) {
+        guard let executableURL = candidateExecutablePaths
+            .map(URL.init(fileURLWithPath:))
+            .first(where: { FileManager.default.isExecutableFile(atPath: $0.path) })
+        else {
+            throw TailscaleStatusError.executableNotFound(candidateExecutablePaths)
+        }
 
-            let process = Process()
-            let output = Pipe()
-            let errorOutput = Pipe()
-            process.executableURL = executableURL
-            process.arguments = arguments
-            process.standardOutput = output
-            process.standardError = errorOutput
+        let result: BoundedProcessResult
+        do {
+            result = try await processRunner.run(
+                executableURL: executableURL,
+                arguments: arguments,
+                timeout: timeout,
+                maximumStandardOutputBytes: 8 * 1_024 * 1_024,
+                maximumStandardErrorBytes: 256 * 1_024
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw TailscaleStatusError.commandFailed(error.localizedDescription)
+        }
 
-            try process.run()
-            process.waitUntilExit()
+        guard result.terminationStatus == 0 else {
+            let message = String(data: result.stderr, encoding: .utf8)
+            throw TailscaleStatusError.commandFailed(
+                message?.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
 
-            let stdout = output.fileHandleForReading.readDataToEndOfFile()
-            let stderr = errorOutput.fileHandleForReading.readDataToEndOfFile()
-            if process.terminationStatus == 0 {
-                return (stdout, stderr)
-            }
-
-            let message = String(data: stderr, encoding: .utf8)
-            throw TailscaleStatusError.commandFailed(message?.trimmingCharacters(in: .whitespacesAndNewlines))
-        }.value
+        return (result.stdout, result.stderr)
     }
 }
 

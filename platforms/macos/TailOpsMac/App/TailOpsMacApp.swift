@@ -15,6 +15,11 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        do {
+            _ = try SharedSnapshotStore().loadWormholeConfigurationMigratingSecrets()
+        } catch {
+            NSLog("TailOps could not migrate Wormhole secrets to Keychain: %@", error.localizedDescription)
+        }
         NSApp.servicesProvider = TaildropServiceProvider.shared
         NSUpdateDynamicServices()
         DistributedNotificationCenter.default().addObserver(
@@ -139,7 +144,9 @@ struct TailOpsMacApp: App {
         _monitor = StateObject(wrappedValue: monitor)
         _preferencesModel = StateObject(wrappedValue: preferencesModel)
         Task { @MainActor in
-            await monitor.refresh()
+            if !(await monitor.refreshIfRequested()) {
+                await monitor.refresh()
+            }
             monitor.startAutomaticRefresh()
         }
     }
