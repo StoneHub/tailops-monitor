@@ -16,8 +16,20 @@ _Avoid_: Production dashboard, supported web product, live agent discovery
 A device represented by Tailscale status and shown in TailOps.
 _Avoid_: Agent, service
 
+**Fleet node**:
+A Tailnet host Monroe manages and includes in operational views.
+_Avoid_: Every Tailscale peer, provider node
+
+**Provider node**:
+Infrastructure enrolled by an external network provider, such as a Mullvad exit node. It remains available to Tailscale but is not part of Monroe's Fleet.
+_Avoid_: Fleet node, managed host
+
+**Fleet registry**:
+The separate Git-backed record of durable device identity, desired state, runbooks, and dated evidence. It is not a live health source.
+_Avoid_: TailOps snapshot, live dashboard
+
 **Shared snapshot**:
-A serialized view of tailnet hosts that the native host app writes and the widget reads.
+A serialized view of Fleet nodes that the native host app writes and the widget reads.
 _Avoid_: Live widget state, backend state
 
 **Taildrop**:

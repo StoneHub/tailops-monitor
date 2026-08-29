@@ -12,6 +12,8 @@ TailOps is a macOS-first Tailscale companion. The supported product is the Widge
 | Browser dashboard | Unsupported experiment | Local Node process only; no hosted deployment is configured |
 | Agent directory | Static prototype data | `/api/agents` reads `data/agents.sample.json`; it is not live agent discovery |
 
+TailOps is the live operational client for Monroe's Fleet. The separate private Fleet repository owns durable identity, desired state, runbooks, and dated evidence. TailOps does not import that inventory or treat it as live health. See [ADR-0002](docs/adr/0002-fleet-integration.md).
+
 The repository has no production web deployment. The browser server binds to `127.0.0.1` unless a user explicitly changes `HOST`, and it has no application-level authentication.
 
 ## Repository layout
@@ -62,6 +64,7 @@ That command proves compilation only. It does not prove that a signed App Group 
 The hidden host app owns active work:
 
 - runs `tailscale status --json` on launch, on an accepted refresh request, and every hour while the app remains alive;
+- keeps managed Fleet nodes in the shared snapshot while hiding Mullvad provider peers tagged `tag:mullvad-exit-node`;
 - samples each online peer with six `tailscale ping` attempts at most once per hour;
 - writes snapshots, refresh health, settings, and non-secret Wormhole state to the App Group or local fallback;
 - owns Settings, Finder Services, Wormhole orchestration, and the pending-transfer listener.
@@ -140,7 +143,7 @@ GET /api/agents
 GET /.well-known/agent.json
 ```
 
-The server can read live Tailscale status and optional ASUSWRT telemetry through Home Assistant. Set `TAILOPS_HA_URL` and `TAILOPS_HA_TOKEN` locally for that integration. Do not commit the token.
+The server can read live Tailscale status and optional ASUSWRT telemetry through Home Assistant. Set `TAILOPS_HA_URL` and `TAILOPS_HA_TOKEN` locally for that integration. The URL defaults to loopback. Do not commit the token.
 
 To expose the server to a trusted LAN or tailnet, set `HOST` explicitly. The server prints a warning because its endpoints have no authentication. Do not expose it to the public internet.
 

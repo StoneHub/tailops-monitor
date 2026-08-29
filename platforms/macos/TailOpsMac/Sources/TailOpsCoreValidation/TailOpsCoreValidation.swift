@@ -152,21 +152,21 @@ struct TailOpsCoreValidation {
 
     private static func actionCatalogKeepsDefaultsWhenOnlyOneCustomActionExists() {
         let host = TailnetHost(
-            id: "fcfdev",
-            name: "fcfdev",
+            id: "worker-node",
+            name: "worker-node",
             role: .peer,
             status: .online,
             operatingSystem: "linux",
-            primaryAddress: "100.104.71.37",
-            magicDNSName: "fcfdev.tailnet.ts.net",
+            primaryAddress: "100.64.0.24",
+            magicDNSName: "worker-node.example.test",
             lastSeen: nil,
             services: []
         )
         let config = TailnetActionConfiguration(hostActions: [
             TailnetHostActionConfiguration(
-                hostID: "fcfdev",
+                hostID: "worker-node",
                 actions: [
-                    TailnetQuickAction(emoji: "🌐", title: "Panel", kind: .url, target: "http://100.104.71.37:8080")
+                    TailnetQuickAction(emoji: "🌐", title: "Panel", kind: .url, target: "http://worker-node.example.test:8080")
                 ]
             )
         ])
@@ -585,9 +585,9 @@ struct TailOpsCoreValidation {
 
     private static func pingParserReadsLatencyAndRouteSamples() {
         let output = """
-        pong from fcfdev (100.104.71.37) via DERP(mia) in 42ms
-        pong from fcfdev (100.104.71.37) via peer-relay(198.51.100.167:7777:vni:7) in 35.5ms
-        pong from fcfdev (100.104.71.37) via 192.168.1.64:41642 in 10ms
+        pong from worker-node (100.64.0.24) via DERP(mia) in 42ms
+        pong from worker-node (100.64.0.24) via peer-relay(198.51.100.167:7777:vni:7) in 35.5ms
+        pong from worker-node (100.64.0.24) via 192.168.1.64:41642 in 10ms
         """
 
         let summary = TailnetPingOutputParser().parse(output)
@@ -639,7 +639,7 @@ struct TailOpsCoreValidation {
 
     private static func taildropTargetsParserReadsAvailableAndOfflineTargets() {
         let output = """
-        100.104.71.37\tfcfdev
+        100.64.0.24\tworker-node
         100.126.20.113\tBenjamin’s MacBook Pro (2)
         100.83.152.74\tpixel-6a\toffline; last seen 20h27m0s ago
         """
@@ -648,7 +648,7 @@ struct TailOpsCoreValidation {
 
         expect(
             targets == [
-                TaildropTarget(address: "100.104.71.37", name: "fcfdev", isAvailable: true),
+                TaildropTarget(address: "100.64.0.24", name: "worker-node", isAvailable: true),
                 TaildropTarget(address: "100.126.20.113", name: "Benjamin’s MacBook Pro", isAvailable: true),
                 TaildropTarget(address: "100.83.152.74", name: "pixel-6a", detail: "offline; last seen 20h27m0s ago", isAvailable: false)
             ],

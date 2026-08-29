@@ -24,22 +24,20 @@
       ]
     },
     {
-      "host": "fcfdev",
-      "hostId": "fcfdev",
+      "host": "worker-node",
+      "hostId": "worker-node",
       "status": "online",
-      "tailscaleIp": "100.104.71.37",
-      "magicDns": "fcfdev.tail161fa6.ts.net",
+      "tailscaleIp": "100.64.0.24",
+      "magicDns": "worker-node.example.test",
       "agents": [
         {
-          "agentId": "home-assistant-mcp",
-          "type": "MCP",
+          "agentId": "bounded-worker",
+          "type": "local worker",
           "status": "available",
-          "contact": "http://100.104.71.37:8086/mcp",
+          "contact": "http://worker-node.example.test:8787/agent",
           "capabilities": [
-            "home-assistant",
-            "asuswrt",
-            "router-stats",
-            "local-network"
+            "health",
+            "tasks"
           ],
           "lastSeen": "2026-04-29T11:25:00-04:00"
         }

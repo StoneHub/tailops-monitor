@@ -1,4 +1,4 @@
-const DEFAULT_HA_URL = "http://100.104.71.37:8123";
+const DEFAULT_HA_URL = "http://127.0.0.1:8123";
 
 export const ASUS_ROUTER_ENTITIES = {
   cpu: "sensor.192_168_50_1_cpu_usage",

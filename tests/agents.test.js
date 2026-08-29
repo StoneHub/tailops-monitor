@@ -5,6 +5,7 @@ import {
   getReachableAgents,
   summarizeAgentDirectory,
   serializeAgentDirectory,
+  sampleAgentHosts,
 } from "../src/agents.js";
 
 const hosts = [
@@ -88,4 +89,12 @@ test("summarizeAgentDirectory counts status, types, and unique capabilities", ()
   assert.equal(summary.types.OpenClaw, 1);
   assert.equal(summary.types["local worker"], 1);
   assert.deepEqual(summary.capabilities, ["files", "indexing", "storage", "transcode", "video"]);
+});
+
+test("static agent examples do not publish live Fleet identity", () => {
+  const worker = sampleAgentHosts.find((host) => host.id === "worker-node");
+
+  assert.equal(worker.magicDns, "worker-node.example.test");
+  assert.equal(worker.agents[0].endpoint, "http://worker-node.example.test:8787/agent");
+  assert.equal(sampleAgentHosts.some((host) => host.id === "fcfdev"), false);
 });
