@@ -32,8 +32,8 @@ final class TailOpsSettingsWindowController {
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.level = .floating
         window.collectionBehavior = [.moveToActiveSpace]
-        window.setContentSize(NSSize(width: 640, height: 500))
-        window.minSize = NSSize(width: 560, height: 430)
+        window.setContentSize(NSSize(width: 980, height: 620))
+        window.minSize = NSSize(width: 820, height: 560)
         window.isReleasedWhenClosed = false
         window.center()
 

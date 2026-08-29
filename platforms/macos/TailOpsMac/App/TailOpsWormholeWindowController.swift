@@ -32,8 +32,8 @@ final class TailOpsWormholeWindowController {
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.level = .floating
         window.collectionBehavior = [.moveToActiveSpace]
-        window.setContentSize(NSSize(width: 620, height: 520))
-        window.minSize = NSSize(width: 540, height: 460)
+        window.setContentSize(NSSize(width: 680, height: 680))
+        window.minSize = NSSize(width: 600, height: 590)
         window.isReleasedWhenClosed = false
         window.center()
 
@@ -534,41 +534,55 @@ private struct TailOpsWormholeSecretUnavailableError: LocalizedError {
 struct TailOpsWormholeView: View {
     @ObservedObject var model: TailOpsWormholeModel
     @State private var showsSetupSecret = false
+    @State private var showsPairingDetails = false
     @State private var isDropTargeted = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
+        ZStack {
+            TailOpsWindowBackground()
 
-            if model.executable == nil {
-                missingExecutableView
-            } else {
-                pairingView
-                pairedComputerView
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    header
+
+                    if model.executable == nil {
+                        missingExecutableView
+                    } else {
+                        executableStatus
+                        pairedComputerView
+                        pairingDetails
+                    }
+
+                    statusView
+                }
+                .padding(22)
             }
-
-            statusView
-            Spacer(minLength: 0)
         }
-        .padding(20)
-        .frame(minWidth: 520, minHeight: 430, alignment: .topLeading)
+        .frame(minWidth: 580, minHeight: 560, alignment: .topLeading)
+        .onAppear {
+            if model.configuration.contacts.isEmpty {
+                showsPairingDetails = true
+            }
+        }
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.teal.opacity(0.15))
+                    .frame(width: 42, height: 42)
+                Image(systemName: "paperplane.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.teal)
+            }
+
             VStack(alignment: .leading, spacing: 3) {
-                Text("Wormhole")
+                Text("Magic Wormhole")
                     .font(.title2.weight(.semibold))
-                if let executable = model.executable {
-                    Text(executable.displayPath)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Text("Magic Wormhole setup")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Private, interactive file transfer")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -580,6 +594,48 @@ struct TailOpsWormholeView: View {
             }
             .help("Check again")
         }
+    }
+
+    private var executableStatus: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.teal)
+            Text("External CLI")
+                .font(.callout.weight(.medium))
+            Spacer()
+            if let executable = model.executable {
+                Text(executable.displayPath)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Text("Ready")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+        }
+        .padding(14)
+        .tailOpsGlassPanel(tint: .teal)
+    }
+
+    private var pairingDetails: some View {
+        DisclosureGroup(isExpanded: $showsPairingDetails) {
+            pairingView
+                .padding(.top, 12)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Advanced Pairing Details")
+                        .font(.callout.weight(.medium))
+                    Text("Secrets remain in Keychain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(14)
+        .tailOpsGlassPanel(tint: .purple)
     }
 
     private var missingExecutableView: some View {
@@ -612,8 +668,8 @@ struct TailOpsWormholeView: View {
                 }
             }
         }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .padding(16)
+        .tailOpsGlassPanel(tint: .orange)
     }
 
     private var pairingView: some View {
@@ -724,7 +780,7 @@ struct TailOpsWormholeView: View {
             }
         }
         .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var pairedComputerView: some View {
@@ -796,22 +852,24 @@ struct TailOpsWormholeView: View {
                 .disabled(model.currentCode == nil || isRunning)
             }
         }
-        .padding(14)
+        .padding(16)
         .background(
             LinearGradient(
                 colors: [
-                    Color.accentColor.opacity(isDropTargeted || isRunning ? 0.2 : 0.08),
-                    Color.primary.opacity(0.045)
+                    Color.teal.opacity(isDropTargeted || isRunning ? 0.2 : 0.09),
+                    Color.blue.opacity(0.045)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            in: RoundedRectangle(cornerRadius: 8)
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.accentColor.opacity(isDropTargeted || isRunning ? 0.85 : 0.28), lineWidth: isDropTargeted ? 2 : 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.teal.opacity(isDropTargeted || isRunning ? 0.85 : 0.3), lineWidth: isDropTargeted ? 2 : 1)
         }
+        .shadow(color: Color.black.opacity(0.08), radius: 12, y: 5)
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTargeted) { providers in
             handleFileDrop(providers)
         }

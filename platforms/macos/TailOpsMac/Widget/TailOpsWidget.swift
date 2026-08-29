@@ -113,11 +113,15 @@ struct TailOpsWidgetView: View {
                 HStack(spacing: 7) {
                     Button(intent: OpenTailscaleAppIntent()) {
                         Label("Tailscale", systemImage: "arrow.up.forward.app")
-                            .labelStyle(.iconOnly)
+                            .labelStyle(.titleAndIcon)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
+                            .background(Color.primary.opacity(0.09), in: Capsule())
                     }
                     Button(intent: RefreshTailOpsWidgetIntent()) {
                         Image(systemName: "arrow.clockwise")
                     }
+                    .accessibilityLabel("Refresh TailOps")
                     WidgetSnapshotFreshness(
                         generatedAt: entry.snapshot.generatedAt,
                         refreshHealth: entry.refreshHealth,
@@ -127,6 +131,7 @@ struct TailOpsWidgetView: View {
                     Link(destination: TailOpsSettingsOpenSignal.url) {
                         Image(systemName: "gearshape")
                     }
+                    .accessibilityLabel("Open TailOps Settings")
                 }
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -154,7 +159,8 @@ struct TailOpsWidgetView: View {
                                 for: entry.wormholeConfiguration.contact(for: host)
                             ),
                             showsActions: showsHostActions,
-                            isCompact: usesCompactRows
+                            isCompact: usesCompactRows,
+                            showsActionTitles: family == .systemMedium
                         )
                     }
                     if layout.hiddenOfflineCount > 0 {
@@ -214,8 +220,10 @@ struct TailOpsWidgetView: View {
 
     private var gridColumnCount: Int {
         switch family {
-        case .systemLarge, .systemExtraLarge:
+        case .systemExtraLarge:
             return 3
+        case .systemLarge:
+            return 2
         default:
             return 2
         }
@@ -240,12 +248,12 @@ struct TailOpsWidgetView: View {
                 columns: gridColumnCount,
                 columnSpacing: 10,
                 rowSpacing: 10,
-                tileMinHeight: 102,
-                tileMaxHeight: 102,
+                tileMinHeight: 92,
+                tileMaxHeight: nil,
                 tileHorizontalPadding: 10,
                 tileVerticalPadding: 8,
                 tileContentSpacing: 7,
-                showsActionTitles: false
+                showsActionTitles: true
             )
         }
     }
@@ -432,9 +440,9 @@ private struct TailOpsWidgetBackground: View {
         if renderingMode == .fullColor {
             LinearGradient(
                 colors: [
-                    Color.green.opacity(0.15),
-                    Color.blue.opacity(0.08),
-                    Color.orange.opacity(0.08)
+                    Color(red: 0.06, green: 0.17, blue: 0.31).opacity(0.96),
+                    Color(red: 0.09, green: 0.28, blue: 0.48).opacity(0.88),
+                    Color.cyan.opacity(0.12)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -576,15 +584,13 @@ private struct WidgetHostStatusTile: View {
         )
         .padding(.horizontal, style.tileHorizontalPadding)
         .padding(.vertical, style.tileVerticalPadding)
-        .background(tileBackground, in: RoundedRectangle(cornerRadius: 8))
+        .background(tileBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .widgetAccentable(false)
         .overlay {
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(
-                    pendingTransfer == nil
-                        ? (wormholeContact == nil ? color.opacity(0.42) : Color.accentColor.opacity(0.72))
-                        : Color.accentColor.opacity(0.95),
-                    lineWidth: pendingTransfer == nil ? (wormholeContact == nil ? 1 : 1.5) : 2
+                    pendingTransfer == nil ? Color.white.opacity(0.18) : Color.accentColor.opacity(0.92),
+                    lineWidth: pendingTransfer == nil ? 1 : 2
                 )
         }
     }
@@ -641,8 +647,9 @@ private struct WidgetHostStatusTile: View {
     private var tileBackground: LinearGradient {
         LinearGradient(
             colors: [
-                color.opacity(host.status == .offline ? 0.09 : 0.2),
-                Color.primary.opacity(0.045)
+                Color.white.opacity(0.13),
+                Color.blue.opacity(0.07),
+                Color.black.opacity(0.05)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -668,6 +675,7 @@ private struct WidgetHostActionRow: View {
     let pendingTransfer: TailOpsWormholePendingTransfer?
     let showsActions: Bool
     let isCompact: Bool
+    let showsActionTitles: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -708,18 +716,23 @@ private struct WidgetHostActionRow: View {
             if showsActions {
                 HStack(spacing: 4) {
                     if let wormholeContact {
-                        WidgetWormholeChip(mode: .send, contact: wormholeContact)
-                        WidgetWormholeChip(mode: .receive, contact: wormholeContact, pendingTransfer: pendingTransfer)
+                        WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: showsActionTitles)
+                        WidgetWormholeChip(
+                            mode: .receive,
+                            contact: wormholeContact,
+                            pendingTransfer: pendingTransfer,
+                            showsTitle: showsActionTitles
+                        )
                     }
                     ForEach(actions.prefix(2), id: \.title) { action in
-                        WidgetActionChip(action: action)
+                        WidgetActionChip(action: action, showsTitle: showsActionTitles)
                     }
                 }
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, isCompact ? 5 : 6)
-        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         .widgetAccentable(false)
         .overlay(alignment: .leading) {
             Rectangle()
@@ -739,11 +752,11 @@ private struct WidgetHostActionRow: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 3)
                         .opacity(0.11)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                         .allowsHitTesting(false)
                 }
                 if wormholeContact != nil {
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .stroke(Color.accentColor.opacity(pendingTransfer == nil ? 0.62 : 0.95), lineWidth: pendingTransfer == nil ? 1.25 : 2)
                 }
             }
