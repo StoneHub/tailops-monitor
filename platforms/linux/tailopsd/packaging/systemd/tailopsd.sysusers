@@ -1,0 +1,1 @@
+u tailopsd - "TailOps observation collector" /var/lib/tailopsd /usr/sbin/nologin

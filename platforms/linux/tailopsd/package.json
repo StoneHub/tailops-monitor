@@ -11,7 +11,16 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "pack:linux": "mkdir -p dist && npm pack --cache dist/.npm-cache --pack-destination dist"
   },
+  "files": [
+    "bin",
+    "src",
+    "packaging",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
   "license": "MIT"
 }
