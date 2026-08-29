@@ -94,11 +94,6 @@ struct TailOpsSettingsView: View {
             }
 
             Spacer()
-
-            Text("Native widget controls")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 10)
         }
         .padding(14)
         .frame(width: 164)
