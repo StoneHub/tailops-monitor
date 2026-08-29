@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -44,7 +44,7 @@ jobs:
         run: npm run pack:linux
 
       - name: Upload package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tailopsd-linux-${{ github.sha }}
           path: platforms/linux/tailopsd/dist/*.tgz
