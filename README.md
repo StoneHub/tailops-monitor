@@ -7,7 +7,7 @@ TailOps is a macOS-first Tailscale companion. The supported product is the Widge
 | Area | State | Proof boundary |
 | --- | --- | --- |
 | Native macOS app and widget | Supported product | Signed App Group build, installed app, running process, and WidgetKit registration are separate checks |
-| Linux `tailopsd` CLI | Source candidate | Versioned read-only observation contract; FCFDEV runtime and installation remain unproven |
+| Linux `tailopsd` CLI | Platform project | Versioned read-only observation contract; package, host, install, runtime, and Fleet transport are separate checks |
 | Taildrop Finder Service | Supported same-account transfer path | Requires the local Tailscale CLI and a reachable destination |
 | Magic Wormhole | Interactive cross-account transfer path | Requires the external `wormhole` CLI and both participants to be present |
 | Browser dashboard | Unsupported experiment | Local Node process only; no hosted deployment is configured |
@@ -128,6 +128,8 @@ swift build --target TailOpsWidgetViews
 GitHub Actions also runs unsigned Debug and Release Xcode builds. A passing source build or CI run is not installed-widget proof. Signed App Group behavior, the copied application bundle, the running executable, and the visible widget each need their own evidence.
 
 The Linux source check runs as part of `npm test`. See [`platforms/linux/tailopsd/README.md`](platforms/linux/tailopsd/README.md) for its narrower runtime and proof boundary.
+
+Build the architecture-neutral Linux package with `npm run pack:linux`. The optional systemd adapter runs as a restricted account with no retry policy and fixed resource limits. Follow the [Linux install runbook](docs/runbooks/linux-tailopsd.md); do not infer a successful host install from the package artifact.
 
 ## Browser experiment
 

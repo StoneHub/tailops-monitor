@@ -4,4 +4,6 @@ TailOps will add a CLI-only Linux collector under `platforms/linux/tailopsd`, wi
 
 The collector is transport-neutral. It does not open a service listener, accept arbitrary commands, perform SSH, import Fleet registry files, or claim that its output is durable Fleet identity. A separate Fleet worker or Threadspace transport adapter may invoke it and attach the observation as evidence under Fleet's task-envelope contract.
 
-This ADR records source architecture only. FCFDEV's Linux distribution, Node runtime, Tailscale permissions, installation, service packaging, and live output remain separate proof gates.
+The Linux CLI is the platform product. Systemd is an optional packaging adapter, not part of the observation interface. The adapter runs a restricted oneshot every 15 minutes, writes the snapshot atomically, has no retry policy, and carries explicit CPU, memory, and task limits.
+
+This ADR records architecture, not deployment evidence. Linux distribution, Node runtime, Tailscale permissions, package, installation, scheduled runtime, and live output remain separate proof gates for each target host.

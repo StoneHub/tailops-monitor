@@ -29,6 +29,54 @@ test("snapshot writes one versioned JSON observation", async () => {
   assert.equal(JSON.parse(stdout).observedAt, "2026-08-29T14:00:00.000Z");
 });
 
+test("snapshot can atomically hand an observation to a persistence adapter", async () => {
+  let receipt = "";
+  let writtenPath = null;
+  let writtenObservation = null;
+
+  const exitCode = await runCLI(["snapshot", "--output", "/var/lib/tailopsd/fleet-observation.json"], {
+    collectStatus: async () => status,
+    now: () => new Date("2026-08-29T14:00:00.000Z"),
+    writeObservation: async (path, observation) => {
+      writtenPath = path;
+      writtenObservation = observation;
+    },
+    writeStdout: (value) => { receipt += value; },
+    writeStderr: () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(writtenPath, "/var/lib/tailopsd/fleet-observation.json");
+  assert.equal(writtenObservation.kind, "tailops.fleet-observation");
+  assert.equal(JSON.parse(receipt).status, "written");
+});
+
+test("doctor returns its readiness exit code", async () => {
+  let stdout = "";
+
+  const exitCode = await runCLI(["doctor"], {
+    inspectRuntime: async () => ({ status: "blocked", kind: "tailops.runtime-doctor" }),
+    writeStdout: (value) => { stdout += value; },
+    writeStderr: () => {},
+  });
+
+  assert.equal(exitCode, 4);
+  assert.equal(JSON.parse(stdout).status, "blocked");
+});
+
+test("version reports the package version without collecting status", async () => {
+  let stdout = "";
+
+  const exitCode = await runCLI(["version"], {
+    collectStatus: async () => { throw new Error("must not run"); },
+    writeStdout: (value) => { stdout += value; },
+    writeStderr: () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(stdout, "tailopsd 0.1.0\n");
+});
+
 test("unknown options fail closed before collecting status", async () => {
   let collected = false;
   let stderr = "";

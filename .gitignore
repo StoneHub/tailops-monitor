@@ -10,4 +10,5 @@ xcuserdata/
 platforms/macos/TailOpsMac/.build/
 platforms/macos/TailOpsMac/.swiftpm/
 platforms/macos/TailOpsMac/build/
+platforms/linux/tailopsd/dist/
 DerivedData/
