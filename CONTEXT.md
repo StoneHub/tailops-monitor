@@ -28,6 +28,14 @@ _Avoid_: Fleet node, managed host
 The separate Git-backed record of durable device identity, desired state, runbooks, and dated evidence. It is not a live health source.
 _Avoid_: TailOps snapshot, live dashboard
 
+**Fleet observation**:
+A versioned, non-secret snapshot collected from a local live adapter and suitable for attachment as Fleet task evidence. It is not durable identity or desired state.
+_Avoid_: Fleet registry record, deployment proof
+
+**Collector node**:
+The device on which a local TailOps adapter observed runtime state. Its runtime hostname does not replace the Fleet registry's durable identity.
+_Avoid_: Fleet registry entry, orchestrator
+
 **Shared snapshot**:
 A serialized view of Fleet nodes that the native host app writes and the widget reads.
 _Avoid_: Live widget state, backend state

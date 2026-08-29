@@ -7,6 +7,7 @@ TailOps is a macOS-first Tailscale companion. The supported product is the Widge
 | Area | State | Proof boundary |
 | --- | --- | --- |
 | Native macOS app and widget | Supported product | Signed App Group build, installed app, running process, and WidgetKit registration are separate checks |
+| Linux `tailopsd` CLI | Source candidate | Versioned read-only observation contract; FCFDEV runtime and installation remain unproven |
 | Taildrop Finder Service | Supported same-account transfer path | Requires the local Tailscale CLI and a reachable destination |
 | Magic Wormhole | Interactive cross-account transfer path | Requires the external `wormhole` CLI and both participants to be present |
 | Browser dashboard | Unsupported experiment | Local Node process only; no hosted deployment is configured |
@@ -20,6 +21,7 @@ The repository has no production web deployment. The browser server binds to `12
 
 ```text
 platforms/macos/TailOpsMac/       Native app, widget, shared state, intents, and Swift tests
+platforms/linux/tailopsd/         Read-only Linux Fleet observation CLI and contract tests
 src/                              Browser dashboard server and telemetry modules
 tests/                            Node tests for the browser experiment
 data/agents.sample.json           Static agent-directory prototype data
@@ -125,6 +127,8 @@ swift build --target TailOpsWidgetViews
 
 GitHub Actions also runs unsigned Debug and Release Xcode builds. A passing source build or CI run is not installed-widget proof. Signed App Group behavior, the copied application bundle, the running executable, and the visible widget each need their own evidence.
 
+The Linux source check runs as part of `npm test`. See [`platforms/linux/tailopsd/README.md`](platforms/linux/tailopsd/README.md) for its narrower runtime and proof boundary.
+
 ## Browser experiment
 
 Run the unsupported local dashboard with:
@@ -159,6 +163,8 @@ To expose the server to a trusted LAN or tailnet, set `HOST` explicitly. The ser
 
 - [Domain glossary](CONTEXT.md)
 - [Native product decision](docs/adr/0001-native-product-boundary.md)
+- [Fleet registry and live-state ownership](docs/adr/0002-fleet-integration.md)
+- [Linux Fleet observation CLI](docs/adr/0003-linux-fleet-observation-cli.md)
 - [April browser concept](docs/archive/2026-04/2026-04-29-tailops-monitor-design.md)
 - [April implementation plan](docs/archive/2026-04/2026-04-29-tailops-monitor-implementation.md)
 - [May native control-surface plan](docs/archive/2026-05/2026-05-14-tailops-macos-control-surface.md)
