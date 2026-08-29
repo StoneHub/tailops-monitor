@@ -102,4 +102,160 @@ public extension TailnetActionConfiguration {
         )
     ])
 }
+
+public final class InMemoryTailOpsStore: @unchecked Sendable,
+    TailnetStateStoring,
+    TailOpsSettingsStoring,
+    TailOpsWormholeStateStoring,
+    TailOpsAppGroupRequestStoring
+{
+    private let lock = NSLock()
+    private var snapshot: TailnetSnapshot?
+    private var actionConfiguration: TailnetActionConfiguration?
+    private var appPreferences: TailOpsAppPreferences?
+    private var wormholeConfiguration: TailOpsWormholeConfiguration?
+    private var wormholePendingTransfers: [TailOpsWormholePendingTransfer]
+    private var wormholeSignalReplayRecords: [TailOpsWormholeSignalReplayRecord]
+    private var settingsOpenRequest: TailOpsSettingsOpenRequest?
+    private var refreshRequest: TailOpsRefreshRequest?
+    private var wormholeOpenRequest: TailOpsWormholeOpenRequest?
+    private var refreshHealth: TailOpsRefreshHealth?
+
+    public init(
+        snapshot: TailnetSnapshot? = nil,
+        actionConfiguration: TailnetActionConfiguration? = nil,
+        appPreferences: TailOpsAppPreferences? = nil,
+        wormholeConfiguration: TailOpsWormholeConfiguration? = nil,
+        wormholePendingTransfers: [TailOpsWormholePendingTransfer] = [],
+        wormholeSignalReplayRecords: [TailOpsWormholeSignalReplayRecord] = [],
+        settingsOpenRequest: TailOpsSettingsOpenRequest? = nil,
+        refreshRequest: TailOpsRefreshRequest? = nil,
+        wormholeOpenRequest: TailOpsWormholeOpenRequest? = nil,
+        refreshHealth: TailOpsRefreshHealth? = nil
+    ) {
+        self.snapshot = snapshot
+        self.actionConfiguration = actionConfiguration
+        self.appPreferences = appPreferences
+        self.wormholeConfiguration = wormholeConfiguration
+        self.wormholePendingTransfers = wormholePendingTransfers
+        self.wormholeSignalReplayRecords = wormholeSignalReplayRecords
+        self.settingsOpenRequest = settingsOpenRequest
+        self.refreshRequest = refreshRequest
+        self.wormholeOpenRequest = wormholeOpenRequest
+        self.refreshHealth = refreshHealth
+    }
+
+    public func load() throws -> TailnetSnapshot? {
+        withLock { snapshot }
+    }
+
+    public func save(_ snapshot: TailnetSnapshot) throws {
+        withLock { self.snapshot = snapshot }
+    }
+
+    public func loadRefreshHealth() throws -> TailOpsRefreshHealth? {
+        withLock { refreshHealth }
+    }
+
+    public func saveRefreshHealth(_ health: TailOpsRefreshHealth) throws {
+        withLock { refreshHealth = health }
+    }
+
+    public func loadActionConfiguration() throws -> TailnetActionConfiguration? {
+        withLock { actionConfiguration }
+    }
+
+    public func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws {
+        withLock { actionConfiguration = configuration }
+    }
+
+    public func loadAppPreferences() throws -> TailOpsAppPreferences? {
+        withLock { appPreferences }
+    }
+
+    public func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws {
+        withLock { appPreferences = preferences }
+    }
+
+    public func loadWormholeConfiguration() throws -> TailOpsWormholeConfiguration? {
+        withLock { wormholeConfiguration }
+    }
+
+    public func loadWormholeConfigurationMigratingSecrets(
+        to secretStore: any TailOpsWormholeSecretStoring
+    ) throws -> TailOpsWormholeConfiguration? {
+        withLock { wormholeConfiguration }
+    }
+
+    public func saveWormholeConfiguration(_ configuration: TailOpsWormholeConfiguration) throws {
+        withLock { wormholeConfiguration = configuration }
+    }
+
+    public func loadWormholePendingTransfers() throws -> [TailOpsWormholePendingTransfer] {
+        withLock { wormholePendingTransfers.filter { !$0.isExpired() } }
+    }
+
+    public func saveWormholePendingTransfers(_ transfers: [TailOpsWormholePendingTransfer]) throws {
+        withLock { wormholePendingTransfers = transfers.filter { !$0.isExpired() } }
+    }
+
+    public func loadWormholeSignalReplayRecords(
+        at date: Date
+    ) throws -> [TailOpsWormholeSignalReplayRecord] {
+        withLock {
+            Array(wormholeSignalReplayRecords.filter { $0.expiresAt > date }.suffix(256))
+        }
+    }
+
+    public func saveWormholeSignalReplayRecords(
+        _ records: [TailOpsWormholeSignalReplayRecord],
+        at date: Date
+    ) throws {
+        withLock {
+            wormholeSignalReplayRecords = Array(records.filter { $0.expiresAt > date }.suffix(256))
+        }
+    }
+
+    public func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest? {
+        withLock { settingsOpenRequest }
+    }
+
+    public func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws {
+        withLock { settingsOpenRequest = request }
+    }
+
+    public func clearSettingsOpenRequest() throws {
+        withLock { settingsOpenRequest = nil }
+    }
+
+    public func loadRefreshRequest() throws -> TailOpsRefreshRequest? {
+        withLock { refreshRequest }
+    }
+
+    public func saveRefreshRequest(_ request: TailOpsRefreshRequest) throws {
+        withLock { refreshRequest = request }
+    }
+
+    public func clearRefreshRequest() throws {
+        withLock { refreshRequest = nil }
+    }
+
+    public func loadWormholeOpenRequest() throws -> TailOpsWormholeOpenRequest? {
+        withLock { wormholeOpenRequest }
+    }
+
+    public func saveWormholeOpenRequest(_ request: TailOpsWormholeOpenRequest) throws {
+        withLock { wormholeOpenRequest = request }
+    }
+
+    public func clearWormholeOpenRequest() throws {
+        withLock { wormholeOpenRequest = nil }
+    }
+
+    private func withLock<Result>(_ operation: () throws -> Result) rethrows -> Result {
+        lock.lock()
+        defer { lock.unlock() }
+        return try operation()
+    }
+}
 #endif

@@ -11,11 +11,11 @@ final class TailOpsPreferencesModel: ObservableObject {
     @Published private(set) var saveError: String?
     @Published private(set) var statusMessage: String?
 
-    private let store: SharedSnapshotStoring
+    private let settingsStore: any TailOpsSettingsStoring
 
-    init(store: SharedSnapshotStoring = SharedSnapshotStore()) {
-        self.store = store
-        let storedPreferences = (try? store.loadAppPreferences()) ?? TailOpsAppPreferences()
+    init(settingsStore: any TailOpsSettingsStoring = SharedSnapshotStore()) {
+        self.settingsStore = settingsStore
+        let storedPreferences = (try? settingsStore.loadAppPreferences()) ?? TailOpsAppPreferences()
         launchAtLogin = SMAppService.mainApp.status == .enabled
         showMenuBarIcon = storedPreferences.showMenuBarIcon
     }
@@ -50,7 +50,7 @@ final class TailOpsPreferencesModel: ObservableObject {
 
     private func save(message: String) {
         do {
-            try store.saveAppPreferences(preferences)
+            try settingsStore.saveAppPreferences(preferences)
             WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
             saveError = nil
             statusMessage = message

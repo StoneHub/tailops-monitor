@@ -77,18 +77,21 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
         case failed(String)
     }
 
-    private let store: SharedSnapshotStore
+    private let tailnetStore: any TailnetStateStoring
+    private let wormholeStore: any TailOpsWormholeStateStoring
     private let secretStore: any TailOpsWormholeSecretStoring
     private let runner: TailOpsWormholeCommandRunner
     private let codeFactory: TailOpsWormholeCodeFactory
 
     init(
-        store: SharedSnapshotStore = SharedSnapshotStore(),
+        tailnetStore: any TailnetStateStoring = SharedSnapshotStore(),
+        wormholeStore: any TailOpsWormholeStateStoring = SharedSnapshotStore(),
         secretStore: any TailOpsWormholeSecretStoring = TailOpsWormholeSecretStore(),
         runner: TailOpsWormholeCommandRunner = TailOpsWormholeCommandRunner(),
         codeFactory: TailOpsWormholeCodeFactory = TailOpsWormholeCodeFactory()
     ) {
-        self.store = store
+        self.tailnetStore = tailnetStore
+        self.wormholeStore = wormholeStore
         self.secretStore = secretStore
         self.runner = runner
         self.codeFactory = codeFactory
@@ -96,11 +99,11 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
         let loadedConfiguration: TailOpsWormholeConfiguration
         let loadError: String?
         do {
-            loadedConfiguration = try store.loadWormholeConfigurationMigratingSecrets(to: secretStore)
+            loadedConfiguration = try wormholeStore.loadWormholeConfigurationMigratingSecrets(to: secretStore)
                 ?? TailOpsWormholeConfiguration()
             loadError = nil
         } catch {
-            loadedConfiguration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+            loadedConfiguration = (try? wormholeStore.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
             loadError = "Wormhole pairing migration failed: \(error.localizedDescription)"
         }
         configuration = loadedConfiguration
@@ -134,10 +137,10 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
         }
         sharedSecret = initialSecret
         inboxPath = loadedConfiguration.inboxPath
-        availableTailnetPeers = ((try? store.load())?.hosts ?? [])
+        availableTailnetPeers = ((try? tailnetStore.load())?.hosts ?? [])
             .filter { $0.role == .peer }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        pendingTransfers = (try? store.loadWormholePendingTransfers()) ?? []
+        pendingTransfers = (try? wormholeStore.loadWormholePendingTransfers()) ?? []
         selectedPendingTransferID = nil
         status = (loadError ?? secretLoadError).map(Status.failed) ?? .ready
         lastOutput = ""
@@ -240,14 +243,14 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
 
     func reload() {
         do {
-            configuration = try store.loadWormholeConfigurationMigratingSecrets(to: secretStore)
+            configuration = try wormholeStore.loadWormholeConfigurationMigratingSecrets(to: secretStore)
                 ?? TailOpsWormholeConfiguration()
         } catch {
-            configuration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+            configuration = (try? wormholeStore.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
             status = .failed("Wormhole pairing migration failed: \(error.localizedDescription)")
         }
-        pendingTransfers = (try? store.loadWormholePendingTransfers()) ?? []
-        availableTailnetPeers = ((try? store.load())?.hosts ?? [])
+        pendingTransfers = (try? wormholeStore.loadWormholePendingTransfers()) ?? []
+        availableTailnetPeers = ((try? tailnetStore.load())?.hosts ?? [])
             .filter { $0.role == .peer }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         executable = runner.discoverExecutable()
@@ -347,7 +350,7 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
 
         do {
             try secretStore.save(secret: cleanSecret, for: contact.id)
-            try store.saveWormholeConfiguration(updatedConfiguration)
+            try wormholeStore.saveWormholeConfiguration(updatedConfiguration)
             configuration = updatedConfiguration
             selectedContactID = contact.id
             status = .succeeded("Saved Wormhole pairing.")
@@ -406,7 +409,8 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
             if let pendingTransfer {
                 do {
                     _ = try await TailOpsWormholePendingSignalClient(
-                        store: store,
+                        tailnetStore: tailnetStore,
+                        wormholeStore: wormholeStore,
                         secretStore: secretStore
                     ).publish(pendingTransfer, to: selectedContact)
                 } catch {
@@ -488,10 +492,10 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
         )
 
         do {
-            var transfers = try store.loadWormholePendingTransfers()
+            var transfers = try wormholeStore.loadWormholePendingTransfers()
             transfers.removeAll { $0.id == transfer.id }
             transfers.append(transfer)
-            try store.saveWormholePendingTransfers(transfers)
+            try wormholeStore.saveWormholePendingTransfers(transfers)
             pendingTransfers = transfers
         } catch {
             status = .failed(error.localizedDescription)
@@ -509,9 +513,9 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
 
     private func clearPendingTransfer(id: String) {
         do {
-            var transfers = try store.loadWormholePendingTransfers()
+            var transfers = try wormholeStore.loadWormholePendingTransfers()
             transfers.removeAll { $0.id == id }
-            try store.saveWormholePendingTransfers(transfers)
+            try wormholeStore.saveWormholePendingTransfers(transfers)
             pendingTransfers = transfers
         } catch {
             status = .failed(error.localizedDescription)

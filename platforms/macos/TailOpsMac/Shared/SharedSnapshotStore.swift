@@ -2,41 +2,50 @@ import Foundation
 import Security
 import TailOpsCore
 
-public protocol SharedSnapshotStoring {
+public protocol TailnetStateStoring {
     func load() throws -> TailnetSnapshot?
     func save(_ snapshot: TailnetSnapshot) throws
+    func loadRefreshHealth() throws -> TailOpsRefreshHealth?
+    func saveRefreshHealth(_ health: TailOpsRefreshHealth) throws
+}
+
+public protocol TailOpsSettingsStoring {
     func loadActionConfiguration() throws -> TailnetActionConfiguration?
     func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws
     func loadAppPreferences() throws -> TailOpsAppPreferences?
     func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws
+}
+
+public protocol TailOpsWormholeSecretStoring: Sendable {
+    func secret(for contactID: String) throws -> String?
+    func save(secret: String, for contactID: String) throws
+}
+
+public protocol TailOpsWormholeStateStoring {
     func loadWormholeConfiguration() throws -> TailOpsWormholeConfiguration?
+    func loadWormholeConfigurationMigratingSecrets(
+        to secretStore: any TailOpsWormholeSecretStoring
+    ) throws -> TailOpsWormholeConfiguration?
     func saveWormholeConfiguration(_ configuration: TailOpsWormholeConfiguration) throws
-    func loadWormholeOpenRequest() throws -> TailOpsWormholeOpenRequest?
-    func saveWormholeOpenRequest(_ request: TailOpsWormholeOpenRequest) throws
-    func clearWormholeOpenRequest() throws
     func loadWormholePendingTransfers() throws -> [TailOpsWormholePendingTransfer]
     func saveWormholePendingTransfers(_ transfers: [TailOpsWormholePendingTransfer]) throws
+    func loadWormholeSignalReplayRecords(at date: Date) throws -> [TailOpsWormholeSignalReplayRecord]
+    func saveWormholeSignalReplayRecords(
+        _ records: [TailOpsWormholeSignalReplayRecord],
+        at date: Date
+    ) throws
+}
+
+public protocol TailOpsAppGroupRequestStoring {
     func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest?
     func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws
     func clearSettingsOpenRequest() throws
     func loadRefreshRequest() throws -> TailOpsRefreshRequest?
     func saveRefreshRequest(_ request: TailOpsRefreshRequest) throws
     func clearRefreshRequest() throws
-    func loadRefreshHealth() throws -> TailOpsRefreshHealth?
-    func saveRefreshHealth(_ health: TailOpsRefreshHealth) throws
-}
-
-public extension SharedSnapshotStoring {
-    func loadRefreshRequest() throws -> TailOpsRefreshRequest? { nil }
-    func saveRefreshRequest(_ request: TailOpsRefreshRequest) throws {}
-    func clearRefreshRequest() throws {}
-    func loadRefreshHealth() throws -> TailOpsRefreshHealth? { nil }
-    func saveRefreshHealth(_ health: TailOpsRefreshHealth) throws {}
-}
-
-public protocol TailOpsWormholeSecretStoring: Sendable {
-    func secret(for contactID: String) throws -> String?
-    func save(secret: String, for contactID: String) throws
+    func loadWormholeOpenRequest() throws -> TailOpsWormholeOpenRequest?
+    func saveWormholeOpenRequest(_ request: TailOpsWormholeOpenRequest) throws
+    func clearWormholeOpenRequest() throws
 }
 
 public enum TailOpsWormholeSecretStoreError: LocalizedError, Equatable {
@@ -114,7 +123,12 @@ public struct TailOpsWormholeSecretStore: TailOpsWormholeSecretStoring {
     }
 }
 
-public struct SharedSnapshotStore: SharedSnapshotStoring {
+public struct SharedSnapshotStore:
+    TailnetStateStoring,
+    TailOpsSettingsStoring,
+    TailOpsWormholeStateStoring,
+    TailOpsAppGroupRequestStoring
+{
     public static let appGroupIdentifier = "group.dev.tailops.monitor"
     private let fileManager: FileManager
     private let baseURLOverride: [URL]?

@@ -9,12 +9,18 @@ final class TailOpsActionSettingsModel: ObservableObject {
     @Published private(set) var saveError: String?
     @Published private(set) var importExportMessage: String?
 
-    private let store: SharedSnapshotStoring
+    private let settingsStore: any TailOpsSettingsStoring
 
-    init(store: SharedSnapshotStoring = SharedSnapshotStore(), configuration: TailnetActionConfiguration? = nil) {
-        self.store = store
-        let initialConfiguration = configuration ?? (try? store.loadActionConfiguration()) ?? TailnetActionConfiguration()
-        let hosts = (try? store.load()?.hosts) ?? []
+    init(
+        tailnetStore: any TailnetStateStoring = SharedSnapshotStore(),
+        settingsStore: any TailOpsSettingsStoring = SharedSnapshotStore(),
+        configuration: TailnetActionConfiguration? = nil
+    ) {
+        self.settingsStore = settingsStore
+        let initialConfiguration = configuration
+            ?? (try? settingsStore.loadActionConfiguration())
+            ?? TailnetActionConfiguration()
+        let hosts = (try? tailnetStore.load()?.hosts) ?? []
         hostActions = Self.mergedHostActions(hosts: hosts, configuration: initialConfiguration)
     }
 
@@ -85,7 +91,7 @@ final class TailOpsActionSettingsModel: ObservableObject {
             return false
         }
         do {
-            try store.saveActionConfiguration(configuration)
+            try settingsStore.saveActionConfiguration(configuration)
             WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
             saveError = nil
             importExportMessage = "Saved actions."

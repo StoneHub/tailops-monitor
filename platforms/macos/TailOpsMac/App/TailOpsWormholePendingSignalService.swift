@@ -43,20 +43,20 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
     private var listener: NWListener?
     private var activeConnections = Set<ObjectIdentifier>()
     private var deadlines: [ObjectIdentifier: DispatchWorkItem] = [:]
-    private let store: SharedSnapshotStore
+    private let wormholeStore: any TailOpsWormholeStateStoring
     private let secretStore: any TailOpsWormholeSecretStoring
 
     init(
-        store: SharedSnapshotStore = SharedSnapshotStore(),
+        wormholeStore: any TailOpsWormholeStateStoring = SharedSnapshotStore(),
         secretStore: any TailOpsWormholeSecretStoring = TailOpsWormholeSecretStore()
     ) {
-        self.store = store
+        self.wormholeStore = wormholeStore
         self.secretStore = secretStore
     }
 
     func start() {
         guard listener == nil else { return }
-        let configuration = (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+        let configuration = (try? wormholeStore.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
         guard let port = NWEndpoint.Port(rawValue: UInt16(configuration.pendingSignalPort ?? 39117)) else {
             Self.publishServiceError("The Wormhole signal port is invalid.")
             return
@@ -158,7 +158,7 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
               payload.fileSizeBytes.map({ $0 >= 0 }) ?? true
         else { throw TailOpsWormholePendingSignalError.invalidPayload }
 
-        let configuration = try store.loadWormholeConfiguration() ?? TailOpsWormholeConfiguration()
+        let configuration = try wormholeStore.loadWormholeConfiguration() ?? TailOpsWormholeConfiguration()
         guard let contact = configuration.contacts.first(where: { $0.pairingID == payload.pairingID }),
               let secret = try secretStore.secret(for: contact.id),
               Self.isValidSignature(request.signature, body: request.body, secret: secret)
@@ -170,7 +170,7 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
               payload.expiresAt.timeIntervalSince(payload.createdAt) <= 20 * 60
         else { throw TailOpsWormholePendingSignalError.invalidTime }
 
-        var replayRecords = try store.loadWormholeSignalReplayRecords(at: now)
+        var replayRecords = try wormholeStore.loadWormholeSignalReplayRecords(at: now)
         guard !replayRecords.contains(where: { $0.messageID == payload.messageID }) else {
             throw TailOpsWormholePendingSignalError.replay
         }
@@ -186,14 +186,14 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
             createdAt: payload.createdAt,
             expiresAt: payload.expiresAt
         )
-        var transfers = try store.loadWormholePendingTransfers()
+        var transfers = try wormholeStore.loadWormholePendingTransfers()
         guard !transfers.contains(where: { $0.id == incoming.id }) else {
             throw TailOpsWormholePendingSignalError.replay
         }
         transfers.append(incoming)
-        try store.saveWormholePendingTransfers(transfers)
+        try wormholeStore.saveWormholePendingTransfers(transfers)
         replayRecords.append(.init(messageID: payload.messageID, expiresAt: payload.expiresAt))
-        try store.saveWormholeSignalReplayRecords(replayRecords, at: now)
+        try wormholeStore.saveWormholeSignalReplayRecords(replayRecords, at: now)
         return .init(messageID: payload.messageID, acceptedAt: now)
     }
 
@@ -274,22 +274,29 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
 
 @MainActor
 struct TailOpsWormholePendingSignalClient {
-    let store: SharedSnapshotStore
+    let tailnetStore: any TailnetStateStoring
+    let wormholeStore: any TailOpsWormholeStateStoring
     let secretStore: any TailOpsWormholeSecretStoring
 
-    init(store: SharedSnapshotStore = SharedSnapshotStore(), secretStore: any TailOpsWormholeSecretStoring = TailOpsWormholeSecretStore()) {
-        self.store = store; self.secretStore = secretStore
+    init(
+        tailnetStore: any TailnetStateStoring = SharedSnapshotStore(),
+        wormholeStore: any TailOpsWormholeStateStoring = SharedSnapshotStore(),
+        secretStore: any TailOpsWormholeSecretStoring = TailOpsWormholeSecretStore()
+    ) {
+        self.tailnetStore = tailnetStore
+        self.wormholeStore = wormholeStore
+        self.secretStore = secretStore
     }
 
     func publish(_ transfer: TailOpsWormholePendingTransfer, to contact: TailOpsWormholeContact) async throws -> TailOpsWormholePendingSignalAcknowledgement {
         guard let nodeID = contact.tailnetNodeID, !nodeID.isEmpty else { throw TailOpsWormholePendingSignalError.noStableRoute }
-        guard let snapshot = try store.load(),
+        guard let snapshot = try tailnetStore.load(),
               let host = snapshot.hosts.first(where: { $0.id == nodeID }),
               let address = host.primaryAddress ?? host.magicDNSName
         else { throw TailOpsWormholePendingSignalError.noStableRoute }
         guard let secret = try secretStore.secret(for: contact.id) else { throw TailOpsWormholePendingSignalError.missingSecret }
         let body = try TailOpsWormholePendingSignalServer.encoder.encode(TailOpsWormholePendingSignalPayload(transfer: transfer))
-        let configuration = try store.loadWormholeConfiguration() ?? TailOpsWormholeConfiguration()
+        let configuration = try wormholeStore.loadWormholeConfiguration() ?? TailOpsWormholeConfiguration()
         let response = try await Self.sendRawPendingRequest(
             body: body,
             signature: TailOpsWormholePendingSignalServer.signature(for: body, secret: secret),

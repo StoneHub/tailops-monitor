@@ -320,31 +320,18 @@ private struct ActionEditorRow: View {
 
 #if DEBUG
 #Preview("Settings") {
+    let store = InMemoryTailOpsStore(
+        snapshot: .preview,
+        actionConfiguration: .preview,
+        appPreferences: TailOpsAppPreferences()
+    )
     TailOpsSettingsView(
         model: TailOpsActionSettingsModel(
-            store: PreviewSettingsStore(),
+            tailnetStore: store,
+            settingsStore: store,
             configuration: .preview
         ),
-        preferencesModel: TailOpsPreferencesModel(store: PreviewSettingsStore())
+        preferencesModel: TailOpsPreferencesModel(settingsStore: store)
     )
-}
-
-private struct PreviewSettingsStore: SharedSnapshotStoring {
-    func load() throws -> TailnetSnapshot? { .preview }
-    func save(_ snapshot: TailnetSnapshot) throws {}
-    func loadActionConfiguration() throws -> TailnetActionConfiguration? { .preview }
-    func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws {}
-    func loadAppPreferences() throws -> TailOpsAppPreferences? { TailOpsAppPreferences() }
-    func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws {}
-    func loadWormholeConfiguration() throws -> TailOpsWormholeConfiguration? { TailOpsWormholeConfiguration() }
-    func saveWormholeConfiguration(_ configuration: TailOpsWormholeConfiguration) throws {}
-    func loadWormholeOpenRequest() throws -> TailOpsWormholeOpenRequest? { nil }
-    func saveWormholeOpenRequest(_ request: TailOpsWormholeOpenRequest) throws {}
-    func clearWormholeOpenRequest() throws {}
-    func loadWormholePendingTransfers() throws -> [TailOpsWormholePendingTransfer] { [] }
-    func saveWormholePendingTransfers(_ transfers: [TailOpsWormholePendingTransfer]) throws {}
-    func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest? { nil }
-    func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws {}
-    func clearSettingsOpenRequest() throws {}
 }
 #endif

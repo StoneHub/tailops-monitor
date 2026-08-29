@@ -70,7 +70,9 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    static func openSettingsWindowIfRequested(store: SharedSnapshotStore = SharedSnapshotStore()) {
+    static func openSettingsWindowIfRequested(
+        store: any TailOpsAppGroupRequestStoring = SharedSnapshotStore()
+    ) {
         guard (try? store.loadSettingsOpenRequest()) != nil else {
             return
         }
@@ -83,7 +85,9 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
         TailOpsSettingsWindowController.shared.show()
     }
 
-    static func openWormholeWindowIfRequested(store: SharedSnapshotStore = SharedSnapshotStore()) {
+    static func openWormholeWindowIfRequested(
+        store: any TailOpsAppGroupRequestStoring = SharedSnapshotStore()
+    ) {
         guard let request = try? store.loadWormholeOpenRequest() else {
             return
         }
@@ -134,12 +138,15 @@ struct TailOpsMacApp: App {
     @StateObject private var preferencesModel: TailOpsPreferencesModel
 
     init() {
+        let store = SharedSnapshotStore()
         let monitor = TailnetMonitor(
             statusProvider: ProcessTailscaleStatusProvider(),
             pingProvider: ProcessTailscalePingProvider(),
-            snapshotStore: SharedSnapshotStore()
+            tailnetStore: store,
+            settingsStore: store,
+            requestStore: store
         )
-        let preferencesModel = TailOpsPreferencesModel()
+        let preferencesModel = TailOpsPreferencesModel(settingsStore: store)
         TailOpsSettingsWindowController.shared.preferencesModel = preferencesModel
         _monitor = StateObject(wrappedValue: monitor)
         _preferencesModel = StateObject(wrappedValue: preferencesModel)
