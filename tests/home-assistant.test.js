@@ -66,6 +66,17 @@ test("fetchHomeAssistantRouterStats reports missing token without network access
   assert.match(stats.error, /TAILOPS_HA_TOKEN/);
 });
 
+test("Home Assistant defaults to loopback instead of a Fleet host", async () => {
+  const stats = await fetchHomeAssistantRouterStats({
+    token: "",
+    fetchImpl: () => {
+      throw new Error("should not fetch without a token");
+    },
+  });
+
+  assert.equal(stats.homeAssistantUrl, "http://127.0.0.1:8123");
+});
+
 test("fetchHomeAssistantRouterStats reads each configured entity with bearer auth", async () => {
   const requested = [];
   const stats = await fetchHomeAssistantRouterStats({

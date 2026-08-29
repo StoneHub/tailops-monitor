@@ -740,8 +740,26 @@ public struct HostActionCatalog: Sendable {
     }
 }
 
+public enum TailnetPeerSelectionPolicy: Sendable {
+    case managedFleet
+    case allPeers
+
+    fileprivate func includes(_ node: TailscaleNode) -> Bool {
+        switch self {
+        case .managedFleet:
+            return !node.tags.contains("tag:mullvad-exit-node")
+        case .allPeers:
+            return true
+        }
+    }
+}
+
 public struct TailnetSnapshotParser: Sendable {
-    public init() {}
+    private let peerSelectionPolicy: TailnetPeerSelectionPolicy
+
+    public init(peerSelectionPolicy: TailnetPeerSelectionPolicy = .managedFleet) {
+        self.peerSelectionPolicy = peerSelectionPolicy
+    }
 
     public func parse(_ data: Data, generatedAt: Date = Date()) throws -> TailnetSnapshot {
         let response = try JSONDecoder().decode(TailscaleStatusResponse.self, from: data)
@@ -752,6 +770,7 @@ public struct TailnetSnapshotParser: Sendable {
         }
 
         hosts.append(contentsOf: response.peers
+            .filter { peerSelectionPolicy.includes($0.value) }
             .sorted { $0.key < $1.key }
             .map { Self.host(from: $0.value, role: .peer) })
 
@@ -941,6 +960,7 @@ private struct TailscaleNode: Decodable {
     let online: Bool?
     let lastSeen: String?
     let os: String?
+    let tags: [String]
 
     enum CodingKeys: String, CodingKey {
         case id = "ID"
@@ -951,5 +971,19 @@ private struct TailscaleNode: Decodable {
         case online = "Online"
         case lastSeen = "LastSeen"
         case os = "OS"
+        case tags = "Tags"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        publicKey = try container.decodeIfPresent(String.self, forKey: .publicKey)
+        hostName = try container.decodeIfPresent(String.self, forKey: .hostName)
+        dnsName = try container.decodeIfPresent(String.self, forKey: .dnsName)
+        tailscaleIPs = try container.decodeIfPresent([String].self, forKey: .tailscaleIPs)
+        online = try container.decodeIfPresent(Bool.self, forKey: .online)
+        lastSeen = try container.decodeIfPresent(String.self, forKey: .lastSeen)
+        os = try container.decodeIfPresent(String.self, forKey: .os)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
     }
 }
