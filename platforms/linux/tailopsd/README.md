@@ -1,12 +1,12 @@
 # tailopsd
 
-`tailopsd` is a read-only Linux CLI for producing one versioned TailOps Fleet observation from the local Tailscale daemon. It is intended for ARM64 FCFDEV first, but it has no native dependencies or architecture-specific code.
+`tailopsd` is a read-only Linux CLI for producing one versioned TailOps Fleet observation from the local Tailscale daemon. FCFDEV is the first install target, but the project is for Linux and contains no architecture-specific code.
 
 This first slice is a collector, not a resident daemon. It opens no listener, accepts no remote command, performs no SSH, and does not import the private Fleet registry. A Fleet transport adapter can invoke the CLI later and attach its result to the Fleet task envelope without changing the collector.
 
 ## Requirements
 
-- Linux on ARM64 or x86_64
+- Linux
 - Node.js 20 or newer
 - a working local `tailscale` CLI and daemon
 
