@@ -14,7 +14,9 @@ final class TailnetMonitor: NSObject, ObservableObject {
     private let statusProvider: TailscaleStatusProviding
     private let pingProvider: TailscalePingProviding?
     private let parser = TailnetSnapshotParser()
-    private let snapshotStore: SharedSnapshotStoring
+    private let tailnetStore: any TailnetStateStoring
+    private let settingsStore: any TailOpsSettingsStoring
+    private let requestStore: any TailOpsAppGroupRequestStoring
     private let actionCatalog = HostActionCatalog()
     private let maxRetainedPingSamples = 120
     private let pingDiagnosticsMinimumInterval: TimeInterval = 60 * 60
@@ -25,22 +27,26 @@ final class TailnetMonitor: NSObject, ObservableObject {
     init(
         statusProvider: TailscaleStatusProviding,
         pingProvider: TailscalePingProviding? = nil,
-        snapshotStore: SharedSnapshotStoring,
+        tailnetStore: any TailnetStateStoring,
+        settingsStore: any TailOpsSettingsStoring,
+        requestStore: any TailOpsAppGroupRequestStoring,
         initialSnapshot: TailnetSnapshot? = nil
     ) {
         self.statusProvider = statusProvider
         self.pingProvider = pingProvider
-        self.snapshotStore = snapshotStore
+        self.tailnetStore = tailnetStore
+        self.settingsStore = settingsStore
+        self.requestStore = requestStore
         super.init()
         if let initialSnapshot {
             snapshot = initialSnapshot
-        } else if let stored = try? snapshotStore.load() {
+        } else if let stored = try? tailnetStore.load() {
             snapshot = stored
         }
         lastPingDiagnosticsRefreshDate = snapshot.hosts
             .compactMap { $0.diagnostics?.ping?.lastUpdated }
             .max()
-        if let storedConfiguration = try? snapshotStore.loadActionConfiguration() {
+        if let storedConfiguration = try? settingsStore.loadActionConfiguration() {
             actionConfiguration = storedConfiguration
         }
         DistributedNotificationCenter.default().addObserver(
@@ -78,8 +84,8 @@ final class TailnetMonitor: NSObject, ObservableObject {
         }
         isRefreshing = true
         let attemptAt = Date()
-        let previousHealth = try? snapshotStore.loadRefreshHealth()
-        try? snapshotStore.saveRefreshHealth(TailOpsRefreshHealth(
+        let previousHealth = try? tailnetStore.loadRefreshHealth()
+        try? tailnetStore.saveRefreshHealth(TailOpsRefreshHealth(
             lastAttemptAt: attemptAt,
             lastSuccessAt: previousHealth?.lastSuccessAt
         ))
@@ -91,15 +97,15 @@ final class TailnetMonitor: NSObject, ObservableObject {
             let diagnosedSnapshot = await snapshotWithPingDiagnostics(nextSnapshot, now: Date())
             snapshot = diagnosedSnapshot
             lastError = nil
-            try snapshotStore.save(diagnosedSnapshot)
-            try snapshotStore.saveRefreshHealth(TailOpsRefreshHealth(
+            try tailnetStore.save(diagnosedSnapshot)
+            try tailnetStore.saveRefreshHealth(TailOpsRefreshHealth(
                 lastAttemptAt: attemptAt,
                 lastSuccessAt: Date()
             ))
             WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
         } catch {
             lastError = error.localizedDescription
-            try? snapshotStore.saveRefreshHealth(TailOpsRefreshHealth(
+            try? tailnetStore.saveRefreshHealth(TailOpsRefreshHealth(
                 lastAttemptAt: attemptAt,
                 lastSuccessAt: previousHealth?.lastSuccessAt,
                 lastError: error.localizedDescription
@@ -116,11 +122,11 @@ final class TailnetMonitor: NSObject, ObservableObject {
 
     @discardableResult
     func refreshIfRequested() async -> Bool {
-        guard (try? snapshotStore.loadRefreshRequest()) != nil else {
+        guard (try? requestStore.loadRefreshRequest()) != nil else {
             return false
         }
 
-        try? snapshotStore.clearRefreshRequest()
+        try? requestStore.clearRefreshRequest()
         await refresh()
         return true
     }
