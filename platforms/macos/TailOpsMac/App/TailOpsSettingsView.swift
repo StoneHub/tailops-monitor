@@ -9,7 +9,7 @@ struct TailOpsSettingsView: View {
     @StateObject private var preferencesModel: TailOpsPreferencesModel
     @State private var importExportText = ""
     @State private var showsJSONEditor = false
-    @State private var selectedSection: SettingsSection = .hostActions
+    @State private var selectedSection: SettingsSection = .general
     @State private var selectedHostID: EditableHostActions.ID?
 
     private enum SettingsSection: String, CaseIterable, Identifiable {
