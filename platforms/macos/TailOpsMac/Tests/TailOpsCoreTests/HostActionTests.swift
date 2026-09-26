@@ -88,6 +88,33 @@ final class HostActionTests: XCTestCase {
         XCTAssertEqual(actions.map(\.title), ["Studio", "SSH", "Copy IP"])
     }
 
+    func testConfiguredURLOpensWithTheMatchingActionKind() {
+        let configuration = TailnetActionConfiguration(hostActions: [
+            TailnetHostActionConfiguration(hostID: "studio", actions: [
+                TailnetQuickAction(emoji: "🖥", title: "Shell", kind: .url, target: "ssh://monroe@studio.tailnet.ts.net"),
+                TailnetQuickAction(emoji: "📁", title: "Share", kind: .url, target: "smb://studio.tailnet.ts.net/Public"),
+            ]),
+        ])
+
+        let actions = HostActionCatalog(configuration: configuration)
+            .actions(for: host(id: "m", name: "studio", operatingSystem: "macOS"))
+
+        XCTAssertEqual(actions[0].kind, .ssh)
+        XCTAssertEqual(actions[0].value, "monroe@studio.tailnet.ts.net")
+        XCTAssertEqual(actions[1].kind, .fileSharing)
+    }
+
+    func testValidationRejectsURLSchemesTheWidgetCannotOpen() {
+        let configuration = TailnetActionConfiguration(hostActions: [
+            TailnetHostActionConfiguration(hostID: "h", actions: [
+                TailnetQuickAction(emoji: "📦", title: "FTP", kind: .url, target: "ftp://h.tailnet.ts.net"),
+                TailnetQuickAction(emoji: "🖥", title: "Screen", kind: .url, target: "vnc://h.tailnet.ts.net"),
+            ]),
+        ])
+
+        XCTAssertEqual(configuration.validationIssues(), [.invalidURL(hostIndex: 0, actionIndex: 0)])
+    }
+
     func testConfigurationDecodesCustomDashboardLinks() throws {
         let data = Data(
             """

@@ -167,6 +167,49 @@ final class TailnetParsingTests: XCTestCase {
         XCTAssertEqual(hosts.first { $0.id == "soon" }?.keyExpiry, ISO8601DateFormatter().date(from: "2026-01-04T00:00:00Z"))
     }
 
+    func testUnknownRouteFromANewerBuildDoesNotBreakTheSnapshot() throws {
+        let data = Data(
+            """
+            {
+              "generatedAt": "2026-09-26T14:00:00Z",
+              "hosts": [
+                {
+                  "id": "peer-1", "name": "fcfdev", "role": "peer", "status": "online",
+                  "services": [], "connection": { "teleport": { "via": "moon" } }
+                }
+              ]
+            }
+            """.utf8
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let snapshot = try decoder.decode(TailnetSnapshot.self, from: data)
+
+        XCTAssertEqual(snapshot.hosts.map(\.name), ["fcfdev"])
+        XCTAssertNil(snapshot.hosts[0].connection)
+    }
+
+    func testHostRoundTripsThroughCodable() throws {
+        let host = TailnetHost(
+            id: "peer-1", name: "fcfdev", role: .peer, status: .warning, operatingSystem: "linux",
+            primaryAddress: "100.64.0.2", magicDNSName: "fcfdev.tailnet.ts.net",
+            lastSeen: Date(timeIntervalSince1970: 1_000), services: [],
+            diagnostics: TailnetHostDiagnostics(ping: TailnetPingSummary(
+                samples: [TailnetPingSample(latencyMilliseconds: 5, route: .direct)],
+                lastUpdated: Date(timeIntervalSince1970: 2_000)
+            )),
+            connection: .derp(region: "mia"),
+            keyExpiry: Date(timeIntervalSince1970: 3_000)
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        XCTAssertEqual(try decoder.decode(TailnetHost.self, from: encoder.encode(host)), host)
+    }
+
     func testSnapshotSavedByEarlierBuildsStillDecodes() throws {
         let data = Data(
             """

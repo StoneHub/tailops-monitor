@@ -57,6 +57,29 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
         self.keyExpiry = keyExpiry
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id, name, role, status, operatingSystem, primaryAddress, magicDNSName
+        case lastSeen, services, diagnostics, connection, keyExpiry
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        role = try container.decode(Role.self, forKey: .role)
+        status = try container.decode(Status.self, forKey: .status)
+        operatingSystem = try container.decodeIfPresent(String.self, forKey: .operatingSystem)
+        primaryAddress = try container.decodeIfPresent(String.self, forKey: .primaryAddress)
+        magicDNSName = try container.decodeIfPresent(String.self, forKey: .magicDNSName)
+        lastSeen = try container.decodeIfPresent(Date.self, forKey: .lastSeen)
+        services = try container.decodeIfPresent([TailnetService].self, forKey: .services) ?? []
+        diagnostics = try container.decodeIfPresent(TailnetHostDiagnostics.self, forKey: .diagnostics)
+        // The app and widget can briefly run different builds; an unknown route must not
+        // make the whole snapshot unreadable.
+        connection = try? container.decodeIfPresent(TailnetConnection.self, forKey: .connection)
+        keyExpiry = try container.decodeIfPresent(Date.self, forKey: .keyExpiry)
+    }
+
     public func withDiagnostics(_ diagnostics: TailnetHostDiagnostics?) -> TailnetHost {
         TailnetHost(
             id: id,

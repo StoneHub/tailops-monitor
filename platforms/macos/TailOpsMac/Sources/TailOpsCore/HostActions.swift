@@ -15,6 +15,25 @@ public struct HostAction: Codable, Equatable, Sendable {
     public let url: URL?
     public let value: String?
 
+    /// URL schemes a widget action can open; anything else would be a dead button.
+    public static let openableURLSchemes: Set<String> = ["http", "https", "ssh", "vnc", "smb"]
+
+    /// The action kind that knows how to open a URL with this scheme.
+    public static func kind(forURLScheme scheme: String?) -> Kind? {
+        switch scheme?.lowercased() {
+        case "http", "https":
+            return .dashboard
+        case "ssh":
+            return .ssh
+        case "vnc":
+            return .screenSharing
+        case "smb":
+            return .fileSharing
+        default:
+            return nil
+        }
+    }
+
     public init(emoji: String? = nil, title: String, kind: Kind, url: URL?, value: String?) {
         self.emoji = emoji
         self.title = title
@@ -95,7 +114,7 @@ public struct TailnetActionConfiguration: Codable, Equatable, Sendable {
 
                 switch action.kind {
                 case .url:
-                    if URL(string: target)?.scheme == nil {
+                    if HostAction.kind(forURLScheme: URL(string: target)?.scheme) == nil {
                         issues.append(.invalidURL(hostIndex: hostIndex, actionIndex: actionIndex))
                     }
                 case .ssh:
@@ -131,7 +150,7 @@ public enum TailnetActionValidationIssue: Codable, Equatable, Sendable {
         case .emptyTarget(let hostIndex, let actionIndex):
             return "Host \(hostIndex + 1), action \(actionIndex + 1): add a target."
         case .invalidURL(let hostIndex, let actionIndex):
-            return "Host \(hostIndex + 1), action \(actionIndex + 1): URL actions need a scheme such as https://, vnc://, or smb://."
+            return "Host \(hostIndex + 1), action \(actionIndex + 1): URL actions need an http, https, ssh, vnc, or smb address."
         case .sshTargetContainsScheme(let hostIndex, let actionIndex):
             return "Host \(hostIndex + 1), action \(actionIndex + 1): SSH targets should be host names, not ssh:// URLs."
         }
@@ -191,8 +210,12 @@ public struct HostActionCatalog: Sendable {
             guard let url = URL(string: "ssh://\(quickAction.target)") else { return nil }
             return HostAction(emoji: quickAction.emoji, title: quickAction.title, kind: .ssh, url: url, value: quickAction.target)
         case .url:
-            guard let url = URL(string: quickAction.target) else { return nil }
-            return HostAction(emoji: quickAction.emoji, title: quickAction.title, kind: .dashboard, url: url, value: nil)
+            guard let url = URL(string: quickAction.target),
+                  let kind = HostAction.kind(forURLScheme: url.scheme)
+            else { return nil }
+            // An ssh:// link opens in Terminal like an SSH action, which takes `[user@]host`.
+            let value = kind == .ssh ? String(quickAction.target.dropFirst("ssh://".count)) : nil
+            return HostAction(emoji: quickAction.emoji, title: quickAction.title, kind: kind, url: url, value: value)
         case .copy:
             return HostAction(emoji: quickAction.emoji, title: quickAction.title, kind: .copyAddress, url: nil, value: quickAction.target)
         }

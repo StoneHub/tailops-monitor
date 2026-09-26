@@ -89,8 +89,9 @@ public struct OpenSSHInTerminalIntent: AppIntent {
 public struct OpenDashboardURLIntent: AppIntent {
     public static let title: LocalizedStringResource = "Open Dashboard"
     public static let description = IntentDescription("Opens a TailOps dashboard, Screen Sharing, or file-sharing URL.")
-    /// Web dashboards plus the Screen Sharing and Finder schemes macOS handles itself.
-    static let allowedSchemes: Set<String> = ["http", "https", "vnc", "smb"]
+    /// Web dashboards plus the Screen Sharing and Finder schemes macOS handles itself;
+    /// ssh:// goes through OpenSSHInTerminalIntent instead.
+    static let allowedSchemes = HostAction.openableURLSchemes.subtracting(["ssh"])
     public static let openAppWhenRun = false
 
     @Parameter(title: "URL")
