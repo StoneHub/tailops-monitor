@@ -5,8 +5,7 @@ Pure Swift macOS platform slice for a low-impact TailOps WidgetKit desktop widge
 ## Shape
 
 - `Sources/TailOpsCore`: testable Swift package core for parsing `tailscale status --json`, host status, summaries, and host actions.
-- `Tests/TailOpsCoreTests`: focused XCTest regressions for parsing, widget prioritization, refresh health, and shared-store persistence.
-- `Sources/TailOpsCoreValidation`: broader executable compatibility validation retained alongside XCTest.
+- `Tests/TailOpsCoreTests`: XCTest coverage for status and ping parsing, host actions, widget prioritization, refresh health, Wormhole codes, and shared-store persistence.
 - `App`: SwiftUI host app source. It owns refresh, runs `tailscale status --json`, gathers ping diagnostics for online peers, writes a cached snapshot, opens settings, and provides Finder Services.
 - `Widget`: WidgetKit source. It reads the cached snapshot and shows the most useful reachable hosts first.
 - `Shared`: source files that should be included in both the app target and the widget extension target.
@@ -195,13 +194,6 @@ That is the simplest and lowest-risk first step for a local developer utility. A
 
 ```bash
 swift test
-swift run TailOpsCoreValidation
-```
-
-The XCTest target covers focused regressions while the validation executable keeps the broader legacy checks. Expected validation-runner output:
-
-```text
-TailOpsCoreValidation passed
 ```
 
 ## Lifecycle

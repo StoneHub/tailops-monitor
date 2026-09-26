@@ -12,8 +12,7 @@ let package = Package(
         .library(name: "TailOpsIntents", targets: ["TailOpsIntents"]),
         .library(name: "TailOpsShared", targets: ["TailOpsShared"]),
         .library(name: "TailOpsMacViews", targets: ["TailOpsMacViews"]),
-        .library(name: "TailOpsWidgetViews", targets: ["TailOpsWidgetViews"]),
-        .executable(name: "TailOpsCoreValidation", targets: ["TailOpsCoreValidation"])
+        .library(name: "TailOpsWidgetViews", targets: ["TailOpsWidgetViews"])
     ],
     targets: [
         .target(name: "TailOpsCore"),
@@ -66,7 +65,6 @@ let package = Package(
                 "TailOpsWidget.swift"
             ]
         ),
-        .executableTarget(name: "TailOpsCoreValidation", dependencies: ["TailOpsCore", "TailOpsShared"]),
         .testTarget(
             name: "TailOpsCoreTests",
             dependencies: ["TailOpsCore", "TailOpsShared"],

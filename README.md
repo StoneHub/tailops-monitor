@@ -113,7 +113,6 @@ Run the focused source checks with:
 npm test
 cd platforms/macos/TailOpsMac
 swift test
-swift run TailOpsCoreValidation
 swift build --target TailOpsMacViews
 swift build --target TailOpsWidgetViews
 ```
