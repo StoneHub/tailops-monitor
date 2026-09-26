@@ -45,6 +45,7 @@ let package = Package(
                 "TaildropServiceProvider.swift",
                 "TailscaleStatusProvider.swift",
                 "TailOpsActionSettingsModel.swift",
+                "TailOpsAppUpdater.swift",
                 "TailOpsPreferencesModel.swift",
                 "TailOpsSettingsView.swift",
                 "TailOpsSettingsWindowController.swift",

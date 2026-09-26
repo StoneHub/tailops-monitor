@@ -19,6 +19,7 @@
 		A10000000000000000000022 /* App/TailOpsWormholeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* App/TailOpsWormholeWindowController.swift */; };
 		A10000000000000000000023 /* App/TailOpsWormholePendingSignalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* App/TailOpsWormholePendingSignalService.swift */; };
 		A10000000000000000000024 /* App/BoundedProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* App/BoundedProcessRunner.swift */; };
+		A10000000000000000000030 /* App/TailOpsAppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* App/TailOpsAppUpdater.swift */; };
 		A10000000000000000000019 /* Xcode/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Xcode/Assets.xcassets */; };
 		A10000000000000000000020 /* Xcode/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Xcode/Assets.xcassets */; };
 		A10000000000000000000007 /* Widget/TailOpsWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */; };
@@ -68,6 +69,7 @@
 		A20000000000000000000021 /* App/TailOpsWormholeWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsWormholeWindowController.swift; sourceTree = "<group>"; };
 		A20000000000000000000022 /* App/TailOpsWormholePendingSignalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsWormholePendingSignalService.swift; sourceTree = "<group>"; };
 		A20000000000000000000023 /* App/BoundedProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/BoundedProcessRunner.swift; sourceTree = "<group>"; };
+		A20000000000000000000030 /* App/TailOpsAppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsAppUpdater.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* Xcode/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Xcode/Assets.xcassets; sourceTree = "<group>"; };
 		A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidgetBundle.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* Widget/TailOpsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidget.swift; sourceTree = "<group>"; };
@@ -116,6 +118,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000023 /* App/BoundedProcessRunner.swift */,
+				A20000000000000000000030 /* App/TailOpsAppUpdater.swift */,
 				A20000000000000000000001 /* App/TailOpsMacApp.swift */,
 				A20000000000000000000002 /* App/TailscaleStatusProvider.swift */,
 				A20000000000000000000003 /* App/TailOpsSettingsView.swift */,
@@ -274,6 +277,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000024 /* App/BoundedProcessRunner.swift in Sources */,
+				A10000000000000000000030 /* App/TailOpsAppUpdater.swift in Sources */,
 				A10000000000000000000001 /* App/TailOpsMacApp.swift in Sources */,
 				A10000000000000000000002 /* App/TailscaleStatusProvider.swift in Sources */,
 				A10000000000000000000003 /* App/TailOpsSettingsView.swift in Sources */,

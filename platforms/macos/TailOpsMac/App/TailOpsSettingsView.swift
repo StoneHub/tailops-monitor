@@ -108,6 +108,7 @@ struct TailOpsSettingsView: View {
                     subtitle: "Choose how TailOps stays available on this Mac."
                 )
                 appControls
+                TailOpsUpdatePanel(updater: TailOpsAppUpdater.shared)
 
                 VStack(alignment: .leading, spacing: 10) {
                     Label("Widget-first by design", systemImage: "rectangle.3.group")
@@ -353,6 +354,72 @@ struct TailOpsSettingsView: View {
             .buttonStyle(.borderedProminent)
             .disabled(!model.canSave)
         }
+    }
+}
+
+/// The installed version, an on-demand GitHub release check, and the update itself.
+private struct TailOpsUpdatePanel: View {
+    @ObservedObject var updater: TailOpsAppUpdater
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("TailOps \(TailOpsAppUpdater.currentVersion)")
+                    .font(.headline)
+                Spacer()
+                if case .available(let release) = updater.state {
+                    Link("Release notes", destination: release.pageURL)
+                    Button("Update") { updater.install() }
+                        .buttonStyle(.borderedProminent)
+                        .help("Downloads the release, checks its signature, and relaunches TailOps.")
+                } else {
+                    Button(updater.state == .checking ? "Checking…" : "Check for Updates") { updater.check() }
+                        .disabled(updater.isBusy)
+                }
+            }
+
+            switch updater.state {
+            case .idle:
+                Text("Updates are checked only when you ask.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .checking:
+                Text("Checking GitHub releases…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            case .upToDate(let version):
+                Text("TailOps \(version) is the latest release.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            case .available(let release):
+                Text("Version \(release.version.description) is available.")
+                    .font(.callout)
+                if !release.firstNoteLine.isEmpty {
+                    Text(release.firstNoteLine)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            case .downloading(let fraction):
+                ProgressView(value: fraction) {
+                    Text("Downloading…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            case .installing:
+                Text("Verifying and installing…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            case .failed(let message):
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tailOpsGlassPanel(tint: .blue)
     }
 }
 
