@@ -134,6 +134,18 @@ The Linux source check runs as part of `npm test`. See [`platforms/linux/tailops
 
 Build the architecture-neutral Linux package with `npm run pack:linux`. The optional systemd adapter runs as a restricted account with no retry policy and fixed resource limits. Follow the [Linux install runbook](docs/runbooks/linux-tailopsd.md); do not infer a successful host install from the package artifact.
 
+## Releases and updates
+
+TailOps releases are GitHub pre-releases signed with the owner's Apple Development identity (team `N6GPP46885`). They are not notarized, so they install only on Macs that trust that certificate. Cut one from a clean, pushed `main`:
+
+```bash
+scripts/release.py minor --notes "What changed, in a sentence or two." --install
+```
+
+The script bumps the app and widget versions and the build number, runs `npm test` and `swift test`, builds and signs a Release product without `get-task-allow`, verifies the signature, team, and version, zips `TailOps-<version>.zip` with a SHA-256 file, commits, tags, pushes, and publishes the pre-release. `--dry-run` stops after the zip and restores the tree. `--install` (or `--install-only v1.1.0` for an existing release) downloads the published zip, checks it against its checksum and signature, and installs it into `/Applications`.
+
+Settings → General → **Check for Updates** asks GitHub for the newest release on demand. **Update** downloads it, requires the same signing team as the running app, refuses a quarantined download instead of clearing the flag, and swaps the app after it quits, restoring the previous copy if the new one fails its signature check. The log is at `~/Library/Application Support/TailOpsMac/update.log`.
+
 ## Current follow-up work
 
 - Add a host picker and common dashboard presets to Settings.
