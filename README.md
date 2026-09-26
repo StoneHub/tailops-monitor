@@ -58,13 +58,13 @@ That command proves compilation only. It does not prove that a signed App Group 
 
 The hidden host app owns active work:
 
-- runs `tailscale status --json` on launch, on an accepted refresh request, and every hour while the app remains alive;
+- runs `tailscale status --json` on launch, on an accepted refresh request, every hour while the app remains alive, and a few seconds after the Mac wakes or its network path changes (at most once a minute);
 - keeps managed Fleet nodes in the shared snapshot while hiding Mullvad provider peers tagged `tag:mullvad-exit-node`;
-- samples each online peer with six `tailscale ping` attempts at most once per hour;
+- publishes the status snapshot first, then samples online peers with six `tailscale ping` attempts, four peers at a time, at most once per hour;
 - writes snapshots, refresh health, settings, and non-secret Wormhole state to the App Group or local fallback;
 - owns Settings, Finder Services, Wormhole orchestration, and the pending-transfer listener.
 
-The widget is passive. It reads shared files and asks WidgetKit for a new timeline after 15 minutes. It supports medium, large, and extra-large families. Removing the widget leaves no separate backend process, while quitting the host app stops active refresh work.
+The widget is passive. It reads shared files when the host app reloads it and otherwise schedules entries only for moments its display changes: the snapshot going stale after 90 minutes, a stuck refresh timing out, or a pending transfer expiring, with a six-hour safety reload. It supports medium, large, and extra-large families. Removing the widget leaves no separate backend process, while quitting the host app stops active refresh work.
 
 ## Actions and settings
 

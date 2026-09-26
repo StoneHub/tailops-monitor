@@ -24,6 +24,17 @@ struct TailOpsEntry: TimelineEntry {
     let refreshHealth: TailOpsRefreshHealth
     let wormholeConfiguration: TailOpsWormholeConfiguration
     let pendingWormholeTransfers: [TailOpsWormholePendingTransfer]
+
+    func at(_ date: Date) -> TailOpsEntry {
+        TailOpsEntry(
+            date: date,
+            snapshot: snapshot,
+            actionConfiguration: actionConfiguration,
+            refreshHealth: refreshHealth,
+            wormholeConfiguration: wormholeConfiguration,
+            pendingWormholeTransfers: pendingWormholeTransfers
+        )
+    }
 }
 
 struct TailOpsTimelineProvider: TimelineProvider {
@@ -42,10 +53,21 @@ struct TailOpsTimelineProvider: TimelineProvider {
         completion(entry())
     }
 
+    /// The host app reloads timelines after every refresh, so the widget does not
+    /// poll. It only adds entries for moments its own display changes: the
+    /// snapshot going stale, a stuck refresh timing out, or a pending transfer
+    /// expiring.
     func getTimeline(in context: Context, completion: @escaping (Timeline<TailOpsEntry>) -> Void) {
         let entry = entry()
-        let nextRefresh = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date().addingTimeInterval(900)
-        completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
+        let dates = TailOpsWidgetSchedule.entryDates(
+            now: entry.date,
+            snapshotGeneratedAt: entry.snapshot.hosts.isEmpty ? nil : entry.snapshot.generatedAt,
+            refreshHealth: entry.refreshHealth,
+            pendingTransferExpiries: entry.pendingWormholeTransfers.map(\.expiresAt)
+        )
+        let entries = dates.map { entry.at($0) }
+        let safetyReload = entry.date.addingTimeInterval(TailOpsWidgetSchedule.safetyReloadInterval)
+        completion(Timeline(entries: entries, policy: .after(safetyReload)))
     }
 
     private func entry() -> TailOpsEntry {
@@ -127,6 +149,7 @@ struct TailOpsWidgetView: View {
                     actionCatalog: actionCatalog,
                     wormholeConfiguration: entry.wormholeConfiguration,
                     pendingTransfers: entry.pendingWormholeTransfers,
+                    referenceDate: entry.date,
                     style: gridStyle
                 )
             } else {
@@ -137,7 +160,8 @@ struct TailOpsWidgetView: View {
                             actions: actionCatalog.actions(for: host),
                             wormholeContact: entry.wormholeConfiguration.contact(for: host),
                             pendingTransfer: entry.pendingWormholeTransfers.pendingTransfer(
-                                for: entry.wormholeConfiguration.contact(for: host)
+                                for: entry.wormholeConfiguration.contact(for: host),
+                                at: entry.date
                             ),
                             isCompact: usesCompactRows,
                             showsActionTitles: family == .systemMedium
@@ -305,8 +329,6 @@ private struct WidgetSnapshotFreshness: View {
     let referenceDate: Date
     let hasSnapshot: Bool
 
-    private let staleInterval: TimeInterval = 90 * 60
-
     var body: some View {
         HStack(spacing: 3) {
             if refreshHealth.hasFailedSinceLastSuccess {
@@ -339,7 +361,7 @@ private struct WidgetSnapshotFreshness: View {
     }
 
     private var isStale: Bool {
-        hasSnapshot && referenceDate.timeIntervalSince(generatedAt) >= staleInterval
+        hasSnapshot && referenceDate.timeIntervalSince(generatedAt) >= TailOpsWidgetSchedule.staleInterval
     }
 
     private var showsStateLabel: Bool {
@@ -351,7 +373,7 @@ private struct WidgetSnapshotFreshness: View {
     }
 
     private var isRefreshActive: Bool {
-        refreshHealth.isRefreshInProgress(at: referenceDate)
+        refreshHealth.isRefreshInProgress(at: referenceDate, timeout: TailOpsWidgetSchedule.refreshTimeout)
     }
 
     private var accessibilityText: String {
@@ -428,6 +450,7 @@ private struct WidgetHostStatusGrid: View {
     let actionCatalog: HostActionCatalog
     let wormholeConfiguration: TailOpsWormholeConfiguration
     let pendingTransfers: [TailOpsWormholePendingTransfer]
+    let referenceDate: Date
     let style: Style
 
     struct Style {
@@ -456,7 +479,10 @@ private struct WidgetHostStatusGrid: View {
                     host: host,
                     actions: actionCatalog.actions(for: host),
                     wormholeContact: wormholeConfiguration.contact(for: host),
-                    pendingTransfer: pendingTransfers.pendingTransfer(for: wormholeConfiguration.contact(for: host)),
+                    pendingTransfer: pendingTransfers.pendingTransfer(
+                        for: wormholeConfiguration.contact(for: host),
+                        at: referenceDate
+                    ),
                     style: style
                 )
             }
@@ -795,10 +821,11 @@ private struct WidgetWormholeChip: View {
 }
 
 private extension [TailOpsWormholePendingTransfer] {
-    func pendingTransfer(for contact: TailOpsWormholeContact?) -> TailOpsWormholePendingTransfer? {
+    /// Uses the entry's date, not the clock: WidgetKit renders future entries ahead of time.
+    func pendingTransfer(for contact: TailOpsWormholeContact?, at date: Date) -> TailOpsWormholePendingTransfer? {
         guard let contact else { return nil }
         return first {
-            !$0.isExpired()
+            !$0.isExpired(at: date)
                 && ($0.contactID == contact.id || $0.pairingID == contact.pairingID)
                 && $0.direction == .incoming
         }
