@@ -1,0 +1,52 @@
+name: Linux tailopsd
+
+on:
+  pull_request:
+    paths:
+      - "platforms/linux/tailopsd/**"
+      - ".github/workflows/tailopsd-linux.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "platforms/linux/tailopsd/**"
+      - ".github/workflows/tailopsd-linux.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-tailopsd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Test and package Linux CLI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Run Linux tests
+        working-directory: platforms/linux/tailopsd
+        run: npm test
+
+      - name: Build package
+        working-directory: platforms/linux/tailopsd
+        run: npm run pack:linux
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: tailopsd-linux-${{ github.sha }}
+          path: platforms/linux/tailopsd/dist/*.tgz
+          if-no-files-found: error
+          retention-days: 7

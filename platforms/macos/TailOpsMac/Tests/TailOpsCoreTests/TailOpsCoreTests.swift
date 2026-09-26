@@ -45,6 +45,40 @@ final class TailOpsCoreTests: XCTestCase {
         XCTAssertEqual(snapshot.generatedAt, Date(timeIntervalSince1970: 1_000))
     }
 
+    func testParserHidesMullvadProviderNodesFromManagedFleetByDefault() throws {
+        let data = try XCTUnwrap(
+            """
+            {
+              "Self": {
+                "ID": "self-1",
+                "HostName": "monroe-mac",
+                "Online": true
+              },
+              "Peer": {
+                "fleet-peer": {
+                  "ID": "fleet-peer",
+                  "HostName": "fcfdev",
+                  "Online": true,
+                  "Tags": ["tag:claw"]
+                },
+                "provider-peer": {
+                  "ID": "provider-peer",
+                  "HostName": "al-tia-wg-001",
+                  "Online": true,
+                  "Tags": ["tag:mullvad-exit-node"]
+                }
+              }
+            }
+            """.data(using: .utf8)
+        )
+
+        let managedFleet = try TailnetSnapshotParser().parse(data)
+        let allPeers = try TailnetSnapshotParser(peerSelectionPolicy: .allPeers).parse(data)
+
+        XCTAssertEqual(managedFleet.hosts.map(\.name), ["monroe-mac", "fcfdev"])
+        XCTAssertEqual(Set(allPeers.hosts.map(\.name)), Set(["al-tia-wg-001", "fcfdev", "monroe-mac"]))
+    }
+
     func testWidgetLayoutPrioritizesReachablePeerAndCountsHiddenOfflineHosts() {
         let hosts = [
             host(id: "this-device", role: .thisDevice, status: .online),

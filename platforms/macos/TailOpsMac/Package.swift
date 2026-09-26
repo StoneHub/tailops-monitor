@@ -12,8 +12,7 @@ let package = Package(
         .library(name: "TailOpsIntents", targets: ["TailOpsIntents"]),
         .library(name: "TailOpsShared", targets: ["TailOpsShared"]),
         .library(name: "TailOpsMacViews", targets: ["TailOpsMacViews"]),
-        .library(name: "TailOpsWidgetViews", targets: ["TailOpsWidgetViews"]),
-        .executable(name: "TailOpsCoreValidation", targets: ["TailOpsCoreValidation"])
+        .library(name: "TailOpsWidgetViews", targets: ["TailOpsWidgetViews"])
     ],
     targets: [
         .target(name: "TailOpsCore"),
@@ -24,7 +23,8 @@ let package = Package(
             sources: [
                 "PingSparklineView.swift",
                 "PreviewFixtures.swift",
-                "SharedSnapshotStore.swift"
+                "SharedSnapshotStore.swift",
+                "TailOpsWidgetKind.swift"
             ]
         ),
         .target(
@@ -42,18 +42,16 @@ let package = Package(
             exclude: ["TailOpsMacApp.swift"],
             sources: [
                 "BoundedProcessRunner.swift",
-                "DesignPreviewGallery.swift",
                 "TaildropServiceProvider.swift",
                 "TailscaleStatusProvider.swift",
                 "TailOpsActionSettingsModel.swift",
-                "TailOpsConstellationIcon.swift",
+                "TailOpsAppUpdater.swift",
                 "TailOpsPreferencesModel.swift",
                 "TailOpsSettingsView.swift",
                 "TailOpsSettingsWindowController.swift",
                 "TailOpsWormholeCommandRunner.swift",
                 "TailOpsWormholePendingSignalService.swift",
                 "TailOpsWormholeWindowController.swift",
-                "TailOpsMenuView.swift",
                 "TailnetMonitor.swift"
             ]
         ),
@@ -66,11 +64,15 @@ let package = Package(
                 "TailOpsWidget.swift"
             ]
         ),
-        .executableTarget(name: "TailOpsCoreValidation", dependencies: ["TailOpsCore", "TailOpsShared"]),
         .testTarget(
             name: "TailOpsCoreTests",
             dependencies: ["TailOpsCore", "TailOpsShared"],
             path: "Tests/TailOpsCoreTests"
+        ),
+        .testTarget(
+            name: "TailOpsWidgetViewsTests",
+            dependencies: ["TailOpsCore", "TailOpsShared", "TailOpsWidgetViews"],
+            path: "Tests/TailOpsWidgetViewsTests"
         ),
         .testTarget(
             name: "TailOpsMacViewsTests",

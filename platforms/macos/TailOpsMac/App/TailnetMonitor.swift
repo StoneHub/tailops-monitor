@@ -1,48 +1,54 @@
+import AppKit
 import Foundation
-import SwiftUI
+import Network
 import TailOpsCore
 import TailOpsShared
-import WidgetKit
 
 @MainActor
 final class TailnetMonitor: NSObject, ObservableObject {
     @Published private(set) var snapshot = TailnetSnapshot(hosts: [])
-    @Published private(set) var actionConfiguration = TailnetActionConfiguration()
     @Published private(set) var isRefreshing = false
     @Published private(set) var lastError: String?
 
     private let statusProvider: TailscaleStatusProviding
     private let pingProvider: TailscalePingProviding?
     private let parser = TailnetSnapshotParser()
-    private let snapshotStore: SharedSnapshotStoring
-    private let actionCatalog = HostActionCatalog()
+    private let tailnetStore: any TailnetStateStoring
+    private let requestStore: any TailOpsAppGroupRequestStoring
     private let maxRetainedPingSamples = 120
+    private let maxConcurrentPings = 4
     private let pingDiagnosticsMinimumInterval: TimeInterval = 60 * 60
+    private let pingRetryInterval: TimeInterval = 10 * 60
+    private let systemEventRefreshDelay: TimeInterval = 5
+    private let systemEventMinimumInterval: TimeInterval = 60
     private var automaticRefreshTask: Task<Void, Never>?
+    private var systemEventRefreshTask: Task<Void, Never>?
+    private var pathMonitor: NWPathMonitor?
     private var lastPingDiagnosticsRefreshDate: Date?
+    private var lastRefreshDate: Date?
     private var refreshRequestedWhileRefreshing = false
+    private var hasSeenInitialPath = false
 
     init(
         statusProvider: TailscaleStatusProviding,
         pingProvider: TailscalePingProviding? = nil,
-        snapshotStore: SharedSnapshotStoring,
+        tailnetStore: any TailnetStateStoring,
+        requestStore: any TailOpsAppGroupRequestStoring,
         initialSnapshot: TailnetSnapshot? = nil
     ) {
         self.statusProvider = statusProvider
         self.pingProvider = pingProvider
-        self.snapshotStore = snapshotStore
+        self.tailnetStore = tailnetStore
+        self.requestStore = requestStore
         super.init()
         if let initialSnapshot {
             snapshot = initialSnapshot
-        } else if let stored = try? snapshotStore.load() {
+        } else if let stored = try? tailnetStore.load() {
             snapshot = stored
         }
         lastPingDiagnosticsRefreshDate = snapshot.hosts
             .compactMap { $0.diagnostics?.ping?.lastUpdated }
             .max()
-        if let storedConfiguration = try? snapshotStore.loadActionConfiguration() {
-            actionConfiguration = storedConfiguration
-        }
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(refreshFromDistributedNotification),
@@ -53,24 +59,14 @@ final class TailnetMonitor: NSObject, ObservableObject {
 
     deinit {
         automaticRefreshTask?.cancel()
+        systemEventRefreshTask?.cancel()
+        pathMonitor?.cancel()
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         DistributedNotificationCenter.default().removeObserver(self)
     }
 
-    var summary: TailnetSummary {
-        TailnetSummary(hosts: snapshot.hosts)
-    }
-
-    var menuBarSymbol: String {
-        switch summary.trafficLight {
-        case .healthy:
-            return "network"
-        case .warning:
-            return "exclamationmark.triangle"
-        case .offline:
-            return "wifi.slash"
-        }
-    }
-
+    /// Publishes fresh Tailscale status first, then runs the hourly ping burst and
+    /// publishes again, so the widget never waits on pings to show who is online.
     func refresh() async {
         guard !isRefreshing else {
             refreshRequestedWhileRefreshing = true
@@ -78,33 +74,50 @@ final class TailnetMonitor: NSObject, ObservableObject {
         }
         isRefreshing = true
         let attemptAt = Date()
-        let previousHealth = try? snapshotStore.loadRefreshHealth()
-        try? snapshotStore.saveRefreshHealth(TailOpsRefreshHealth(
+        lastRefreshDate = attemptAt
+        let previousHealth = try? tailnetStore.loadRefreshHealth()
+        try? tailnetStore.saveRefreshHealth(TailOpsRefreshHealth(
             lastAttemptAt: attemptAt,
             lastSuccessAt: previousHealth?.lastSuccessAt
         ))
-        WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
+        reloadWidget()
 
         do {
             let data = try await statusProvider.statusJSON()
-            let nextSnapshot = try parser.parse(data)
-            let diagnosedSnapshot = await snapshotWithPingDiagnostics(nextSnapshot, now: Date())
-            snapshot = diagnosedSnapshot
+            let parsed = try parser.parse(data)
+            let previousPings = pingSummariesByHostID(in: snapshot)
+            try publish(Self.snapshot(parsed, applying: previousPings))
             lastError = nil
-            try snapshotStore.save(diagnosedSnapshot)
-            try snapshotStore.saveRefreshHealth(TailOpsRefreshHealth(
+            try tailnetStore.saveRefreshHealth(TailOpsRefreshHealth(
                 lastAttemptAt: attemptAt,
                 lastSuccessAt: Date()
             ))
-            WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
+            reloadWidget()
+
+            if let pingProvider, shouldRefreshPingDiagnostics(now: Date()) {
+                let freshPings = await pingSummaries(for: parsed.hosts, using: pingProvider)
+                // When every ping failed (often right after wake), try again sooner than hourly.
+                lastPingDiagnosticsRefreshDate = freshPings.isEmpty
+                    ? Date().addingTimeInterval(pingRetryInterval - pingDiagnosticsMinimumInterval)
+                    : Date()
+                let mergedPings = previousPings.merging(freshPings) { previous, fresh in
+                    previous.mergingRecentSamples(from: fresh, maxSamples: maxRetainedPingSamples)
+                }
+                do {
+                    try publish(Self.snapshot(parsed, applying: mergedPings))
+                    reloadWidget()
+                } catch {
+                    NSLog("TailOps could not save ping diagnostics: %@", error.localizedDescription)
+                }
+            }
         } catch {
             lastError = error.localizedDescription
-            try? snapshotStore.saveRefreshHealth(TailOpsRefreshHealth(
+            try? tailnetStore.saveRefreshHealth(TailOpsRefreshHealth(
                 lastAttemptAt: attemptAt,
                 lastSuccessAt: previousHealth?.lastSuccessAt,
                 lastError: error.localizedDescription
             ))
-            WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
+            reloadWidget()
         }
 
         isRefreshing = false
@@ -116,11 +129,11 @@ final class TailnetMonitor: NSObject, ObservableObject {
 
     @discardableResult
     func refreshIfRequested() async -> Bool {
-        guard (try? snapshotStore.loadRefreshRequest()) != nil else {
+        guard (try? requestStore.loadRefreshRequest()) != nil else {
             return false
         }
 
-        try? snapshotStore.clearRefreshRequest()
+        try? requestStore.clearRefreshRequest()
         await refresh()
         return true
     }
@@ -131,7 +144,9 @@ final class TailnetMonitor: NSObject, ObservableObject {
         automaticRefreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: interval)
+                    // Suspending clock: time asleep does not count, so an overdue refresh
+                    // does not fire at wake before the network is back. Wake has its own refresh.
+                    try await Task.sleep(for: interval, tolerance: .seconds(60), clock: .suspending)
                 } catch {
                     break
                 }
@@ -141,8 +156,25 @@ final class TailnetMonitor: NSObject, ObservableObject {
         }
     }
 
-    func actions(for host: TailnetHost) -> [HostAction] {
-        HostActionCatalog(configuration: actionConfiguration).actions(for: host)
+    /// Refreshes shortly after the Mac wakes or its network path changes, since
+    /// that is when peers most often appear or disappear. Bursts of events
+    /// collapse into one refresh, at most once a minute.
+    func startObservingSystemEvents() {
+        guard pathMonitor == nil else { return }
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(systemDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] _ in
+            Task { @MainActor in self?.networkPathDidChange() }
+        }
+        monitor.start(queue: DispatchQueue(label: "dev.tailops.monitor.path"))
+        pathMonitor = monitor
     }
 
     @objc private func refreshFromDistributedNotification(_ notification: Notification) {
@@ -151,42 +183,39 @@ final class TailnetMonitor: NSObject, ObservableObject {
         }
     }
 
-    private func snapshotWithPingDiagnostics(_ snapshot: TailnetSnapshot, now: Date) async -> TailnetSnapshot {
-        guard let pingProvider else { return snapshot }
+    @objc private func systemDidWake(_ notification: Notification) {
+        scheduleSystemEventRefresh()
+    }
 
-        let existingPingByHostID = Dictionary(
-            uniqueKeysWithValues: self.snapshot.hosts.compactMap { host in
-                host.diagnostics?.ping.map { (host.id, $0) }
-            }
-        )
-        guard shouldRefreshPingDiagnostics(now: now) else {
-            return snapshotWithRetainedPingDiagnostics(snapshot, existingPingByHostID: existingPingByHostID)
+    private func networkPathDidChange() {
+        // The monitor reports the current path immediately; launch already refreshed.
+        guard hasSeenInitialPath else {
+            hasSeenInitialPath = true
+            return
         }
+        scheduleSystemEventRefresh()
+    }
 
-        var diagnosedHosts: [TailnetHost] = []
-        for host in snapshot.hosts {
-            guard host.role == .peer, host.status == .online else {
-                diagnosedHosts.append(host)
-                continue
-            }
-
-            do {
-                guard let ping = try await pingProvider.pingSummary(for: host) else {
-                    diagnosedHosts.append(host)
-                    continue
-                }
-                let retainedPing = existingPingByHostID[host.id]?.mergingRecentSamples(
-                    from: ping,
-                    maxSamples: maxRetainedPingSamples
-                ) ?? ping
-                diagnosedHosts.append(host.withDiagnostics(TailnetHostDiagnostics(ping: retainedPing)))
-            } catch {
-                diagnosedHosts.append(host)
-            }
+    /// Waits a few seconds for the network to settle, and at least until a minute
+    /// has passed since the last refresh, so the final event in a burst is honored.
+    private func scheduleSystemEventRefresh() {
+        systemEventRefreshTask?.cancel()
+        let sinceLastRefresh = lastRefreshDate.map { Date().timeIntervalSince($0) } ?? .infinity
+        let delay = max(systemEventRefreshDelay, systemEventMinimumInterval - sinceLastRefresh)
+        systemEventRefreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            await refresh()
         }
+    }
 
-        lastPingDiagnosticsRefreshDate = now
-        return TailnetSnapshot(hosts: diagnosedHosts, generatedAt: snapshot.generatedAt)
+    private func publish(_ nextSnapshot: TailnetSnapshot) throws {
+        snapshot = nextSnapshot
+        try tailnetStore.save(nextSnapshot)
+    }
+
+    private func reloadWidget() {
+        TailOpsWidgetKind.reloadTimelines()
     }
 
     private func shouldRefreshPingDiagnostics(now: Date) -> Bool {
@@ -194,21 +223,57 @@ final class TailnetMonitor: NSObject, ObservableObject {
         return now.timeIntervalSince(lastPingDiagnosticsRefreshDate) >= pingDiagnosticsMinimumInterval
     }
 
-    private func snapshotWithRetainedPingDiagnostics(
+    private func pingSummariesByHostID(in snapshot: TailnetSnapshot) -> [String: TailnetPingSummary] {
+        Dictionary(
+            snapshot.hosts.compactMap { host in host.diagnostics?.ping.map { (host.id, $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    /// Pings online peers with bounded concurrency. A failed ping leaves that
+    /// host out of the result so its earlier samples are kept.
+    private func pingSummaries(
+        for hosts: [TailnetHost],
+        using pingProvider: TailscalePingProviding
+    ) async -> [String: TailnetPingSummary] {
+        var pending = hosts.filter { $0.role == .peer && $0.status != .offline }[...]
+        var summaries: [String: TailnetPingSummary] = [:]
+
+        await withTaskGroup(of: (String, TailnetPingSummary?).self) { group in
+            var running = 0
+            while !pending.isEmpty || running > 0 {
+                while running < maxConcurrentPings, let host = pending.popFirst() {
+                    group.addTask { (host.id, try? await pingProvider.pingSummary(for: host)) }
+                    running += 1
+                }
+                guard let (hostID, summary) = await group.next() else { break }
+                running -= 1
+                if let summary {
+                    summaries[hostID] = summary
+                }
+            }
+        }
+
+        return summaries
+    }
+
+    /// Attaches ping history to reachable peers only; offline hosts and this device
+    /// carry no ping diagnostics.
+    private static func snapshot(
         _ snapshot: TailnetSnapshot,
-        existingPingByHostID: [String: TailnetPingSummary]
+        applying pingByHostID: [String: TailnetPingSummary]
     ) -> TailnetSnapshot {
         let hosts = snapshot.hosts.map { host in
             guard host.role == .peer,
-                  host.status == .online,
-                  let existingPing = existingPingByHostID[host.id]
+                  host.status != .offline,
+                  let ping = pingByHostID[host.id]
             else {
                 return host
             }
 
-            return host.withDiagnostics(TailnetHostDiagnostics(ping: existingPing))
+            return host.withDiagnostics(TailnetHostDiagnostics(ping: ping))
         }
 
-        return TailnetSnapshot(hosts: hosts, generatedAt: snapshot.generatedAt)
+        return snapshot.withHosts(hosts)
     }
 }

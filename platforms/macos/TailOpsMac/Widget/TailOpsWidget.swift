@@ -6,8 +6,8 @@ import WidgetKit
 
 struct TailOpsWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "dev.tailops.monitor.widget", provider: TailOpsTimelineProvider()) { entry in
-            TailOpsWidgetView(entry: entry)
+        StaticConfiguration(kind: TailOpsWidgetKind.identifier, provider: TailOpsTimelineProvider()) { entry in
+            TailOpsWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("TailOps")
         .description("Glanceable Tailscale host reachability.")
@@ -24,6 +24,17 @@ struct TailOpsEntry: TimelineEntry {
     let refreshHealth: TailOpsRefreshHealth
     let wormholeConfiguration: TailOpsWormholeConfiguration
     let pendingWormholeTransfers: [TailOpsWormholePendingTransfer]
+
+    func at(_ date: Date) -> TailOpsEntry {
+        TailOpsEntry(
+            date: date,
+            snapshot: snapshot,
+            actionConfiguration: actionConfiguration,
+            refreshHealth: refreshHealth,
+            wormholeConfiguration: wormholeConfiguration,
+            pendingWormholeTransfers: pendingWormholeTransfers
+        )
+    }
 }
 
 struct TailOpsTimelineProvider: TimelineProvider {
@@ -42,47 +53,48 @@ struct TailOpsTimelineProvider: TimelineProvider {
         completion(entry())
     }
 
+    /// The host app reloads timelines after every refresh, so the widget does not
+    /// poll. It only adds entries for moments its own display changes: the
+    /// snapshot going stale, a stuck refresh timing out, or a pending transfer
+    /// expiring.
     func getTimeline(in context: Context, completion: @escaping (Timeline<TailOpsEntry>) -> Void) {
         let entry = entry()
-        let nextRefresh = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date().addingTimeInterval(900)
-        completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
+        let dates = TailOpsWidgetSchedule.entryDates(
+            now: entry.date,
+            snapshotGeneratedAt: entry.snapshot.hosts.isEmpty ? nil : entry.snapshot.generatedAt,
+            refreshHealth: entry.refreshHealth,
+            pendingTransferExpiries: entry.pendingWormholeTransfers.map(\.expiresAt)
+        )
+        let entries = dates.map { entry.at($0) }
+        let safetyReload = entry.date.addingTimeInterval(TailOpsWidgetSchedule.safetyReloadInterval)
+        completion(Timeline(entries: entries, policy: .after(safetyReload)))
     }
 
     private func entry() -> TailOpsEntry {
-        TailOpsEntry(
+        let store = SharedSnapshotStore()
+        return TailOpsEntry(
             date: Date(),
-            snapshot: loadSnapshot(),
-            actionConfiguration: loadActionConfiguration(),
-            refreshHealth: loadRefreshHealth(),
-            wormholeConfiguration: loadWormholeConfiguration(),
-            pendingWormholeTransfers: loadPendingWormholeTransfers()
+            snapshot: (try? store.load()) ?? TailnetSnapshot(hosts: []),
+            actionConfiguration: (try? store.loadActionConfiguration()) ?? TailnetActionConfiguration(),
+            refreshHealth: (try? store.loadRefreshHealth()) ?? TailOpsRefreshHealth(),
+            wormholeConfiguration: (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration(),
+            pendingWormholeTransfers: (try? store.loadWormholePendingTransfers()) ?? []
         )
     }
+}
 
-    private func loadSnapshot() -> TailnetSnapshot {
-        (try? SharedSnapshotStore().load()) ?? TailnetSnapshot(hosts: [])
-    }
+private struct TailOpsWidgetEntryView: View {
+    let entry: TailOpsEntry
+    @Environment(\.widgetFamily) private var family
 
-    private func loadActionConfiguration() -> TailnetActionConfiguration {
-        (try? SharedSnapshotStore().loadActionConfiguration()) ?? TailnetActionConfiguration()
-    }
-
-    private func loadRefreshHealth() -> TailOpsRefreshHealth {
-        (try? SharedSnapshotStore().loadRefreshHealth()) ?? TailOpsRefreshHealth()
-    }
-
-    private func loadWormholeConfiguration() -> TailOpsWormholeConfiguration {
-        (try? SharedSnapshotStore().loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
-    }
-
-    private func loadPendingWormholeTransfers() -> [TailOpsWormholePendingTransfer] {
-        (try? SharedSnapshotStore().loadWormholePendingTransfers()) ?? []
+    var body: some View {
+        TailOpsWidgetView(entry: entry, family: family)
     }
 }
 
 struct TailOpsWidgetView: View {
     let entry: TailOpsEntry
-    @Environment(\.widgetFamily) private var family
+    let family: WidgetFamily
     @Environment(\.widgetRenderingMode) private var renderingMode
 
     private var actionCatalog: HostActionCatalog {
@@ -95,6 +107,11 @@ struct TailOpsWidgetView: View {
 
     private var gridHosts: [TailnetHost] {
         Array(entry.snapshot.hosts.sorted(by: gridSort).prefix(gridHostLimit))
+    }
+
+    private var hiddenGridOfflineCount: Int {
+        let shownIDs = Set(gridHosts.map(\.id))
+        return entry.snapshot.hosts.filter { $0.status == .offline && !shownIDs.contains($0.id) }.count
     }
 
     var body: some View {
@@ -113,11 +130,15 @@ struct TailOpsWidgetView: View {
                 HStack(spacing: 7) {
                     Button(intent: OpenTailscaleAppIntent()) {
                         Label("Tailscale", systemImage: "arrow.up.forward.app")
-                            .labelStyle(.iconOnly)
+                            .labelStyle(.titleAndIcon)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
+                            .background(Color.primary.opacity(0.09), in: Capsule())
                     }
                     Button(intent: RefreshTailOpsWidgetIntent()) {
                         Image(systemName: "arrow.clockwise")
                     }
+                    .accessibilityLabel("Refresh TailOps")
                     WidgetSnapshotFreshness(
                         generatedAt: entry.snapshot.generatedAt,
                         refreshHealth: entry.refreshHealth,
@@ -127,10 +148,15 @@ struct TailOpsWidgetView: View {
                     Link(destination: TailOpsSettingsOpenSignal.url) {
                         Image(systemName: "gearshape")
                     }
+                    .accessibilityLabel("Open TailOps Settings")
                 }
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .buttonStyle(.plain)
+            }
+
+            if let banner {
+                WidgetStatusBanner(banner: banner)
             }
 
             if entry.snapshot.hosts.isEmpty {
@@ -141,8 +167,12 @@ struct TailOpsWidgetView: View {
                     actionCatalog: actionCatalog,
                     wormholeConfiguration: entry.wormholeConfiguration,
                     pendingTransfers: entry.pendingWormholeTransfers,
+                    referenceDate: entry.date,
                     style: gridStyle
                 )
+                if hiddenGridOfflineCount > 0 {
+                    WidgetOfflineSummary(count: hiddenGridOfflineCount)
+                }
             } else {
                 VStack(alignment: .leading, spacing: rowSpacing) {
                     ForEach(layout.visibleHosts) { host in
@@ -151,13 +181,15 @@ struct TailOpsWidgetView: View {
                             actions: actionCatalog.actions(for: host),
                             wormholeContact: entry.wormholeConfiguration.contact(for: host),
                             pendingTransfer: entry.pendingWormholeTransfers.pendingTransfer(
-                                for: entry.wormholeConfiguration.contact(for: host)
+                                for: entry.wormholeConfiguration.contact(for: host),
+                                at: entry.date
                             ),
-                            showsActions: showsHostActions,
-                            isCompact: usesCompactRows
+                            isCompact: usesCompactRows,
+                            showsActionTitles: family == .systemMedium
                         )
                     }
-                    if layout.hiddenOfflineCount > 0 {
+                    // The banner takes this line's space in the medium family.
+                    if layout.hiddenOfflineCount > 0, banner == nil {
                         WidgetOfflineSummary(count: layout.hiddenOfflineCount)
                     }
                 }
@@ -177,6 +209,25 @@ struct TailOpsWidgetView: View {
         "point.3.connected.trianglepath.dotted"
     }
 
+    /// The single most important tailnet-wide message, if any.
+    private var banner: WidgetStatusBanner.Content? {
+        if entry.refreshHealth.hasFailedSinceLastSuccess, let error = entry.refreshHealth.lastError {
+            return .init(symbol: "exclamationmark.triangle.fill", text: error, tone: .problem)
+        }
+        guard let health = entry.snapshot.health else { return nil }
+        if let problem = health.backendProblem {
+            return .init(symbol: "power", text: problem, tone: .problem)
+        }
+        if let warning = health.warnings.first {
+            let more = health.warnings.count > 1 ? " (+\(health.warnings.count - 1) more)" : ""
+            return .init(symbol: "exclamationmark.triangle", text: warning + more, tone: .warning)
+        }
+        if let exitNode = health.exitNode {
+            return .init(symbol: "arrow.up.right.circle", text: "Exit node: \(exitNode.displayName)", tone: .info)
+        }
+        return nil
+    }
+
     private var usesStatusGrid: Bool {
         switch family {
         case .systemLarge, .systemExtraLarge:
@@ -187,18 +238,7 @@ struct TailOpsWidgetView: View {
     }
 
     private var visibleHostLimit: Int {
-        switch family {
-        case .systemSmall:
-            return 1
-        case .systemMedium:
-            return 2
-        case .systemExtraLarge:
-            return 4
-        case .systemLarge:
-            return 2
-        default:
-            return 2
-        }
+        family == .systemExtraLarge ? 4 : 2
     }
 
     private var gridHostLimit: Int {
@@ -206,7 +246,8 @@ struct TailOpsWidgetView: View {
         case .systemExtraLarge:
             return 9
         case .systemLarge:
-            return 6
+            // Two rows of tiles; three do not fit a large widget's height.
+            return 4
         default:
             return visibleHostLimit
         }
@@ -214,8 +255,10 @@ struct TailOpsWidgetView: View {
 
     private var gridColumnCount: Int {
         switch family {
-        case .systemLarge, .systemExtraLarge:
+        case .systemExtraLarge:
             return 3
+        case .systemLarge:
+            return 2
         default:
             return 2
         }
@@ -233,29 +276,20 @@ struct TailOpsWidgetView: View {
                 tileHorizontalPadding: 8,
                 tileVerticalPadding: 6,
                 tileContentSpacing: 5,
-                showsActionTitles: true
+                maximumTitledChips: 3
             )
         default:
             return WidgetHostStatusGrid.Style(
                 columns: gridColumnCount,
                 columnSpacing: 10,
                 rowSpacing: 10,
-                tileMinHeight: 102,
-                tileMaxHeight: 102,
+                tileMinHeight: 84,
+                tileMaxHeight: nil,
                 tileHorizontalPadding: 10,
                 tileVerticalPadding: 8,
                 tileContentSpacing: 7,
-                showsActionTitles: false
+                maximumTitledChips: 2
             )
-        }
-    }
-
-    private var showsHostActions: Bool {
-        switch family {
-        case .systemSmall:
-            return false
-        default:
-            return true
         }
     }
 
@@ -291,18 +325,11 @@ struct TailOpsWidgetView: View {
     }
 
     private var horizontalPadding: CGFloat {
-        switch family {
-        case .systemSmall:
-            return 12
-        default:
-            return 14
-        }
+        14
     }
 
     private var verticalPadding: CGFloat {
         switch family {
-        case .systemSmall:
-            return 9
         case .systemMedium:
             return 12
         case .systemLarge:
@@ -344,8 +371,6 @@ private struct WidgetSnapshotFreshness: View {
     let referenceDate: Date
     let hasSnapshot: Bool
 
-    private let staleInterval: TimeInterval = 90 * 60
-
     var body: some View {
         HStack(spacing: 3) {
             if refreshHealth.hasFailedSinceLastSuccess {
@@ -378,7 +403,7 @@ private struct WidgetSnapshotFreshness: View {
     }
 
     private var isStale: Bool {
-        hasSnapshot && referenceDate.timeIntervalSince(generatedAt) >= staleInterval
+        hasSnapshot && referenceDate.timeIntervalSince(generatedAt) >= TailOpsWidgetSchedule.staleInterval
     }
 
     private var showsStateLabel: Bool {
@@ -390,7 +415,7 @@ private struct WidgetSnapshotFreshness: View {
     }
 
     private var isRefreshActive: Bool {
-        refreshHealth.isRefreshInProgress(at: referenceDate)
+        refreshHealth.isRefreshInProgress(at: referenceDate, timeout: TailOpsWidgetSchedule.refreshTimeout)
     }
 
     private var accessibilityText: String {
@@ -406,6 +431,61 @@ private struct WidgetSnapshotFreshness: View {
             return "Snapshot stale. Generated \(age)"
         }
         return "Snapshot generated \(age)"
+    }
+}
+
+private struct WidgetStatusBanner: View {
+    struct Content {
+        enum Tone {
+            case problem
+            case warning
+            case info
+        }
+
+        let symbol: String
+        let text: String
+        let tone: Tone
+    }
+
+    let banner: Content
+
+    var body: some View {
+        Label {
+            Text(banner.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } icon: {
+            Image(systemName: banner.symbol)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(color)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var color: Color {
+        switch banner.tone {
+        case .problem:
+            return .red
+        case .warning:
+            return .orange
+        case .info:
+            return .secondary
+        }
+    }
+}
+
+private extension TailnetHost {
+    /// Idle peers have no live path worth naming; Tailscale connects on demand.
+    var activeRouteLabel: String? {
+        guard let connection, connection != .idle else { return nil }
+        return connection.label
+    }
+
+    /// Replaces the address line while a key-expiry warning is active.
+    var keyExpiryText: String? {
+        guard status == .warning, let keyExpiry else { return nil }
+        return "Key expires \(keyExpiry.formatted(.dateTime.month(.abbreviated).day()))"
     }
 }
 
@@ -432,9 +512,9 @@ private struct TailOpsWidgetBackground: View {
         if renderingMode == .fullColor {
             LinearGradient(
                 colors: [
-                    Color.green.opacity(0.15),
-                    Color.blue.opacity(0.08),
-                    Color.orange.opacity(0.08)
+                    Color(red: 0.06, green: 0.17, blue: 0.31).opacity(0.96),
+                    Color(red: 0.09, green: 0.28, blue: 0.48).opacity(0.88),
+                    Color.cyan.opacity(0.12)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -467,6 +547,7 @@ private struct WidgetHostStatusGrid: View {
     let actionCatalog: HostActionCatalog
     let wormholeConfiguration: TailOpsWormholeConfiguration
     let pendingTransfers: [TailOpsWormholePendingTransfer]
+    let referenceDate: Date
     let style: Style
 
     struct Style {
@@ -478,7 +559,8 @@ private struct WidgetHostStatusGrid: View {
         let tileHorizontalPadding: CGFloat
         let tileVerticalPadding: CGFloat
         let tileContentSpacing: CGFloat
-        let showsActionTitles: Bool
+        /// Chips drop their titles when more than this many share a tile's width.
+        let maximumTitledChips: Int
     }
 
     private var gridColumns: [GridItem] {
@@ -495,7 +577,10 @@ private struct WidgetHostStatusGrid: View {
                     host: host,
                     actions: actionCatalog.actions(for: host),
                     wormholeContact: wormholeConfiguration.contact(for: host),
-                    pendingTransfer: pendingTransfers.pendingTransfer(for: wormholeConfiguration.contact(for: host)),
+                    pendingTransfer: pendingTransfers.pendingTransfer(
+                        for: wormholeConfiguration.contact(for: host),
+                        at: referenceDate
+                    ),
                     style: style
                 )
             }
@@ -528,6 +613,13 @@ private struct WidgetHostStatusTile: View {
                             .foregroundStyle(color)
                             .lineLimit(1)
 
+                        if let route = host.activeRouteLabel {
+                            Text(route)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+
                         if let pingText {
                             Text(pingText)
                                 .font(.caption2.monospacedDigit().weight(.semibold))
@@ -552,22 +644,26 @@ private struct WidgetHostStatusTile: View {
                     .minimumScaleFactor(0.78)
             }
 
-            HStack(spacing: 5) {
-                if let wormholeContact {
-                    WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: style.showsActionTitles)
-                    WidgetWormholeChip(
-                        mode: .receive,
-                        contact: wormholeContact,
-                        pendingTransfer: pendingTransfer,
-                        showsTitle: style.showsActionTitles
-                    )
+            if host.status != .offline || pendingTransfer != nil {
+                HStack(spacing: 5) {
+                    if let wormholeContact {
+                        WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: showsChipTitles)
+                        WidgetWormholeChip(
+                            mode: .receive,
+                            contact: wormholeContact,
+                            pendingTransfer: pendingTransfer,
+                            showsTitle: showsChipTitles
+                        )
+                    }
+                    ForEach(Array(visibleActions.enumerated()), id: \.offset) { _, action in
+                        WidgetActionChip(action: action, showsTitle: showsChipTitles)
+                    }
+                    Spacer(minLength: 0)
                 }
-                ForEach(actions.prefix(3), id: \.title) { action in
-                    WidgetActionChip(action: action, showsTitle: style.showsActionTitles)
-                }
-                Spacer(minLength: 0)
             }
         }
+        // The grid otherwise proposes a short row height and shrinks the host name to fit.
+        .fixedSize(horizontal: false, vertical: true)
         .frame(
             maxWidth: .infinity,
             minHeight: style.tileMinHeight,
@@ -576,21 +672,28 @@ private struct WidgetHostStatusTile: View {
         )
         .padding(.horizontal, style.tileHorizontalPadding)
         .padding(.vertical, style.tileVerticalPadding)
-        .background(tileBackground, in: RoundedRectangle(cornerRadius: 8))
+        .background(tileBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .widgetAccentable(false)
         .overlay {
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(
-                    pendingTransfer == nil
-                        ? (wormholeContact == nil ? color.opacity(0.42) : Color.accentColor.opacity(0.72))
-                        : Color.accentColor.opacity(0.95),
-                    lineWidth: pendingTransfer == nil ? (wormholeContact == nil ? 1 : 1.5) : 2
+                    pendingTransfer == nil ? Color.white.opacity(0.18) : Color.accentColor.opacity(0.92),
+                    lineWidth: pendingTransfer == nil ? 1 : 2
                 )
         }
     }
 
     private var detailText: String {
-        host.primaryAddress ?? host.magicDNSName ?? host.operatingSystem ?? "No address"
+        host.keyExpiryText ?? host.primaryAddress ?? host.magicDNSName ?? host.operatingSystem ?? "No address"
+    }
+
+    private var visibleActions: ArraySlice<HostAction> {
+        actions.prefix(3)
+    }
+
+    private var showsChipTitles: Bool {
+        let chipCount = visibleActions.count + (wormholeContact == nil ? 0 : 2)
+        return chipCount <= style.maximumTitledChips
     }
 
     private var pingText: String? {
@@ -609,7 +712,7 @@ private struct WidgetHostStatusTile: View {
         case .online:
             return host.role == .thisDevice ? "This Mac" : "Online"
         case .warning:
-            return "Warn"
+            return host.keyExpiry == nil ? "Warning" : "Key expiring"
         case .offline:
             return "Offline"
         }
@@ -641,8 +744,9 @@ private struct WidgetHostStatusTile: View {
     private var tileBackground: LinearGradient {
         LinearGradient(
             colors: [
-                color.opacity(host.status == .offline ? 0.09 : 0.2),
-                Color.primary.opacity(0.045)
+                Color.white.opacity(0.13),
+                Color.blue.opacity(0.07),
+                Color.black.opacity(0.05)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -666,8 +770,8 @@ private struct WidgetHostActionRow: View {
     let actions: [HostAction]
     let wormholeContact: TailOpsWormholeContact?
     let pendingTransfer: TailOpsWormholePendingTransfer?
-    let showsActions: Bool
     let isCompact: Bool
+    let showsActionTitles: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -705,21 +809,24 @@ private struct WidgetHostActionRow: View {
                     .minimumScaleFactor(0.82)
             }
 
-            if showsActions {
-                HStack(spacing: 4) {
-                    if let wormholeContact {
-                        WidgetWormholeChip(mode: .send, contact: wormholeContact)
-                        WidgetWormholeChip(mode: .receive, contact: wormholeContact, pendingTransfer: pendingTransfer)
-                    }
-                    ForEach(actions.prefix(2), id: \.title) { action in
-                        WidgetActionChip(action: action)
-                    }
+            HStack(spacing: 4) {
+                if let wormholeContact {
+                    WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: showsActionTitles)
+                    WidgetWormholeChip(
+                        mode: .receive,
+                        contact: wormholeContact,
+                        pendingTransfer: pendingTransfer,
+                        showsTitle: showsActionTitles
+                    )
+                }
+                ForEach(Array(actions.prefix(2).enumerated()), id: \.offset) { _, action in
+                    WidgetActionChip(action: action, showsTitle: showsActionTitles)
                 }
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, isCompact ? 5 : 6)
-        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         .widgetAccentable(false)
         .overlay(alignment: .leading) {
             Rectangle()
@@ -739,11 +846,11 @@ private struct WidgetHostActionRow: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 3)
                         .opacity(0.11)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                         .allowsHitTesting(false)
                 }
                 if wormholeContact != nil {
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .stroke(Color.accentColor.opacity(pendingTransfer == nil ? 0.62 : 0.95), lineWidth: pendingTransfer == nil ? 1.25 : 2)
                 }
             }
@@ -751,20 +858,20 @@ private struct WidgetHostActionRow: View {
     }
 
     private var detailText: String {
-        host.primaryAddress ?? host.magicDNSName ?? host.status.rawValue
+        if let keyExpiryText = host.keyExpiryText {
+            return keyExpiryText
+        }
+        let address = host.primaryAddress ?? host.magicDNSName ?? host.status.rawValue
+        guard let route = host.activeRouteLabel else { return address }
+        return "\(address) · \(route)"
     }
 
     private var pingText: String? {
-        guard let ping = host.diagnostics?.ping,
-              let latest = ping.latestLatencyMilliseconds,
-              let average = ping.averageLatencyMilliseconds
-        else {
+        guard let latest = host.diagnostics?.ping?.latestLatencyMilliseconds else {
             return nil
         }
 
-        let latestText = latest.formatted(.number.precision(.fractionLength(0...0)))
-        let averageText = average.formatted(.number.precision(.fractionLength(0...0)))
-        return "\(latestText) ms / \(averageText) avg"
+        return "\(latest.formatted(.number.precision(.fractionLength(0...0)))) ms"
     }
 
     private func color(for status: TailnetHost.Status) -> Color {
@@ -832,10 +939,11 @@ private struct WidgetWormholeChip: View {
 }
 
 private extension [TailOpsWormholePendingTransfer] {
-    func pendingTransfer(for contact: TailOpsWormholeContact?) -> TailOpsWormholePendingTransfer? {
+    /// Uses the entry's date, not the clock: WidgetKit renders future entries ahead of time.
+    func pendingTransfer(for contact: TailOpsWormholeContact?, at date: Date) -> TailOpsWormholePendingTransfer? {
         guard let contact else { return nil }
         return first {
-            !$0.isExpired()
+            !$0.isExpired(at: date)
                 && ($0.contactID == contact.id || $0.pairingID == contact.pairingID)
                 && $0.direction == .incoming
         }
@@ -883,15 +991,11 @@ private struct WidgetActionChip: View {
                 chipContent
             }
             .buttonStyle(.plain)
-        } else if action.kind == .dashboard, let url = action.url {
+        } else if [.dashboard, .screenSharing, .fileSharing].contains(action.kind), let url = action.url {
             Button(intent: OpenDashboardURLIntent(url: url)) {
                 chipContent
             }
             .buttonStyle(.plain)
-        } else if let url = action.url {
-            Link(destination: url) {
-                chipContent
-            }
         } else if action.kind == .copyAddress, let value = action.value {
             Button(intent: CopyTailnetValueIntent(value: value)) {
                 chipContent
@@ -940,6 +1044,10 @@ private struct WidgetActionChip: View {
             return "terminal"
         case .dashboard:
             return "gauge.with.dots.needle.50percent"
+        case .screenSharing:
+            return "rectangle.on.rectangle"
+        case .fileSharing:
+            return "folder"
         case .copyAddress:
             return "doc.on.doc"
         }
@@ -948,21 +1056,18 @@ private struct WidgetActionChip: View {
 
 #if DEBUG
 #Preview("Widget View") {
-    TailOpsWidgetView(entry: TailOpsEntry(
-        date: .now,
-        snapshot: .preview,
-        actionConfiguration: .preview,
-        refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now),
-        wormholeConfiguration: .previewBen,
-        pendingWormholeTransfers: .previewBen
-    ))
+    TailOpsWidgetView(
+        entry: TailOpsEntry(
+            date: .now,
+            snapshot: .preview,
+            actionConfiguration: .preview,
+            refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now),
+            wormholeConfiguration: .previewBen,
+            pendingWormholeTransfers: .previewBen
+        ),
+        family: .systemMedium
+    )
         .frame(width: 340, height: 240)
-}
-
-#Preview("Small", as: .systemSmall) {
-    TailOpsWidget()
-} timeline: {
-    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now), wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
 }
 
 #Preview("Medium", as: .systemMedium) {

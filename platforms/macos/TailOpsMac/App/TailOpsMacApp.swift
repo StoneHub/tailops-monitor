@@ -24,23 +24,15 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
         DistributedNotificationCenter.default().addObserver(
             self,
-            selector: #selector(openSettingsWindowFromDistributedNotification),
-            name: Notification.Name(TailOpsSettingsOpenSignal.notificationName),
-            object: nil
-        )
-        DistributedNotificationCenter.default().addObserver(
-            self,
             selector: #selector(openWormholeWindowFromDistributedNotification),
             name: Notification.Name(TailOpsWormholeSignal.notificationName),
             object: nil
         )
-        Self.openSettingsWindowIfRequested()
         Self.openWormholeWindowIfRequested()
         TailOpsWormholePendingSignalServer.shared.start()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        Self.openSettingsWindowIfRequested()
         Self.openWormholeWindowIfRequested()
     }
 
@@ -53,16 +45,7 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls where url.scheme == "tailops" {
-            switch url.host {
-            case "settings":
-                Self.openSettingsWindow()
-            case "wormhole":
-                Self.openWormholeWindow()
-            default:
-                continue
-            }
-        }
+        urls.forEach(Self.route)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -70,35 +53,24 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    static func openSettingsWindowIfRequested(store: SharedSnapshotStore = SharedSnapshotStore()) {
-        guard (try? store.loadSettingsOpenRequest()) != nil else {
-            return
-        }
-
-        try? store.clearSettingsOpenRequest()
-        openSettingsWindow()
-    }
-
     static func openSettingsWindow() {
         TailOpsSettingsWindowController.shared.show()
     }
 
-    static func openWormholeWindowIfRequested(store: SharedSnapshotStore = SharedSnapshotStore()) {
+    static func openWormholeWindowIfRequested(
+        store: any TailOpsAppGroupRequestStoring = SharedSnapshotStore()
+    ) {
         guard let request = try? store.loadWormholeOpenRequest() else {
             return
         }
 
         try? store.clearWormholeOpenRequest()
+        guard request.isFresh() else { return }
         openWormholeWindow(request: request)
     }
 
     static func openWormholeWindow(request: TailOpsWormholeOpenRequest? = nil) {
         TailOpsWormholeWindowController.shared.show(request: request)
-    }
-
-    @objc private func openSettingsWindowFromDistributedNotification(_ notification: Notification) {
-        try? SharedSnapshotStore().clearSettingsOpenRequest()
-        Self.openSettingsWindow()
     }
 
     @objc private func openWormholeWindowFromDistributedNotification(_ notification: Notification) {
@@ -110,17 +82,22 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
         guard let urlString = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
-              let url = URL(string: urlString),
-              url.scheme == "tailops"
+              let url = URL(string: urlString)
         else {
             return
         }
+        Self.route(url)
+    }
 
+    /// The Apple Event handler replaces AppKit's default URL delivery, so both
+    /// entry points funnel through this one router.
+    private static func route(_ url: URL) {
+        guard url.scheme == TailOpsSettingsOpenSignal.url.scheme else { return }
         switch url.host {
-        case "settings":
-            Self.openSettingsWindow()
-        case "wormhole":
-            Self.openWormholeWindow()
+        case TailOpsSettingsOpenSignal.url.host:
+            openSettingsWindow()
+        case TailOpsWormholeSignal.url.host:
+            openWormholeWindow()
         default:
             return
         }
@@ -134,10 +111,12 @@ struct TailOpsMacApp: App {
     @StateObject private var preferencesModel: TailOpsPreferencesModel
 
     init() {
+        let store = SharedSnapshotStore()
         let monitor = TailnetMonitor(
             statusProvider: ProcessTailscaleStatusProvider(),
             pingProvider: ProcessTailscalePingProvider(),
-            snapshotStore: SharedSnapshotStore()
+            tailnetStore: store,
+            requestStore: store
         )
         let preferencesModel = TailOpsPreferencesModel()
         TailOpsSettingsWindowController.shared.preferencesModel = preferencesModel
@@ -148,6 +127,7 @@ struct TailOpsMacApp: App {
                 await monitor.refresh()
             }
             monitor.startAutomaticRefresh()
+            monitor.startObservingSystemEvents()
         }
     }
 

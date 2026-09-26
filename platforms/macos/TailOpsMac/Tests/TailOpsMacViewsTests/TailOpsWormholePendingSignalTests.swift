@@ -86,7 +86,10 @@ final class TailOpsWormholePendingSignalTests: XCTestCase {
         try store.saveWormholeConfiguration(.init(contacts: [
             .init(id: "ben", displayName: "Ben", pairingID: "pair", tailnetNodeID: "peer-1")
         ]))
-        let server = TailOpsWormholePendingSignalServer(store: store, secretStore: TestSecretStore(secret: secret))
+        let server = TailOpsWormholePendingSignalServer(
+            wormholeStore: store,
+            secretStore: TestSecretStore(secret: secret)
+        )
         let body = try TailOpsWormholePendingSignalServer.encoder.encode(
             TailOpsWormholePendingSignalPayload(transfer: pendingTransfer())
         )

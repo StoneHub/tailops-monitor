@@ -5,8 +5,7 @@ Pure Swift macOS platform slice for a low-impact TailOps WidgetKit desktop widge
 ## Shape
 
 - `Sources/TailOpsCore`: testable Swift package core for parsing `tailscale status --json`, host status, summaries, and host actions.
-- `Tests/TailOpsCoreTests`: focused XCTest regressions for parsing, widget prioritization, refresh health, and shared-store persistence.
-- `Sources/TailOpsCoreValidation`: broader executable compatibility validation retained alongside XCTest.
+- `Tests/TailOpsCoreTests`: XCTest coverage for status and ping parsing, host actions, widget prioritization, refresh health, Wormhole codes, and shared-store persistence.
 - `App`: SwiftUI host app source. It owns refresh, runs `tailscale status --json`, gathers ping diagnostics for online peers, writes a cached snapshot, opens settings, and provides Finder Services.
 - `Widget`: WidgetKit source. It reads the cached snapshot and shows the most useful reachable hosts first.
 - `Shared`: source files that should be included in both the app target and the widget extension target.
@@ -61,7 +60,7 @@ The app group identifier lives in `Shared/SharedSnapshotStore.swift`.
 Open these files in Xcode and use the canvas previews:
 
 - `App/TailOpsSettingsView.swift` for custom dashboard/action settings.
-- `Widget/TailOpsWidget.swift` for small, medium, large, and extra-large desktop widgets.
+- `Widget/TailOpsWidget.swift` for medium, large, and extra-large desktop widgets.
 
 The preview data lives in `Shared/PreviewFixtures.swift`, so visual edits do not need live Tailscale state.
 
@@ -96,16 +95,17 @@ Custom actions extend the generated per-host defaults instead of replacing them.
 
 ## Widget-First App
 
-TailOps no longer shows a menu-bar icon by default. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear opens `tailops://settings`, bringing the app forward and showing the floating settings window on the active Space so custom buttons stay reachable from widget-only mode.
+TailOps has no menu-bar icon. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear is a `Link` to `tailops://settings`. Opening the deep link brings the app forward and shows the floating settings window on the active Space so custom buttons stay reachable from widget-only mode.
 
-The host registers the `tailops://settings` URL scheme as the supported widget-to-app settings path. Widget actions remain intentionally small: they either invoke App Intents for one-shot actions or deep-link back into the containing app when richer UI is needed.
+The host registers the `tailops://settings` URL scheme as the supported widget-to-app settings path. The visible settings gear uses that deep link. Other widget actions use App Intents for one-shot work or deep-link back into the containing app when richer UI is needed.
 
 ## Taildrop
 
 TailOps currently exposes Taildrop through Finder:
 
 - Finder can show a `Send with TailOps` Service for selected files. The service opens a Taildrop destination picker backed by `tailscale file cp --targets`.
-- Host rows accept dropped files and send them with `tailscale file cp`.
+
+The Finder Service is the Taildrop entry point.
 
 Cross-account file-send path: TailOps includes a Wormhole send/receive window backed by paired contacts and deterministic transfer codes. Use Magic Wormhole for simple prompt files, Markdown, rich text, and images when the paired user can click receive. Keep Taildrop for same-account devices only. Use SFTP or a future token-authenticated TailOps Inbox receiver only if unattended drops become necessary.
 
@@ -163,20 +163,20 @@ WidgetKit does not expose arbitrary hover-only controls. TailOps uses always-vis
 
 Host SSH chips run `OpenSSHInTerminalIntent`, which opens `ssh://<host>` explicitly with Terminal. Plain widget `Link` dispatch for `ssh://` was not reliable enough on macOS.
 
-## Runtime Impact
+## Runtime impact
 
-The widget itself does not ping. It reloads the cached snapshot from the shared App Group on its WidgetKit timeline, currently every hour.
+The widget itself does not ping or poll. The host app reloads it after each refresh; between reloads the widget only schedules entries for display changes (stale after 90 minutes, a stuck refresh timing out, a pending transfer expiring) plus a six-hour safety reload.
 
-The app does the active refresh work. It refreshes on launch, once per hour while the app remains alive, and when the refresh button is pressed. Each refresh currently runs:
+The app does the active refresh work. It refreshes on launch, once per hour while the app remains alive, when the refresh button is pressed, and a few seconds after wake or a network path change (at most once a minute). Each refresh runs:
 
 ```text
 tailscale status --json
 tailscale ping --c 6 --timeout 1500ms --until-direct=false <online-peer>
 ```
 
-Only online peers are pinged, and ping diagnostics are throttled to at most once per hour. With two online peers, one ping refresh means twelve ping samples total. Refreshes inside the one-hour window keep cached ping diagnostics instead of running another ping burst.
+The status snapshot is written and the widget reloaded before any ping runs. Only online peers are pinged, four at a time, and ping diagnostics are throttled to at most once per hour. With two online peers, one ping refresh means twelve ping samples total. Refreshes inside the one-hour window keep cached ping diagnostics, and a failed ping keeps a host's earlier samples.
 
-## Sandbox Note
+## Sandbox note
 
 The app currently reads Tailscale through:
 
@@ -190,17 +190,10 @@ The app currently reads Tailscale through:
 
 That is the simplest and lowest-risk first step for a local developer utility. A sandboxed App Store build should not rely on launching arbitrary command-line tools. For that path, replace `ProcessTailscaleStatusProvider` with an XPC helper or a signed privileged helper.
 
-## Verify Core
+## Verify core
 
 ```bash
 swift test
-swift run TailOpsCoreValidation
-```
-
-The XCTest target covers focused regressions while the validation executable keeps the broader legacy checks. Expected validation-runner output:
-
-```text
-TailOpsCoreValidation passed
 ```
 
 ## Lifecycle
@@ -209,31 +202,26 @@ The widget is intentionally passive. It does not own a backend and does not keep
 
 Removing the widget leaves no backend to kill. Quitting the hidden host app stops refresh work.
 
-## Next Implementation Plan
-
-The next control-surface plan lives at:
-
-```text
-docs/superpowers/plans/2026-05-14-tailops-macos-control-surface.md
-```
-
-Current progress:
+## Current state
 
 - Native Swift hidden host app and WidgetKit widget are working.
 - App and widget share state through the team-prefixed App Group.
-- Widget supports small, medium, large, and extra-large families.
+- Widget supports medium, large, and extra-large families.
 - Widget shows reachable hosts first, then offline hosts when space remains, and collapses extra offline hosts.
-- Widget rows show latest ping route, latest latency, average latency, and sample count when diagnostics are cached.
+- Widget rows show latest and average latency when diagnostics are cached. Grid tiles show latest latency.
 - Widget quick actions support SSH, dashboard URLs, and copy actions.
-- Widget settings gear opens the hidden host app settings window through an App Intent.
+- Widget settings gear opens the hidden host app through `tailops://settings`.
 - Finder Service can send selected files through Taildrop.
 - Local signed installs are branded as `/Applications/TailOps.app`; `TailOpsMac.app` is the old development product name.
 
-The planned order is:
+Current follow-up work:
 
 1. Manually verify the widget gear in the live desktop widget after each install.
 2. Improve dashboard action presets and common-port helpers in settings.
-3. Exercise the hardened Wormhole send/receive path between two updated Macs.
-4. Keep menu-bar UI as optional future scope only if the widget cannot cover a workflow.
+3. Add QR setup and explicit cancellation to the Wormhole flow.
+4. Exercise Wormhole send and receive between two signed, current Mac installs.
+5. Keep menu-bar UI as optional future scope only if the widget cannot cover a workflow.
+
+The completed native control-surface plan is archived at `../../../docs/archive/2026-05/2026-05-14-tailops-macos-control-surface.md`. Active Wormhole follow-up remains in `../../../docs/superpowers/plans/2026-07-03-tailops-file-send-upgrade.html`.
 
 Wishlist: TailOps Drop Zone.

@@ -1,0 +1,32 @@
+[Unit]
+Description=TailOps Linux Fleet observation
+Documentation=https://github.com/StoneHub/tailops-monitor
+Requires=tailscaled.service
+After=tailscaled.service
+ConditionPathExists=/opt/tailopsd/current/bin/tailopsd.js
+
+[Service]
+Type=oneshot
+User=tailopsd
+Group=tailopsd
+WorkingDirectory=/var/lib/tailopsd
+ExecStart=/opt/tailopsd/current/bin/tailopsd.js snapshot --output /var/lib/tailopsd/fleet-observation.json
+TimeoutStartSec=30s
+UMask=0077
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/tailopsd
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+CPUQuota=5%
+MemoryMax=128M
+TasksMax=32

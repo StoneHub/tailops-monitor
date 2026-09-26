@@ -35,10 +35,6 @@ jobs:
         working-directory: platforms/macos/TailOpsMac
         run: swift test
 
-      - name: Run Swift core validation
-        working-directory: platforms/macos/TailOpsMac
-        run: swift run TailOpsCoreValidation
-
       - name: Build SwiftPM app views
         working-directory: platforms/macos/TailOpsMac
         run: swift build --target TailOpsMacViews

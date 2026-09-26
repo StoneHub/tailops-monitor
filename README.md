@@ -1,77 +1,93 @@
 # TailOps Monitor
 
-TailOps Monitor is a low-impact macOS tailnet companion for Tailscale users. The primary experience is now a WidgetKit desktop widget backed by a hidden Swift host app. The widget keeps useful tailnet shortcuts one click away: SSH, local dashboards, copied IPs, and quick reachability status.
+TailOps is a macOS-first Tailscale companion. The supported product is the WidgetKit extension plus its hidden Swift host app. The earlier Node browser dashboard was retired in September 2026; its last version is tagged `browser-dashboard-final` (see [ADR-0004](docs/adr/0004-retire-browser-dashboard.md)).
 
-The older browser dashboard is still included as a full-screen visualization and telemetry playground, but the macOS widget suite is now the main product path.
+## Support boundary
 
-## What It Does
+| Area | State | Proof boundary |
+| --- | --- | --- |
+| Native macOS app and widget | Supported product | Signed App Group build, installed app, running process, and WidgetKit registration are separate checks |
+| Linux `tailopsd` CLI | Platform project | Versioned read-only observation contract; package, host, install, runtime, and Fleet transport are separate checks |
+| Taildrop Finder Service | Supported same-account transfer path | Requires the local Tailscale CLI and a reachable destination |
+| Magic Wormhole | Interactive cross-account transfer path | Requires the external `wormhole` CLI and both participants to be present |
 
-- Shows Tailscale hosts from `tailscale status --json`.
-- Adds a desktop WidgetKit widget with host rows, ping context, and custom emoji action buttons.
-- Uses a hidden native host app for refresh, settings, App Group sharing, and Finder Services.
-- Adds passive ping context for online peers when the host app refreshes, then exposes the cached result in the widget.
-- Adds Taildrop shortcuts through menu-row file drops and a Finder Service.
-- Adds cross-account file send/receive through Magic Wormhole pairing, with Taildrop kept for same-account devices.
-- Lets you configure custom actions for each host:
-  - `ssh`: opens `ssh://host`.
-  - `url`: opens HTTP dashboards, admin pages, Home Assistant, OpenClaw, router UIs, logs, and other web tools.
-  - `copy`: copies an IP address or other configured value through an App Intent.
-- Shares widget state through an App Group instead of running a Node backend.
-- Keeps the widget passive: removing the widget leaves no backend process to kill.
+TailOps is the live operational client for Monroe's Fleet. The separate private Fleet repository owns durable identity, desired state, runbooks, and dated evidence. TailOps does not import that inventory or treat it as live health. See [ADR-0002](docs/adr/0002-fleet-integration.md).
 
-## Project Layout
+## Repository layout
 
 ```text
-platforms/macos/TailOpsMac/       Swift macOS app, widget, core package, and Xcode project
-src/                              Browser dashboard server and telemetry modules
-tests/                            Node test suite for browser/server telemetry behavior
-data/agents.sample.json           Sample AI agent phonebook data
-docs/assets/                      Visual references and dashboard captures
+platforms/macos/TailOpsMac/       Native app, widget, shared state, intents, and Swift tests
+platforms/linux/tailopsd/         Read-only Linux Fleet observation CLI and contract tests
+docs/                             Current agent guidance, architecture decisions, and history
 ```
 
-## macOS Quick Start
+## Native quick start
 
 Requirements:
 
-- macOS 14 or newer with Xcode 16 or newer installed.
-- Tailscale CLI available as `tailscale`.
-- An Apple ID in Xcode for local development signing.
-- Optional for the planned cross-account file handoff path: Magic Wormhole installed as `wormhole`.
+- macOS 14 or newer
+- Xcode 16 or newer
+- the Tailscale CLI
+- an Apple Development team for signed App Group and WidgetKit testing
+- optional Magic Wormhole CLI for cross-account file-transfer trials
 
-Install the current external Wormhole dependency for local trials with:
+Install the optional Wormhole dependency:
 
 ```bash
 brew install magic-wormhole
 ```
 
-Open the real app/widget project:
+Open the project:
 
 ```bash
 open platforms/macos/TailOpsMac/TailOpsMac.xcodeproj
 ```
 
-In Xcode:
+In Xcode, select an Apple Development team for both `TailOpsMac` and `TailOpsWidget`, then run the `TailOpsMac` scheme. The installed product is branded `TailOps.app`.
 
-1. Select the `TailOpsMac` scheme.
-2. Select target `TailOpsMac`, open **Signing & Capabilities**, enable **Automatically manage signing**, and choose your team.
-3. Repeat for target `TailOpsWidget`.
-4. Run the `TailOpsMac` scheme. The built app product is branded as `TailOps.app`.
-5. Open macOS **Edit Widgets**, search for **TailOps**, and add the widget.
-
-For command-line compile verification without signing:
+Compile without signing:
 
 ```bash
 cd platforms/macos/TailOpsMac
 xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
-That command proves the project compiles. It does not prove the live desktop widget can read the signed App Group; for widget testing, run from Xcode with your Apple Development team selected for both `TailOpsMac` and `TailOpsWidget`.
+That command proves compilation only. It does not prove that a signed App Group works, that `/Applications/TailOps.app` matches the build, or that the visible desktop widget loaded the new extension.
 
-## Custom Widget Actions
+## Native runtime model
 
-The app settings UI edits the same action configuration that the widget reads. Actions are stored as `tailops-actions.json` in the shared App Group container, with a fallback to `Application Support/TailOpsMac` when App Groups are unavailable.
+The hidden host app owns active work:
 
-Example:
+- runs `tailscale status --json` on launch, on an accepted refresh request, every hour while the app remains alive, and a few seconds after the Mac wakes or its network path changes (at most once a minute);
+- keeps managed Fleet nodes in the shared snapshot while hiding Mullvad provider peers tagged `tag:mullvad-exit-node`;
+- publishes the status snapshot first, then samples online peers with six `tailscale ping` attempts, four peers at a time, at most once per hour;
+- writes snapshots, refresh health, settings, and non-secret Wormhole state to the App Group or local fallback;
+- owns Settings, Finder Services, Wormhole orchestration, and the pending-transfer listener.
+
+The widget shows a single status line when the last refresh failed, Tailscale is off or needs login, Tailscale reports health warnings, or an exit node is in use. Each online host shows its route (Direct, DERP region, or peer relay), and a node key expiring within seven days turns the host into a warning. Offline hosts show no action buttons, and hosts beyond the widget's tile budget collapse into an offline count.
+
+The widget is passive. It reads shared files when the host app reloads it and otherwise schedules entries only for moments its display changes: the snapshot going stale after 90 minutes, a stuck refresh timing out, or a pending transfer expiring, with a six-hour safety reload. It supports medium, large, and extra-large families. Removing the widget leaves no separate backend process, while quitting the host app stops active refresh work.
+
+## Actions and settings
+
+Every host gets default actions based on its operating system:
+
+| Device | Default actions |
+| --- | --- |
+| macOS | SSH, Screen Sharing (`vnc://`), Copy IP |
+| Linux and BSD | SSH, Copy IP |
+| Windows | Files (`smb://`), Copy IP |
+| iOS and Android | Copy IP |
+
+Custom actions come first and replace a default that opens the same URL. TailOps supports three custom action kinds:
+
+- `ssh`: opens `ssh://host` with Terminal.
+- `url`: opens an `http`, `https`, `vnc` (Screen Sharing), or `smb` (Finder) URL.
+- `copy`: copies the configured value.
+
+Settings stores host actions in `tailops-actions.json`; launch at login is read from and written to macOS through `SMAppService`. Files live in the signed App Group when available, with `Application Support/TailOpsMac` as the unsigned fallback.
+
+Example action configuration:
 
 ```json
 {
@@ -88,146 +104,71 @@ Example:
 }
 ```
 
-`hostID` can match a host ID, display name, MagicDNS name, or Tailscale IP. A sample file is available at:
+A sample file lives at `platforms/macos/TailOpsMac/config/tailops-actions.sample.json`.
 
-```text
-platforms/macos/TailOpsMac/config/tailops-actions.sample.json
-```
+## File transfer
 
-## macOS Architecture
+Use Taildrop for same-account devices. The reachable native entry point is the Finder Service named `Send with TailOps`.
 
-The macOS implementation avoids a Node backend:
+Use Magic Wormhole for interactive cross-account transfers. Pairing secrets stay in the device-local Keychain. Shared JSON contains non-secret contact and transfer metadata only. Pending notices never contain file data or a Wormhole transfer code.
 
-- `TailOpsCore` parses Tailscale status and models hosts/actions.
-- `TailOpsShared` stores snapshots and action config for app/widget sharing.
-- `TailOpsIntents` provides widget App Intents for copy, refresh, settings, Wormhole, and opening Tailscale.
-- `TailOpsMac` is the hidden SwiftUI host app for refresh, settings, Wormhole, and Finder Services.
-- `TailOpsWidget` is the WidgetKit extension.
+The pending-notice client routes to the configured Tailnet node. The receiver listens only after a contact is paired, drops connections from outside the Tailscale address ranges (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`), and validates pairing ID, Keychain secret, HMAC, expiry, replay state, and bounded request structure. It does not tie the source address to the specific paired node.
 
-Magic Wormhole is not bundled yet. TailOps detects `wormhole` on `PATH` or in common Homebrew locations and shows setup instructions when missing. Bundling remains possible, but should be treated as a separate packaging task because the reference Wormhole CLI is a Python tool with native crypto dependencies that must be signed per architecture inside the app bundle.
+Current Wormhole follow-up work remains in [the file-send upgrade plan](docs/superpowers/plans/2026-07-03-tailops-file-send-upgrade.html).
 
-Wormhole pairing secrets live only in the device-local macOS Keychain. Widget-readable configuration contains non-secret contact metadata, pending notices never contain transfer codes, and delivery notices are accepted only after bounded request validation, constant-time HMAC verification, expiry/replay checks, and an exact Tailnet node match. Both Macs must run the hardened V1 protocol; there is no insecure legacy fallback.
+## Validation gates
 
-The widget uses WidgetKit container backgrounds, removable backgrounds, `widgetRenderingMode`, and `widgetAccentable(_:)` so macOS can apply modern tinted and Liquid Glass widget appearances.
-
-More detail: `platforms/macos/TailOpsMac/README.md`.
-
-## Current macOS Progress
-
-As of May 15, 2026, the current branch has a widget-first native Swift macOS build. The app/widget are locally signed with a shared App Group, the widget reads cached snapshots, the hidden host app owns live Tailscale refresh and settings, and Taildrop is available through the Finder Service.
-
-The installed local debug app is `/Applications/TailOps.app`. The Xcode scheme and target remain named `TailOpsMac`, but the app bundle, widget picker label, and icon resources are branded as TailOps.
-
-Next implementation batch:
-
-1. Exercise the widget gear/settings flow in the real desktop widget after install.
-2. Polish the settings editor for custom dashboard presets and common ports.
-3. Exercise a hardened V1 Wormhole send/receive between two updated Macs.
-4. Decide whether any menu-bar surface is worth restoring later as optional, not primary.
-
-Recent checkpoint polish:
-
-- Widget header spacing was adjusted to avoid clipping on the desktop.
-- The widget now declares the extra-large family for more room when macOS offers it.
-- The widget extension includes the shared app icon asset catalog so the widget picker no longer falls back to a generic icon.
-- The built app product is `TailOps.app` instead of `TailOpsMac.app`.
-
-Deferred for now: ping-rate controls and TailOps Drop Zone. Drop Zone remains wishlist only.
-
-## macOS Runtime Impact
-
-The WidgetKit extension is passive. It reads the cached shared snapshot and asks WidgetKit for another timeline in about one hour. It does not run `tailscale`, keep a backend alive, or ping hosts.
-
-The hidden host app is the active side. It refreshes on app launch, on an hourly automatic cadence while the app is alive, and when the user presses refresh from the widget. A refresh currently runs:
-
-- one `tailscale status --json`;
-- at most once per hour, six `tailscale ping` samples for each online peer.
-
-Repeated refreshes inside the one-hour ping window retain cached ping diagnostics instead of running another ping burst. Idle impact should stay low even if the host app remains alive for widget support.
-
-## Verify The Swift Platform
-
-```bash
-cd platforms/macos/TailOpsMac
-swift test
-swift run TailOpsCoreValidation
-swift build --target TailOpsMacViews
-swift build --target TailOpsWidgetViews
-xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Debug CODE_SIGNING_ALLOWED=NO build
-xcodebuild -project TailOpsMac.xcodeproj -scheme TailOpsMac -configuration Release CODE_SIGNING_ALLOWED=NO build
-```
-
-`swift test` runs the focused XCTest regression suite. `TailOpsCoreValidation` remains the broader compatibility check. GitHub Actions runs these gates together with the Node suite and both unsigned Xcode configurations on pull requests and pushes to `main`.
-
-## Browser Dashboard
-
-The browser dashboard remains available for full-screen visualization, live telemetry experiments, and the AI phonebook surface.
-
-Run it with:
-
-```bash
-npm run serve
-```
-
-Then open:
-
-```text
-http://127.0.0.1:4173/
-```
-
-Endpoints:
-
-```text
-GET /api/telemetry
-GET /api/agents
-GET /.well-known/agent.json
-```
-
-The server reads live Tailscale hosts through `tailscale status --json`. It can also pull ASUSWRT router telemetry through Home Assistant when `TAILOPS_HA_URL` and `TAILOPS_HA_TOKEN` are set.
-
-By default, the server binds only to `127.0.0.1` and does not send CORS headers. To make it reachable from a trusted LAN or tailnet, explicitly set `HOST`; the server will print a warning because these endpoints do not have application-level authentication:
-
-```bash
-HOST=0.0.0.0 npm run serve
-```
-
-If a separate browser origin must call the API, allow that exact origin with `TAILOPS_CORS_ORIGIN`:
-
-```bash
-TAILOPS_CORS_ORIGIN=https://console.example.test npm run serve
-```
-
-Do not expose the browser server to the public internet without adding authentication.
-
-The browser dashboard needs Node 18 or newer for built-in `fetch`. Run the Node test suite with:
+Run the focused source checks with:
 
 ```bash
 npm test
+cd platforms/macos/TailOpsMac
+swift test
+swift build --target TailOpsMacViews
+swift build --target TailOpsWidgetViews
 ```
 
-## AI Phonebook
+GitHub Actions also runs unsigned Debug and Release Xcode builds. A passing source build or CI run is not installed-widget proof. Signed App Group behavior, the copied application bundle, the running executable, and the visible widget each need their own evidence.
 
-The browser dashboard exposes a machine-readable local agent directory:
+The Linux source check runs as part of `npm test`. See [`platforms/linux/tailopsd/README.md`](platforms/linux/tailopsd/README.md) for its narrower runtime and proof boundary.
 
-- `window.tailopsAgentDirectory`
-- `window.tailopsReachableAgents`
-- `<script id="tailops-agent-directory" type="application/json">`
-- `/api/agents`
+Build the architecture-neutral Linux package with `npm run pack:linux`. The optional systemd adapter runs as a restricted account with no retry policy and fixed resource limits. Follow the [Linux install runbook](docs/runbooks/linux-tailopsd.md); do not infer a successful host install from the package artifact.
 
-This is intended to evolve into an MCP resource/tool so local AI agents can discover reachable tailnet peers.
+## Releases and updates
 
-## Next Work
+TailOps releases are GitHub pre-releases signed with the owner's Apple Development identity (team `N6GPP46885`). They are not notarized, so they install only on Macs that trust that certificate. Cut one from a clean, pushed `main`:
 
-- Add launch-at-login and menu-bar icon visibility settings.
-- Add a widget-to-app entry point so hiding the menu icon still has a recovery path.
-- Show latest ping route and latency text in the widget so the sparkline has context.
-- Add a host picker in macOS settings from the current Tailscale snapshot.
-- Replace direct `tailscale status --json` process calls with a helper/XPC path if pursuing a sandboxed distribution build.
+```bash
+scripts/release.py minor --notes "What changed, in a sentence or two." --install
+```
 
-Wishlist: a Finder-based TailOps Drop Zone for easier Taildrop sends.
+The script bumps the app and widget versions and the build number, runs `npm test` and `swift test`, builds and signs a Release product without `get-task-allow`, verifies the signature, team, and version, zips `TailOps-<version>.zip` with a SHA-256 file, commits, tags, pushes, and publishes the pre-release. `--dry-run` stops after the zip and restores the tree. `--install` (or `--install-only v1.1.0` for an existing release) downloads the published zip, checks it against its checksum and signature, and installs it into `/Applications`.
 
-Detailed plan: `docs/superpowers/plans/2026-05-14-tailops-macos-control-surface.md`.
+Settings → General → **Check for Updates** asks GitHub for the newest release on demand. **Update** downloads it, requires the same signing team as the running app, refuses a quarantined download instead of clearing the flag, and swaps the app after it quits, restoring the previous copy if the new one fails its signature check. The log is at `~/Library/Application Support/TailOpsMac/update.log`.
 
-File-send upgrade plan: `docs/superpowers/plans/2026-07-03-tailops-file-send-upgrade.html`.
+## Current follow-up work
 
-First-run audit for Monroe/Ben trial setup: `docs/superpowers/plans/2026-07-03-tailops-first-run-audit.md`.
+- Add a host picker and common dashboard presets to Settings.
+- Add explicit QR setup and cancellation controls to the Wormhole flow.
+- Validate Wormhole between two signed, current Mac installs.
+- Fix Wormhole transfers that start near the end of a 15-minute code window: the pending notice expires with the window and the receiver derives the next window's code. Expire notices relative to creation and try `candidateCodes` on receive.
+- Track the running Wormhole send/receive task so it can be cancelled, block concurrent sends, and clear a pending notice after a successful receive.
+- Split `TailOpsWormholeWindowController.swift` into view, pairing editor, transfer coordinator, and a serialized pending-transfer store shared with the listener.
+- Write shared state to one App Group location instead of every candidate directory, with read fallback for migration. This needs installed-widget proof.
+- Decide whether sandboxed distribution justifies a signed helper or XPC path for Tailscale commands.
+- Keep the Finder-based Drop Zone as wishlist work.
+
+## Project records
+
+- [Domain glossary](CONTEXT.md)
+- [Native product decision](docs/adr/0001-native-product-boundary.md)
+- [Fleet registry and live-state ownership](docs/adr/0002-fleet-integration.md)
+- [Linux Fleet observation CLI](docs/adr/0003-linux-fleet-observation-cli.md)
+- [Retire the browser dashboard](docs/adr/0004-retire-browser-dashboard.md)
+- [April browser concept](docs/archive/2026-04/2026-04-29-tailops-monitor-design.md)
+- [April implementation plan](docs/archive/2026-04/2026-04-29-tailops-monitor-implementation.md)
+- [May native control-surface plan](docs/archive/2026-05/2026-05-14-tailops-macos-control-surface.md)
+- [July first-run audit](docs/archive/2026-07/2026-07-03-tailops-first-run-audit.md)
+- [July trust-hardening report](docs/archive/2026-07/2026-07-11-tailops-trust-hardening.html)
+
+TailOps Monitor is available under the [MIT License](LICENSE).

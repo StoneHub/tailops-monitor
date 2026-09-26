@@ -88,7 +88,10 @@ public struct OpenSSHInTerminalIntent: AppIntent {
 
 public struct OpenDashboardURLIntent: AppIntent {
     public static let title: LocalizedStringResource = "Open Dashboard"
-    public static let description = IntentDescription("Opens a TailOps dashboard URL in the default browser.")
+    public static let description = IntentDescription("Opens a TailOps dashboard, Screen Sharing, or file-sharing URL.")
+    /// Web dashboards plus the Screen Sharing and Finder schemes macOS handles itself;
+    /// ssh:// goes through OpenSSHInTerminalIntent instead.
+    static let allowedSchemes = HostAction.openableURLSchemes.subtracting(["ssh"])
     public static let openAppWhenRun = false
 
     @Parameter(title: "URL")
@@ -105,7 +108,8 @@ public struct OpenDashboardURLIntent: AppIntent {
     public func perform() async throws -> some IntentResult {
         let target = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: target),
-              ["http", "https"].contains(url.scheme?.lowercased())
+              let scheme = url.scheme?.lowercased(),
+              Self.allowedSchemes.contains(scheme)
         else {
             return .result()
         }
@@ -136,24 +140,6 @@ public struct OpenTailscaleAppIntent: AppIntent {
             NSWorkspace.shared.open(url)
         }
 
-        return .result()
-    }
-}
-
-public struct OpenTailOpsSettingsIntent: AppIntent {
-    public static let title: LocalizedStringResource = "Open TailOps Settings"
-    public static let description = IntentDescription("Opens TailOps settings from the widget.")
-    public static let openAppWhenRun = true
-
-    public init() {}
-
-    public func perform() async throws -> some IntentResult {
-        try SharedSnapshotStore().saveSettingsOpenRequest(TailOpsSettingsOpenRequest())
-        DistributedNotificationCenter.default().postNotificationName(
-            Notification.Name(TailOpsSettingsOpenSignal.notificationName),
-            object: nil,
-            deliverImmediately: true
-        )
         return .result()
     }
 }

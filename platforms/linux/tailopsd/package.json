@@ -1,0 +1,26 @@
+{
+  "name": "@tailops/tailopsd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only TailOps Fleet observation CLI for Linux nodes.",
+  "bin": {
+    "tailopsd": "./bin/tailopsd.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "pack:linux": "mkdir -p dist && npm pack --cache dist/.npm-cache --pack-destination dist"
+  },
+  "files": [
+    "bin",
+    "src",
+    "packaging",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "license": "MIT"
+}
