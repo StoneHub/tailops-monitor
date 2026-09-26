@@ -96,7 +96,7 @@ public extension TailnetActionConfiguration {
         TailnetHostActionConfiguration(
             hostID: "monroe-mac",
             actions: [
-                TailnetQuickAction(emoji: "🏠", title: "Local", kind: .url, target: "http://127.0.0.1:4173"),
+                TailnetQuickAction(emoji: "🏠", title: "Local", kind: .url, target: "http://127.0.0.1:3000"),
                 TailnetQuickAction(emoji: "📋", title: "IP", kind: .copy, target: "100.64.0.1")
             ]
         )

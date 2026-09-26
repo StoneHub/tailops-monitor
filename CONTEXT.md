@@ -6,11 +6,7 @@ TailOps is a macOS-first Tailscale companion. This glossary names the product bo
 
 **Supported native product**:
 The WidgetKit extension and hidden Swift host app that make up the supported macOS product.
-_Avoid_: Browser dashboard, Node widget, menu-bar app as the primary product
-
-**Browser experiment**:
-The unsupported full-screen dashboard retained for telemetry visualization and agent-directory exploration.
-_Avoid_: Production dashboard, supported web product, live agent discovery
+_Avoid_: Browser dashboard (retired, see ADR-0004), Node widget, menu-bar app as the primary product
 
 **Tailnet host**:
 A device represented by Tailscale status and shown in TailOps.

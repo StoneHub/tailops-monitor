@@ -1,6 +1,6 @@
 # TailOps Monitor
 
-TailOps is a macOS-first Tailscale companion. The supported product is the WidgetKit extension plus its hidden Swift host app. The Node browser dashboard remains in this repository as an unsupported experiment for visualization and agent-directory prototyping.
+TailOps is a macOS-first Tailscale companion. The supported product is the WidgetKit extension plus its hidden Swift host app. The earlier Node browser dashboard was retired in September 2026; its last version is tagged `browser-dashboard-final` (see [ADR-0004](docs/adr/0004-retire-browser-dashboard.md)).
 
 ## Support boundary
 
@@ -10,21 +10,14 @@ TailOps is a macOS-first Tailscale companion. The supported product is the Widge
 | Linux `tailopsd` CLI | Platform project | Versioned read-only observation contract; package, host, install, runtime, and Fleet transport are separate checks |
 | Taildrop Finder Service | Supported same-account transfer path | Requires the local Tailscale CLI and a reachable destination |
 | Magic Wormhole | Interactive cross-account transfer path | Requires the external `wormhole` CLI and both participants to be present |
-| Browser dashboard | Unsupported experiment | Local Node process only; no hosted deployment is configured |
-| Agent directory | Static prototype data | `/api/agents` reads `data/agents.sample.json`; it is not live agent discovery |
 
 TailOps is the live operational client for Monroe's Fleet. The separate private Fleet repository owns durable identity, desired state, runbooks, and dated evidence. TailOps does not import that inventory or treat it as live health. See [ADR-0002](docs/adr/0002-fleet-integration.md).
-
-The repository has no production web deployment. The browser server binds to `127.0.0.1` unless a user explicitly changes `HOST`, and it has no application-level authentication.
 
 ## Repository layout
 
 ```text
 platforms/macos/TailOpsMac/       Native app, widget, shared state, intents, and Swift tests
 platforms/linux/tailopsd/         Read-only Linux Fleet observation CLI and contract tests
-src/                              Browser dashboard server and telemetry modules
-tests/                            Node tests for the browser experiment
-data/agents.sample.json           Static agent-directory prototype data
 docs/                             Current agent guidance, architecture decisions, and history
 ```
 
@@ -131,28 +124,6 @@ The Linux source check runs as part of `npm test`. See [`platforms/linux/tailops
 
 Build the architecture-neutral Linux package with `npm run pack:linux`. The optional systemd adapter runs as a restricted account with no retry policy and fixed resource limits. Follow the [Linux install runbook](docs/runbooks/linux-tailopsd.md); do not infer a successful host install from the package artifact.
 
-## Browser experiment
-
-Run the unsupported local dashboard with:
-
-```bash
-npm run serve
-```
-
-Open `http://127.0.0.1:4173/`.
-
-Local endpoints:
-
-```text
-GET /api/telemetry
-GET /api/agents
-GET /.well-known/agent.json
-```
-
-The server can read live Tailscale status and optional ASUSWRT telemetry through Home Assistant. Set `TAILOPS_HA_URL` and `TAILOPS_HA_TOKEN` locally for that integration. The URL defaults to loopback. Do not commit the token.
-
-To expose the server to a trusted LAN or tailnet, set `HOST` explicitly. The server prints a warning because its endpoints have no authentication. Do not expose it to the public internet.
-
 ## Current follow-up work
 
 - Add a host picker and common dashboard presets to Settings.
@@ -167,6 +138,7 @@ To expose the server to a trusted LAN or tailnet, set `HOST` explicitly. The ser
 - [Native product decision](docs/adr/0001-native-product-boundary.md)
 - [Fleet registry and live-state ownership](docs/adr/0002-fleet-integration.md)
 - [Linux Fleet observation CLI](docs/adr/0003-linux-fleet-observation-cli.md)
+- [Retire the browser dashboard](docs/adr/0004-retire-browser-dashboard.md)
 - [April browser concept](docs/archive/2026-04/2026-04-29-tailops-monitor-design.md)
 - [April implementation plan](docs/archive/2026-04/2026-04-29-tailops-monitor-implementation.md)
 - [May native control-surface plan](docs/archive/2026-05/2026-05-14-tailops-macos-control-surface.md)
