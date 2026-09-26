@@ -1,6 +1,6 @@
 {
   "name": "@tailops/tailopsd",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Read-only TailOps Fleet observation CLI for Linux nodes.",
