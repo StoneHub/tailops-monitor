@@ -41,7 +41,7 @@ Stop if Linux, Node 20 or newer, or local Tailscale status access is missing. A 
 
 ## Staged install
 
-Copy the package to the host, then replace `0.1.0` below with the package version:
+Copy the package to the host, then replace `0.1.0` below with the package version. Published packages are attached to `tailopsd-v<version>` GitHub releases with a SHA-256 file; verify the checksum before extracting.
 
 ```bash
 sudo install -d -m 0755 /opt/tailopsd/releases/0.1.0
@@ -72,7 +72,7 @@ The oneshot unit has no retry policy. The timer runs every 15 minutes with a sma
 sudo systemctl status tailopsd.service --no-pager
 systemctl list-timers tailopsd.timer --no-pager
 sudo stat -c '%a %U %G %n' /var/lib/tailopsd/fleet-observation.json
-sudo jq '{kind, schemaVersion, policy, observedAt, summary}' /var/lib/tailopsd/fleet-observation.json
+sudo jq '{kind, schemaVersion, policy, observedAt, summary, host: {os: .host.os, failedUnits: .host.failedUnits, warnings: .host.warnings}}' /var/lib/tailopsd/fleet-observation.json
 ```
 
 Expected snapshot mode is `600`, owned by `tailopsd`. Do not print the full node list into public logs or pull requests.
