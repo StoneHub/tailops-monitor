@@ -11,7 +11,7 @@ User=tailopsd
 Group=tailopsd
 WorkingDirectory=/var/lib/tailopsd
 ExecStart=/opt/tailopsd/current/bin/tailopsd.js snapshot --output /var/lib/tailopsd/fleet-observation.json
-TimeoutStartSec=30s
+TimeoutStartSec=60s
 UMask=0077
 
 NoNewPrivileges=true
@@ -27,6 +27,11 @@ ReadWritePaths=/var/lib/tailopsd
 CapabilityBoundingSet=
 AmbientCapabilities=
 
-CPUQuota=5%
+# Run only on spare capacity. The quota is a runaway guard, not a pacing limit: a
+# tailnet listing hundreds of provider peers needs about a second of CPU to read.
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+CPUQuota=50%
 MemoryMax=128M
 TasksMax=32

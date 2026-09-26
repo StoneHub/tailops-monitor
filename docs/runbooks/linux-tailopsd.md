@@ -64,7 +64,7 @@ sudo systemctl start tailopsd.service
 sudo systemctl enable --now tailopsd.timer
 ```
 
-The oneshot unit has no retry policy. The timer runs every 15 minutes with a small randomized delay. The unit caps CPU at 5 percent, memory at 128 MiB, and tasks at 32 so a failure cannot consume the host's wider capacity.
+The oneshot unit has no retry policy. The timer runs every 15 minutes with a small randomized delay. The unit runs at idle CPU and I/O priority, so it only uses spare capacity. It caps CPU at half a core, memory at 128 MiB, and tasks at 32 so a failure cannot consume the host's wider capacity. A tighter CPU quota is a trap: on FCFDEV a 5 percent quota stretched one snapshot of an 840 KB tailnet status to 16–20 seconds and tripped the 10-second `tailscale status` timeout.
 
 ## Runtime proof
 
