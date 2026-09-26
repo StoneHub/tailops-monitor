@@ -42,6 +42,7 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "dev.tailops.monitor.wormhole-pending")
     private var listener: NWListener?
+    private var retryDelay: TimeInterval = 30
     private var activeConnections = Set<ObjectIdentifier>()
     private var deadlines: [ObjectIdentifier: DispatchWorkItem] = [:]
     private let wormholeStore: any TailOpsWormholeStateStoring
@@ -69,10 +70,19 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
             do {
                 let listener = try NWListener(using: .tcp, on: port)
                 listener.stateUpdateHandler = { [weak self, weak listener] state in
-                    guard case .failed(let error) = state else { return }
-                    Self.publishServiceError("Wormhole signal listener failed: \(error.localizedDescription)")
-                    listener?.cancel()
-                    if let self, self.listener === listener { self.listener = nil }
+                    guard let self else { return }
+                    switch state {
+                    case .ready:
+                        self.retryDelay = 30
+                    case .failed(let error):
+                        Self.publishServiceError("Wormhole signal listener failed: \(error.localizedDescription)")
+                        listener?.cancel()
+                        guard self.listener === listener else { return }
+                        self.listener = nil
+                        self.scheduleRetry()
+                    default:
+                        break
+                    }
                 }
                 listener.newConnectionHandler = { [weak self] connection in self?.handle(connection) }
                 listener.start(queue: queue)
@@ -81,6 +91,13 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
                 Self.publishServiceError("Wormhole signal listener failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// A port held by another process (for example a second build) frees up later.
+    private func scheduleRetry() {
+        let delay = retryDelay
+        retryDelay = min(retryDelay * 2, 15 * 60)
+        queue.asyncAfter(deadline: .now() + delay) { [weak self] in self?.start() }
     }
 
     static func port(from configuredPort: Int?) -> NWEndpoint.Port? {
@@ -151,6 +168,8 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
                     }
                     if requestData.count == expectedLength {
                         let acknowledgement = try self.accept(requestData, now: Date())
+                        // A notice lasts minutes; show it now rather than at the next refresh.
+                        DispatchQueue.main.async { TailOpsWidgetKind.reloadTimelines() }
                         let body = try Self.encoder.encode(acknowledgement)
                         self.sendResponse(status: "201 Created", body: body, on: connection)
                         return

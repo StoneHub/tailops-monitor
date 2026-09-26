@@ -6,7 +6,7 @@ import WidgetKit
 
 struct TailOpsWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "dev.tailops.monitor.widget", provider: TailOpsTimelineProvider()) { entry in
+        StaticConfiguration(kind: TailOpsWidgetKind.identifier, provider: TailOpsTimelineProvider()) { entry in
             TailOpsWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("TailOps")

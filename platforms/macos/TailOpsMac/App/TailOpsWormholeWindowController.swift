@@ -354,6 +354,7 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
             try wormholeStore.saveWormholeConfiguration(updatedConfiguration)
             configuration = updatedConfiguration
             selectedContactID = contact.id
+            TailOpsWidgetKind.reloadTimelines()
             TailOpsWormholePendingSignalServer.shared.start()
             status = .succeeded("Saved Wormhole pairing.")
         } catch {
@@ -519,6 +520,7 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
             transfers.removeAll { $0.id == id }
             try wormholeStore.saveWormholePendingTransfers(transfers)
             pendingTransfers = transfers
+            TailOpsWidgetKind.reloadTimelines()
         } catch {
             status = .failed(error.localizedDescription)
         }

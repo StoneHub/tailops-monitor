@@ -23,7 +23,8 @@ let package = Package(
             sources: [
                 "PingSparklineView.swift",
                 "PreviewFixtures.swift",
-                "SharedSnapshotStore.swift"
+                "SharedSnapshotStore.swift",
+                "TailOpsWidgetKind.swift"
             ]
         ),
         .target(
