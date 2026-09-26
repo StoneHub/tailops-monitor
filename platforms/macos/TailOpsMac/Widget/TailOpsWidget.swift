@@ -49,34 +49,15 @@ struct TailOpsTimelineProvider: TimelineProvider {
     }
 
     private func entry() -> TailOpsEntry {
-        TailOpsEntry(
+        let store = SharedSnapshotStore()
+        return TailOpsEntry(
             date: Date(),
-            snapshot: loadSnapshot(),
-            actionConfiguration: loadActionConfiguration(),
-            refreshHealth: loadRefreshHealth(),
-            wormholeConfiguration: loadWormholeConfiguration(),
-            pendingWormholeTransfers: loadPendingWormholeTransfers()
+            snapshot: (try? store.load()) ?? TailnetSnapshot(hosts: []),
+            actionConfiguration: (try? store.loadActionConfiguration()) ?? TailnetActionConfiguration(),
+            refreshHealth: (try? store.loadRefreshHealth()) ?? TailOpsRefreshHealth(),
+            wormholeConfiguration: (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration(),
+            pendingWormholeTransfers: (try? store.loadWormholePendingTransfers()) ?? []
         )
-    }
-
-    private func loadSnapshot() -> TailnetSnapshot {
-        (try? SharedSnapshotStore().load()) ?? TailnetSnapshot(hosts: [])
-    }
-
-    private func loadActionConfiguration() -> TailnetActionConfiguration {
-        (try? SharedSnapshotStore().loadActionConfiguration()) ?? TailnetActionConfiguration()
-    }
-
-    private func loadRefreshHealth() -> TailOpsRefreshHealth {
-        (try? SharedSnapshotStore().loadRefreshHealth()) ?? TailOpsRefreshHealth()
-    }
-
-    private func loadWormholeConfiguration() -> TailOpsWormholeConfiguration {
-        (try? SharedSnapshotStore().loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
-    }
-
-    private func loadPendingWormholeTransfers() -> [TailOpsWormholePendingTransfer] {
-        (try? SharedSnapshotStore().loadWormholePendingTransfers()) ?? []
     }
 }
 
@@ -542,7 +523,7 @@ private struct WidgetHostStatusTile: View {
                         showsTitle: style.showsActionTitles
                     )
                 }
-                ForEach(actions.prefix(3), id: \.title) { action in
+                ForEach(Array(actions.prefix(3).enumerated()), id: \.offset) { _, action in
                     WidgetActionChip(action: action, showsTitle: style.showsActionTitles)
                 }
                 Spacer(minLength: 0)
@@ -694,7 +675,7 @@ private struct WidgetHostActionRow: View {
                         showsTitle: showsActionTitles
                     )
                 }
-                ForEach(actions.prefix(2), id: \.title) { action in
+                ForEach(Array(actions.prefix(2).enumerated()), id: \.offset) { _, action in
                     WidgetActionChip(action: action, showsTitle: showsActionTitles)
                 }
             }

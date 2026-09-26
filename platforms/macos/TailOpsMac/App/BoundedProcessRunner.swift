@@ -3,8 +3,11 @@ import Foundation
 
 struct BoundedProcessResult: Sendable {
     let terminationStatus: Int32
+    /// The newest `maximumStandardOutputBytes` of output; check `stdoutWasTruncated`
+    /// before parsing it as a whole document.
     let stdout: Data
     let stderr: Data
+    let stdoutWasTruncated: Bool
 }
 
 enum BoundedProcessRunnerError: LocalizedError {
@@ -53,6 +56,7 @@ struct BoundedProcessRunner: Sendable {
         process.arguments = arguments
         process.currentDirectoryURL = workingDirectory
         process.environment = environment
+        process.standardInput = FileHandle.nullDevice
         process.standardOutput = standardOutput
         process.standardError = standardError
 
@@ -84,10 +88,13 @@ struct BoundedProcessRunner: Sendable {
 
             do {
                 let terminationStatus = try await execution.terminationStatus()
-                return try await BoundedProcessResult(
+                let (stdout, stdoutWasTruncated) = try await capturedStandardOutput
+                let (stderr, _) = try await capturedStandardError
+                return BoundedProcessResult(
                     terminationStatus: terminationStatus,
-                    stdout: capturedStandardOutput,
-                    stderr: capturedStandardError
+                    stdout: stdout,
+                    stderr: stderr,
+                    stdoutWasTruncated: stdoutWasTruncated
                 )
             } catch {
                 execution.cancel()
@@ -99,19 +106,21 @@ struct BoundedProcessRunner: Sendable {
         }
     }
 
-    private static func capture(_ handle: FileHandle, maximumBytes: Int) async throws -> Data {
+    private static func capture(_ handle: FileHandle, maximumBytes: Int) async throws -> (Data, Bool) {
         try await Task.detached(priority: .utility) {
             defer { try? handle.close() }
             var captured = Data()
+            var wasTruncated = false
 
             while let chunk = try handle.read(upToCount: readChunkSize), !chunk.isEmpty {
                 captured.append(chunk)
                 if captured.count > maximumBytes {
                     captured.removeFirst(captured.count - maximumBytes)
+                    wasTruncated = true
                 }
             }
 
-            return captured
+            return (captured, wasTruncated)
         }.value
     }
 }
@@ -123,6 +132,7 @@ private final class ProcessExecution: @unchecked Sendable {
     private var continuation: CheckedContinuation<Int32, Error>?
     private var completedResult: Result<Int32, Error>?
     private var requestedError: Error?
+    private var timeoutWorkItem: DispatchWorkItem?
 
     init(process: Process, timeoutError: BoundedProcessRunnerError) {
         self.process = process
@@ -144,9 +154,15 @@ private final class ProcessExecution: @unchecked Sendable {
     }
 
     func scheduleTimeout(after timeout: TimeInterval) {
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { [weak self] in
+        let workItem = DispatchWorkItem { [weak self] in
             self?.requestTermination(with: self?.timeoutError)
         }
+        lock.lock()
+        let alreadyCompleted = completedResult != nil
+        if !alreadyCompleted { timeoutWorkItem = workItem }
+        lock.unlock()
+        guard !alreadyCompleted else { return }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: workItem)
     }
 
     func terminationStatus() async throws -> Int32 {
@@ -211,8 +227,11 @@ private final class ProcessExecution: @unchecked Sendable {
         completedResult = result
         let continuation = self.continuation
         self.continuation = nil
+        let timeoutWorkItem = self.timeoutWorkItem
+        self.timeoutWorkItem = nil
         lock.unlock()
 
+        timeoutWorkItem?.cancel()
         continuation?.resume(with: result)
     }
 }

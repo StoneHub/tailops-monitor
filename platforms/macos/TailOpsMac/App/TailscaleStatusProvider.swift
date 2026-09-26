@@ -119,11 +119,16 @@ struct TailscaleCommandRunner: Sendable {
             throw TailscaleStatusError.commandFailed(error.localizedDescription)
         }
 
+        let command = "tailscale \(arguments.first ?? "")"
         guard result.terminationStatus == 0 else {
-            let message = String(data: result.stderr, encoding: .utf8)
+            let message = String(decoding: result.stderr, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             throw TailscaleStatusError.commandFailed(
-                message?.trimmingCharacters(in: .whitespacesAndNewlines)
+                message.isEmpty ? "\(command) exited with status \(result.terminationStatus)." : message
             )
+        }
+        guard !result.stdoutWasTruncated else {
+            throw TailscaleStatusError.commandFailed("\(command) produced more output than TailOps accepts.")
         }
 
         return (result.stdout, result.stderr)
@@ -139,7 +144,7 @@ enum TailscaleStatusError: LocalizedError {
         case .executableNotFound(let paths):
             return "Tailscale CLI not found. Checked: \(paths.joined(separator: ", "))"
         case .commandFailed(let message):
-            return message?.isEmpty == false ? message : "tailscale status --json failed"
+            return message?.isEmpty == false ? message : "The Tailscale CLI failed."
         }
     }
 }
