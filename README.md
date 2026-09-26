@@ -139,6 +139,10 @@ Build the architecture-neutral Linux package with `npm run pack:linux`. The opti
 - Add a host picker and common dashboard presets to Settings.
 - Add explicit QR setup and cancellation controls to the Wormhole flow.
 - Validate Wormhole between two signed, current Mac installs.
+- Fix Wormhole transfers that start near the end of a 15-minute code window: the pending notice expires with the window and the receiver derives the next window's code. Expire notices relative to creation and try `candidateCodes` on receive.
+- Track the running Wormhole send/receive task so it can be cancelled, block concurrent sends, and clear a pending notice after a successful receive.
+- Split `TailOpsWormholeWindowController.swift` into view, pairing editor, transfer coordinator, and a serialized pending-transfer store shared with the listener.
+- Write shared state to one App Group location instead of every candidate directory, with read fallback for migration. This needs installed-widget proof.
 - Decide whether sandboxed distribution justifies a signed helper or XPC path for Tailscale commands.
 - Keep the Finder-based Drop Zone as wishlist work.
 
