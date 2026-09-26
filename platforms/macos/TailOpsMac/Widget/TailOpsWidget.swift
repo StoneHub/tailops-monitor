@@ -158,7 +158,6 @@ struct TailOpsWidgetView: View {
                             pendingTransfer: entry.pendingWormholeTransfers.pendingTransfer(
                                 for: entry.wormholeConfiguration.contact(for: host)
                             ),
-                            showsActions: showsHostActions,
                             isCompact: usesCompactRows,
                             showsActionTitles: family == .systemMedium
                         )
@@ -193,18 +192,7 @@ struct TailOpsWidgetView: View {
     }
 
     private var visibleHostLimit: Int {
-        switch family {
-        case .systemSmall:
-            return 1
-        case .systemMedium:
-            return 2
-        case .systemExtraLarge:
-            return 4
-        case .systemLarge:
-            return 2
-        default:
-            return 2
-        }
+        family == .systemExtraLarge ? 4 : 2
     }
 
     private var gridHostLimit: Int {
@@ -258,15 +246,6 @@ struct TailOpsWidgetView: View {
         }
     }
 
-    private var showsHostActions: Bool {
-        switch family {
-        case .systemSmall:
-            return false
-        default:
-            return true
-        }
-    }
-
     private var usesCompactRows: Bool {
         switch family {
         case .systemLarge, .systemExtraLarge:
@@ -299,18 +278,11 @@ struct TailOpsWidgetView: View {
     }
 
     private var horizontalPadding: CGFloat {
-        switch family {
-        case .systemSmall:
-            return 12
-        default:
-            return 14
-        }
+        14
     }
 
     private var verticalPadding: CGFloat {
         switch family {
-        case .systemSmall:
-            return 9
         case .systemMedium:
             return 12
         case .systemLarge:
@@ -673,7 +645,6 @@ private struct WidgetHostActionRow: View {
     let actions: [HostAction]
     let wormholeContact: TailOpsWormholeContact?
     let pendingTransfer: TailOpsWormholePendingTransfer?
-    let showsActions: Bool
     let isCompact: Bool
     let showsActionTitles: Bool
 
@@ -713,20 +684,18 @@ private struct WidgetHostActionRow: View {
                     .minimumScaleFactor(0.82)
             }
 
-            if showsActions {
-                HStack(spacing: 4) {
-                    if let wormholeContact {
-                        WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: showsActionTitles)
-                        WidgetWormholeChip(
-                            mode: .receive,
-                            contact: wormholeContact,
-                            pendingTransfer: pendingTransfer,
-                            showsTitle: showsActionTitles
-                        )
-                    }
-                    ForEach(actions.prefix(2), id: \.title) { action in
-                        WidgetActionChip(action: action, showsTitle: showsActionTitles)
-                    }
+            HStack(spacing: 4) {
+                if let wormholeContact {
+                    WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: showsActionTitles)
+                    WidgetWormholeChip(
+                        mode: .receive,
+                        contact: wormholeContact,
+                        pendingTransfer: pendingTransfer,
+                        showsTitle: showsActionTitles
+                    )
+                }
+                ForEach(actions.prefix(2), id: \.title) { action in
+                    WidgetActionChip(action: action, showsTitle: showsActionTitles)
                 }
             }
         }
@@ -901,10 +870,6 @@ private struct WidgetActionChip: View {
                 chipContent
             }
             .buttonStyle(.plain)
-        } else if let url = action.url {
-            Link(destination: url) {
-                chipContent
-            }
         } else if action.kind == .copyAddress, let value = action.value {
             Button(intent: CopyTailnetValueIntent(value: value)) {
                 chipContent
@@ -970,12 +935,6 @@ private struct WidgetActionChip: View {
         pendingWormholeTransfers: .previewBen
     ))
         .frame(width: 340, height: 240)
-}
-
-#Preview("Small", as: .systemSmall) {
-    TailOpsWidget()
-} timeline: {
-    TailOpsEntry(date: .now, snapshot: .preview, actionConfiguration: .preview, refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now), wormholeConfiguration: .previewBen, pendingWormholeTransfers: .previewBen)
 }
 
 #Preview("Medium", as: .systemMedium) {

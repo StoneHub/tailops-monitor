@@ -10,10 +10,8 @@
 		A10000000000000000000001 /* App/TailOpsMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* App/TailOpsMacApp.swift */; };
 		A10000000000000000000002 /* App/TailscaleStatusProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* App/TailscaleStatusProvider.swift */; };
 		A10000000000000000000003 /* App/TailOpsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* App/TailOpsSettingsView.swift */; };
-		A10000000000000000000004 /* App/TailOpsMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* App/TailOpsMenuView.swift */; };
 		A10000000000000000000005 /* App/TailnetMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* App/TailnetMonitor.swift */; };
 		A10000000000000000000006 /* App/TailOpsActionSettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* App/TailOpsActionSettingsModel.swift */; };
-		A10000000000000000000015 /* App/TailOpsConstellationIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* App/TailOpsConstellationIcon.swift */; };
 		A10000000000000000000016 /* App/TaildropServiceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* App/TaildropServiceProvider.swift */; };
 		A10000000000000000000017 /* App/TailOpsPreferencesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* App/TailOpsPreferencesModel.swift */; };
 		A10000000000000000000018 /* App/TailOpsSettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* App/TailOpsSettingsWindowController.swift */; };
@@ -61,10 +59,8 @@
 		A20000000000000000000001 /* App/TailOpsMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsMacApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 /* App/TailscaleStatusProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailscaleStatusProvider.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* App/TailOpsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsSettingsView.swift; sourceTree = "<group>"; };
-		A20000000000000000000004 /* App/TailOpsMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsMenuView.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* App/TailnetMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailnetMonitor.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 /* App/TailOpsActionSettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsActionSettingsModel.swift; sourceTree = "<group>"; };
-		A20000000000000000000015 /* App/TailOpsConstellationIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsConstellationIcon.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* App/TaildropServiceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TaildropServiceProvider.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* App/TailOpsPreferencesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsPreferencesModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000018 /* App/TailOpsSettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/TailOpsSettingsWindowController.swift; sourceTree = "<group>"; };
@@ -123,10 +119,8 @@
 				A20000000000000000000001 /* App/TailOpsMacApp.swift */,
 				A20000000000000000000002 /* App/TailscaleStatusProvider.swift */,
 				A20000000000000000000003 /* App/TailOpsSettingsView.swift */,
-				A20000000000000000000004 /* App/TailOpsMenuView.swift */,
 				A20000000000000000000005 /* App/TailnetMonitor.swift */,
 				A20000000000000000000006 /* App/TailOpsActionSettingsModel.swift */,
-				A20000000000000000000015 /* App/TailOpsConstellationIcon.swift */,
 				A20000000000000000000016 /* App/TaildropServiceProvider.swift */,
 				A20000000000000000000017 /* App/TailOpsPreferencesModel.swift */,
 				A20000000000000000000018 /* App/TailOpsSettingsWindowController.swift */,
@@ -283,10 +277,8 @@
 				A10000000000000000000001 /* App/TailOpsMacApp.swift in Sources */,
 				A10000000000000000000002 /* App/TailscaleStatusProvider.swift in Sources */,
 				A10000000000000000000003 /* App/TailOpsSettingsView.swift in Sources */,
-				A10000000000000000000004 /* App/TailOpsMenuView.swift in Sources */,
 				A10000000000000000000005 /* App/TailnetMonitor.swift in Sources */,
 				A10000000000000000000006 /* App/TailOpsActionSettingsModel.swift in Sources */,
-				A10000000000000000000015 /* App/TailOpsConstellationIcon.swift in Sources */,
 				A10000000000000000000016 /* App/TaildropServiceProvider.swift in Sources */,
 				A10000000000000000000017 /* App/TailOpsPreferencesModel.swift in Sources */,
 				A10000000000000000000018 /* App/TailOpsSettingsWindowController.swift in Sources */,

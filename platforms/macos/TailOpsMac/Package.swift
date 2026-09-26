@@ -41,18 +41,15 @@ let package = Package(
             exclude: ["TailOpsMacApp.swift"],
             sources: [
                 "BoundedProcessRunner.swift",
-                "DesignPreviewGallery.swift",
                 "TaildropServiceProvider.swift",
                 "TailscaleStatusProvider.swift",
                 "TailOpsActionSettingsModel.swift",
-                "TailOpsConstellationIcon.swift",
                 "TailOpsPreferencesModel.swift",
                 "TailOpsSettingsView.swift",
                 "TailOpsSettingsWindowController.swift",
                 "TailOpsWormholeCommandRunner.swift",
                 "TailOpsWormholePendingSignalService.swift",
                 "TailOpsWormholeWindowController.swift",
-                "TailOpsMenuView.swift",
                 "TailnetMonitor.swift"
             ]
         ),

@@ -95,7 +95,7 @@ Custom actions extend the generated per-host defaults instead of replacing them.
 
 ## Widget-First App
 
-TailOps no longer shows a menu-bar icon by default. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear is a `Link` to `tailops://settings`. Opening the deep link brings the app forward and shows the floating settings window on the active Space so custom buttons stay reachable from widget-only mode.
+TailOps has no menu-bar icon. The app launches as an `LSUIElement` helper, refreshes the shared widget snapshot, and stays out of the menu bar. The widget gear is a `Link` to `tailops://settings`. Opening the deep link brings the app forward and shows the floating settings window on the active Space so custom buttons stay reachable from widget-only mode.
 
 The host registers the `tailops://settings` URL scheme as the supported widget-to-app settings path. The visible settings gear uses that deep link. Other widget actions use App Intents for one-shot work or deep-link back into the containing app when richer UI is needed.
 
@@ -105,7 +105,7 @@ TailOps currently exposes Taildrop through Finder:
 
 - Finder can show a `Send with TailOps` Service for selected files. The service opens a Taildrop destination picker backed by `tailscale file cp --targets`.
 
-The older `TailOpsMenuView` still contains row-drop code, but the current app scene does not mount that view. Treat the Finder Service as the reachable Taildrop entry point.
+The Finder Service is the Taildrop entry point.
 
 Cross-account file-send path: TailOps includes a Wormhole send/receive window backed by paired contacts and deterministic transfer codes. Use Magic Wormhole for simple prompt files, Markdown, rich text, and images when the paired user can click receive. Keep Taildrop for same-account devices only. Use SFTP or a future token-authenticated TailOps Inbox receiver only if unattended drops become necessary.
 

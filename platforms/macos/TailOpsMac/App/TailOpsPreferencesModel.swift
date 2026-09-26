@@ -1,31 +1,16 @@
 import Foundation
 import ServiceManagement
-import TailOpsCore
-import TailOpsShared
-import WidgetKit
 
+/// Launch-at-login is the only app preference. macOS owns its state through
+/// `SMAppService`, so TailOps reads it back instead of persisting a copy.
 @MainActor
 final class TailOpsPreferencesModel: ObservableObject {
-    @Published var launchAtLogin: Bool
-    @Published var showMenuBarIcon: Bool
+    @Published private(set) var launchAtLogin: Bool
     @Published private(set) var saveError: String?
     @Published private(set) var statusMessage: String?
 
-    private let settingsStore: any TailOpsSettingsStoring
-
-    init(settingsStore: any TailOpsSettingsStoring = SharedSnapshotStore()) {
-        self.settingsStore = settingsStore
-        let storedPreferences = (try? settingsStore.loadAppPreferences()) ?? TailOpsAppPreferences()
+    init() {
         launchAtLogin = SMAppService.mainApp.status == .enabled
-        showMenuBarIcon = storedPreferences.showMenuBarIcon
-    }
-
-    var preferences: TailOpsAppPreferences {
-        TailOpsAppPreferences(
-            launchAtLogin: launchAtLogin,
-            showMenuBarIcon: showMenuBarIcon,
-            opensSettingsFromWidget: true
-        )
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -35,27 +20,11 @@ final class TailOpsPreferencesModel: ObservableObject {
             } else {
                 try SMAppService.mainApp.unregister()
             }
-            launchAtLogin = enabled
-            save(message: enabled ? "TailOps will launch at login." : "TailOps will not launch at login.")
-        } catch {
-            launchAtLogin = SMAppService.mainApp.status == .enabled
-            saveError = error.localizedDescription
-        }
-    }
-
-    func setShowMenuBarIcon(_ enabled: Bool) {
-        showMenuBarIcon = enabled
-        save(message: enabled ? "Menu bar icon shown." : "Widget-only mode enabled.")
-    }
-
-    private func save(message: String) {
-        do {
-            try settingsStore.saveAppPreferences(preferences)
-            WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
             saveError = nil
-            statusMessage = message
+            statusMessage = enabled ? "TailOps will launch at login." : "TailOps will not launch at login."
         } catch {
             saveError = error.localizedDescription
         }
+        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }

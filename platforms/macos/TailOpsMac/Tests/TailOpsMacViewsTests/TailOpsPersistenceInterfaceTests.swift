@@ -44,7 +44,6 @@ final class TailOpsPersistenceInterfaceTests: XCTestCase {
         let monitor = TailnetMonitor(
             statusProvider: StaticStatusProvider(),
             tailnetStore: store,
-            settingsStore: store,
             requestStore: store
         )
 

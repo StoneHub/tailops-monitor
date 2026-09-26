@@ -91,38 +91,6 @@ public struct TailnetSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-public struct TailnetSummary: Equatable, Sendable {
-    public enum TrafficLight: String, Codable, Equatable, Sendable {
-        case healthy
-        case warning
-        case offline
-    }
-
-    public let hosts: [TailnetHost]
-
-    public init(hosts: [TailnetHost]) {
-        self.hosts = hosts
-    }
-
-    public var onlineCount: Int {
-        hosts.filter { $0.status == .online }.count
-    }
-
-    public var warningCount: Int {
-        hosts.filter { $0.status == .warning }.count
-    }
-
-    public var offlineCount: Int {
-        hosts.filter { $0.status == .offline }.count
-    }
-
-    public var trafficLight: TrafficLight {
-        if warningCount > 0 { return .warning }
-        if offlineCount > 0 { return .offline }
-        return .healthy
-    }
-}
-
 public struct TailnetWidgetHostLayout: Equatable, Sendable {
     public let visibleHosts: [TailnetHost]
     public let hiddenOfflineCount: Int

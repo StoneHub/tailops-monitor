@@ -74,7 +74,7 @@ TailOps supports three host action kinds:
 - `url`: opens an HTTP or HTTPS dashboard.
 - `copy`: copies the configured value.
 
-Settings stores host actions in `tailops-actions.json` and preferences in `tailops-preferences.json`. Files live in the signed App Group when available, with `Application Support/TailOpsMac` as the unsigned fallback.
+Settings stores host actions in `tailops-actions.json`; launch at login is read from and written to macOS through `SMAppService`. Files live in the signed App Group when available, with `Application Support/TailOpsMac` as the unsigned fallback.
 
 Example action configuration:
 

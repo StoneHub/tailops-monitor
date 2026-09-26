@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 import TailOpsCore
 import TailOpsShared
 import WidgetKit
@@ -7,7 +6,6 @@ import WidgetKit
 @MainActor
 final class TailnetMonitor: NSObject, ObservableObject {
     @Published private(set) var snapshot = TailnetSnapshot(hosts: [])
-    @Published private(set) var actionConfiguration = TailnetActionConfiguration()
     @Published private(set) var isRefreshing = false
     @Published private(set) var lastError: String?
 
@@ -15,9 +13,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
     private let pingProvider: TailscalePingProviding?
     private let parser = TailnetSnapshotParser()
     private let tailnetStore: any TailnetStateStoring
-    private let settingsStore: any TailOpsSettingsStoring
     private let requestStore: any TailOpsAppGroupRequestStoring
-    private let actionCatalog = HostActionCatalog()
     private let maxRetainedPingSamples = 120
     private let pingDiagnosticsMinimumInterval: TimeInterval = 60 * 60
     private var automaticRefreshTask: Task<Void, Never>?
@@ -28,14 +24,12 @@ final class TailnetMonitor: NSObject, ObservableObject {
         statusProvider: TailscaleStatusProviding,
         pingProvider: TailscalePingProviding? = nil,
         tailnetStore: any TailnetStateStoring,
-        settingsStore: any TailOpsSettingsStoring,
         requestStore: any TailOpsAppGroupRequestStoring,
         initialSnapshot: TailnetSnapshot? = nil
     ) {
         self.statusProvider = statusProvider
         self.pingProvider = pingProvider
         self.tailnetStore = tailnetStore
-        self.settingsStore = settingsStore
         self.requestStore = requestStore
         super.init()
         if let initialSnapshot {
@@ -46,9 +40,6 @@ final class TailnetMonitor: NSObject, ObservableObject {
         lastPingDiagnosticsRefreshDate = snapshot.hosts
             .compactMap { $0.diagnostics?.ping?.lastUpdated }
             .max()
-        if let storedConfiguration = try? settingsStore.loadActionConfiguration() {
-            actionConfiguration = storedConfiguration
-        }
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(refreshFromDistributedNotification),
@@ -60,21 +51,6 @@ final class TailnetMonitor: NSObject, ObservableObject {
     deinit {
         automaticRefreshTask?.cancel()
         DistributedNotificationCenter.default().removeObserver(self)
-    }
-
-    var summary: TailnetSummary {
-        TailnetSummary(hosts: snapshot.hosts)
-    }
-
-    var menuBarSymbol: String {
-        switch summary.trafficLight {
-        case .healthy:
-            return "network"
-        case .warning:
-            return "exclamationmark.triangle"
-        case .offline:
-            return "wifi.slash"
-        }
     }
 
     func refresh() async {
@@ -145,10 +121,6 @@ final class TailnetMonitor: NSObject, ObservableObject {
                 await self?.refresh()
             }
         }
-    }
-
-    func actions(for host: TailnetHost) -> [HostAction] {
-        HostActionCatalog(configuration: actionConfiguration).actions(for: host)
     }
 
     @objc private func refreshFromDistributedNotification(_ notification: Notification) {

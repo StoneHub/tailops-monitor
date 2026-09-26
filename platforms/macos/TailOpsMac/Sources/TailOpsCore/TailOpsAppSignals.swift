@@ -1,29 +1,5 @@
 import Foundation
 
-public struct TailOpsAppPreferences: Codable, Equatable, Sendable {
-    public let launchAtLogin: Bool
-    public let showMenuBarIcon: Bool
-    public let opensSettingsFromWidget: Bool
-
-    public init(
-        launchAtLogin: Bool = false,
-        showMenuBarIcon: Bool = true,
-        opensSettingsFromWidget: Bool = true
-    ) {
-        self.launchAtLogin = launchAtLogin
-        self.showMenuBarIcon = showMenuBarIcon
-        self.opensSettingsFromWidget = opensSettingsFromWidget
-    }
-}
-
-public struct TailOpsSettingsOpenRequest: Codable, Equatable, Sendable {
-    public let requestedAt: Date
-
-    public init(requestedAt: Date = Date()) {
-        self.requestedAt = requestedAt
-    }
-}
-
 public struct TailOpsRefreshRequest: Codable, Equatable, Sendable {
     public let requestedAt: Date
 
@@ -66,7 +42,6 @@ public enum TailOpsRefreshSignal {
 }
 
 public enum TailOpsSettingsOpenSignal {
-    public static let notificationName = "dev.tailops.monitor.openSettings"
     public static let url = URL(string: "tailops://settings")!
 }
 

@@ -12,8 +12,6 @@ public protocol TailnetStateStoring {
 public protocol TailOpsSettingsStoring {
     func loadActionConfiguration() throws -> TailnetActionConfiguration?
     func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws
-    func loadAppPreferences() throws -> TailOpsAppPreferences?
-    func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws
 }
 
 public protocol TailOpsWormholeSecretStoring: Sendable {
@@ -37,9 +35,6 @@ public protocol TailOpsWormholeStateStoring {
 }
 
 public protocol TailOpsAppGroupRequestStoring {
-    func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest?
-    func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws
-    func clearSettingsOpenRequest() throws
     func loadRefreshRequest() throws -> TailOpsRefreshRequest?
     func saveRefreshRequest(_ request: TailOpsRefreshRequest) throws
     func clearRefreshRequest() throws
@@ -154,15 +149,6 @@ public struct SharedSnapshotStore:
     public func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws {
         let data = try JSONEncoder.tailops.encode(configuration)
         try write(data, path: "tailops-actions.json")
-    }
-
-    public func loadAppPreferences() throws -> TailOpsAppPreferences? {
-        try loadFirstExisting(path: "tailops-preferences.json", as: TailOpsAppPreferences.self)
-    }
-
-    public func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws {
-        let data = try JSONEncoder.tailops.encode(preferences)
-        try write(data, path: "tailops-preferences.json")
     }
 
     public func loadWormholeConfiguration() throws -> TailOpsWormholeConfiguration? {
@@ -304,19 +290,6 @@ public struct SharedSnapshotStore:
     ) throws {
         let bounded = Array(records.filter { $0.expiresAt > date }.suffix(256))
         try write(JSONEncoder.tailops.encode(bounded), path: "tailops-wormhole-signal-replay.json")
-    }
-
-    public func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest? {
-        try loadFirstExisting(path: "tailops-open-settings.json", as: TailOpsSettingsOpenRequest.self)
-    }
-
-    public func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws {
-        let data = try JSONEncoder.tailops.encode(request)
-        try write(data, path: "tailops-open-settings.json")
-    }
-
-    public func clearSettingsOpenRequest() throws {
-        try delete(path: "tailops-open-settings.json")
     }
 
     public func loadRefreshRequest() throws -> TailOpsRefreshRequest? {

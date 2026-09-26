@@ -17,24 +17,6 @@ final class SharedStateTests: XCTestCase {
         try? FileManager.default.removeItem(at: rootURL)
     }
 
-    func testAppPreferencesRoundTrip() throws {
-        let preferences = TailOpsAppPreferences(launchAtLogin: true, showMenuBarIcon: false, opensSettingsFromWidget: true)
-
-        try store.saveAppPreferences(preferences)
-
-        XCTAssertEqual(try store.loadAppPreferences(), preferences)
-    }
-
-    func testSettingsOpenRequestRoundTripsAndClears() throws {
-        let request = TailOpsSettingsOpenRequest(requestedAt: Date(timeIntervalSince1970: 100))
-
-        try store.saveSettingsOpenRequest(request)
-        XCTAssertEqual(try store.loadSettingsOpenRequest(), request)
-
-        try store.clearSettingsOpenRequest()
-        XCTAssertNil(try store.loadSettingsOpenRequest())
-    }
-
     func testWormholeConfigurationRoundTrip() throws {
         let configuration = TailOpsWormholeConfiguration(
             contacts: [
@@ -114,32 +96,5 @@ final class SharedStateTests: XCTestCase {
         XCTAssertNotEqual(senderCode.code, nextWindowCode.code)
         XCTAssertTrue(candidates.map(\.code).contains(senderCode.code))
         XCTAssertEqual(senderCode.code.split(separator: "-").count, 5)
-    }
-
-    func testSummaryLetsWarningsOutrankOfflineHosts() {
-        let summary = TailnetSummary(hosts: [
-            host(id: "online", status: .online),
-            host(id: "warning", status: .warning),
-            host(id: "offline", status: .offline),
-        ])
-
-        XCTAssertEqual(summary.onlineCount, 1)
-        XCTAssertEqual(summary.warningCount, 1)
-        XCTAssertEqual(summary.offlineCount, 1)
-        XCTAssertEqual(summary.trafficLight, .warning)
-    }
-
-    private func host(id: String, status: TailnetHost.Status) -> TailnetHost {
-        TailnetHost(
-            id: id,
-            name: id,
-            role: .peer,
-            status: status,
-            operatingSystem: nil,
-            primaryAddress: "100.64.0.10",
-            magicDNSName: nil,
-            lastSeen: nil,
-            services: []
-        )
     }
 }

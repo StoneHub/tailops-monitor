@@ -112,11 +112,9 @@ public final class InMemoryTailOpsStore: @unchecked Sendable,
     private let lock = NSLock()
     private var snapshot: TailnetSnapshot?
     private var actionConfiguration: TailnetActionConfiguration?
-    private var appPreferences: TailOpsAppPreferences?
     private var wormholeConfiguration: TailOpsWormholeConfiguration?
     private var wormholePendingTransfers: [TailOpsWormholePendingTransfer]
     private var wormholeSignalReplayRecords: [TailOpsWormholeSignalReplayRecord]
-    private var settingsOpenRequest: TailOpsSettingsOpenRequest?
     private var refreshRequest: TailOpsRefreshRequest?
     private var wormholeOpenRequest: TailOpsWormholeOpenRequest?
     private var refreshHealth: TailOpsRefreshHealth?
@@ -124,22 +122,18 @@ public final class InMemoryTailOpsStore: @unchecked Sendable,
     public init(
         snapshot: TailnetSnapshot? = nil,
         actionConfiguration: TailnetActionConfiguration? = nil,
-        appPreferences: TailOpsAppPreferences? = nil,
         wormholeConfiguration: TailOpsWormholeConfiguration? = nil,
         wormholePendingTransfers: [TailOpsWormholePendingTransfer] = [],
         wormholeSignalReplayRecords: [TailOpsWormholeSignalReplayRecord] = [],
-        settingsOpenRequest: TailOpsSettingsOpenRequest? = nil,
         refreshRequest: TailOpsRefreshRequest? = nil,
         wormholeOpenRequest: TailOpsWormholeOpenRequest? = nil,
         refreshHealth: TailOpsRefreshHealth? = nil
     ) {
         self.snapshot = snapshot
         self.actionConfiguration = actionConfiguration
-        self.appPreferences = appPreferences
         self.wormholeConfiguration = wormholeConfiguration
         self.wormholePendingTransfers = wormholePendingTransfers
         self.wormholeSignalReplayRecords = wormholeSignalReplayRecords
-        self.settingsOpenRequest = settingsOpenRequest
         self.refreshRequest = refreshRequest
         self.wormholeOpenRequest = wormholeOpenRequest
         self.refreshHealth = refreshHealth
@@ -167,14 +161,6 @@ public final class InMemoryTailOpsStore: @unchecked Sendable,
 
     public func saveActionConfiguration(_ configuration: TailnetActionConfiguration) throws {
         withLock { actionConfiguration = configuration }
-    }
-
-    public func loadAppPreferences() throws -> TailOpsAppPreferences? {
-        withLock { appPreferences }
-    }
-
-    public func saveAppPreferences(_ preferences: TailOpsAppPreferences) throws {
-        withLock { appPreferences = preferences }
     }
 
     public func loadWormholeConfiguration() throws -> TailOpsWormholeConfiguration? {
@@ -214,18 +200,6 @@ public final class InMemoryTailOpsStore: @unchecked Sendable,
         withLock {
             wormholeSignalReplayRecords = Array(records.filter { $0.expiresAt > date }.suffix(256))
         }
-    }
-
-    public func loadSettingsOpenRequest() throws -> TailOpsSettingsOpenRequest? {
-        withLock { settingsOpenRequest }
-    }
-
-    public func saveSettingsOpenRequest(_ request: TailOpsSettingsOpenRequest) throws {
-        withLock { settingsOpenRequest = request }
-    }
-
-    public func clearSettingsOpenRequest() throws {
-        withLock { settingsOpenRequest = nil }
     }
 
     public func loadRefreshRequest() throws -> TailOpsRefreshRequest? {

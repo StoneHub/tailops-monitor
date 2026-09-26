@@ -140,24 +140,6 @@ public struct OpenTailscaleAppIntent: AppIntent {
     }
 }
 
-public struct OpenTailOpsSettingsIntent: AppIntent {
-    public static let title: LocalizedStringResource = "Open TailOps Settings"
-    public static let description = IntentDescription("Opens TailOps settings from the widget.")
-    public static let openAppWhenRun = true
-
-    public init() {}
-
-    public func perform() async throws -> some IntentResult {
-        try SharedSnapshotStore().saveSettingsOpenRequest(TailOpsSettingsOpenRequest())
-        DistributedNotificationCenter.default().postNotificationName(
-            Notification.Name(TailOpsSettingsOpenSignal.notificationName),
-            object: nil,
-            deliverImmediately: true
-        )
-        return .result()
-    }
-}
-
 public struct OpenTailOpsWormholeIntent: AppIntent {
     public static let title: LocalizedStringResource = "Open TailOps Wormhole"
     public static let description = IntentDescription("Opens TailOps Wormhole send or receive controls.")

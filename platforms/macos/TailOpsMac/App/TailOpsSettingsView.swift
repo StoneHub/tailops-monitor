@@ -614,18 +614,14 @@ extension View {
 
 #if DEBUG
 #Preview("Settings") {
-    let store = InMemoryTailOpsStore(
-        snapshot: .preview,
-        actionConfiguration: .preview,
-        appPreferences: TailOpsAppPreferences()
-    )
+    let store = InMemoryTailOpsStore(snapshot: .preview, actionConfiguration: .preview)
     TailOpsSettingsView(
         model: TailOpsActionSettingsModel(
             tailnetStore: store,
             settingsStore: store,
             configuration: .preview
         ),
-        preferencesModel: TailOpsPreferencesModel(settingsStore: store)
+        preferencesModel: TailOpsPreferencesModel()
     )
 }
 #endif
