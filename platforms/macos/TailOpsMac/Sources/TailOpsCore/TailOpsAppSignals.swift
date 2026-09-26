@@ -67,4 +67,10 @@ public struct TailOpsWormholeOpenRequest: Codable, Equatable, Sendable {
         self.pendingTransferID = pendingTransferID
         self.requestedAt = requestedAt
     }
+
+    /// Requests are written by a widget tap and consumed at launch or activation;
+    /// an old file left behind must not reopen the window later.
+    public func isFresh(at date: Date = Date(), maximumAge: TimeInterval = 120) -> Bool {
+        date.timeIntervalSince(requestedAt) <= maximumAge
+    }
 }

@@ -65,6 +65,7 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         try? store.clearWormholeOpenRequest()
+        guard request.isFresh() else { return }
         openWormholeWindow(request: request)
     }
 

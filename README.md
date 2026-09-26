@@ -101,7 +101,7 @@ Use Taildrop for same-account devices. The reachable native entry point is the F
 
 Use Magic Wormhole for interactive cross-account transfers. Pairing secrets stay in the device-local Keychain. Shared JSON contains non-secret contact and transfer metadata only. Pending notices never contain file data or a Wormhole transfer code.
 
-The pending-notice client routes to the configured Tailnet node. The receiver validates pairing ID, Keychain secret, HMAC, expiry, replay state, and bounded request structure. It does not independently authenticate the incoming transport peer as a Tailscale node.
+The pending-notice client routes to the configured Tailnet node. The receiver listens only after a contact is paired, drops connections from outside the Tailscale address ranges (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`), and validates pairing ID, Keychain secret, HMAC, expiry, replay state, and bounded request structure. It does not tie the source address to the specific paired node.
 
 Current Wormhole follow-up work remains in [the file-send upgrade plan](docs/superpowers/plans/2026-07-03-tailops-file-send-upgrade.html).
 

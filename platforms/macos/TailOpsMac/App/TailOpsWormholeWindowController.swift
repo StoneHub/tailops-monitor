@@ -184,7 +184,8 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
         }
         guard let selectedContact else { return nil }
         return pendingTransfers.first {
-            $0.contactID == selectedContact.id || $0.pairingID == selectedContact.pairingID
+            $0.direction == .incoming
+                && ($0.contactID == selectedContact.id || $0.pairingID == selectedContact.pairingID)
         }
     }
 
@@ -353,6 +354,7 @@ final class TailOpsWormholeModel: NSObject, ObservableObject {
             try wormholeStore.saveWormholeConfiguration(updatedConfiguration)
             configuration = updatedConfiguration
             selectedContactID = contact.id
+            TailOpsWormholePendingSignalServer.shared.start()
             status = .succeeded("Saved Wormhole pairing.")
         } catch {
             status = .failed(error.localizedDescription)

@@ -38,6 +38,7 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
     static let maximumRequestBytes = maximumHeaderBytes + maximumBodyBytes + 4
     static let maximumConnections = 8
     static let requestTimeout: TimeInterval = 10
+    static let defaultPort = 39117
 
     private let queue = DispatchQueue(label: "dev.tailops.monitor.wormhole-pending")
     private var listener: NWListener?
@@ -54,29 +55,66 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
         self.secretStore = secretStore
     }
 
+    /// Starts listening once at least one Wormhole contact is paired. Safe to call
+    /// repeatedly; after a listener failure the next call starts a fresh one.
     func start() {
-        guard listener == nil else { return }
-        let configuration = (try? wormholeStore.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
-        guard let port = NWEndpoint.Port(rawValue: UInt16(configuration.pendingSignalPort ?? 39117)) else {
-            Self.publishServiceError("The Wormhole signal port is invalid.")
-            return
-        }
-        do {
-            let listener = try NWListener(using: .tcp, on: port)
-            listener.stateUpdateHandler = { state in
-                if case .failed(let error) = state {
-                    Self.publishServiceError("Wormhole signal listener failed: \(error.localizedDescription)")
-                }
+        queue.async { [self] in
+            guard listener == nil else { return }
+            let configuration = (try? wormholeStore.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+            guard !configuration.contacts.isEmpty else { return }
+            guard let port = Self.port(from: configuration.pendingSignalPort) else {
+                Self.publishServiceError("The Wormhole signal port is invalid.")
+                return
             }
-            listener.newConnectionHandler = { [weak self] connection in self?.handle(connection) }
-            listener.start(queue: queue)
-            self.listener = listener
-        } catch {
-            Self.publishServiceError("Wormhole signal listener failed: \(error.localizedDescription)")
+            do {
+                let listener = try NWListener(using: .tcp, on: port)
+                listener.stateUpdateHandler = { [weak self, weak listener] state in
+                    guard case .failed(let error) = state else { return }
+                    Self.publishServiceError("Wormhole signal listener failed: \(error.localizedDescription)")
+                    listener?.cancel()
+                    if let self, self.listener === listener { self.listener = nil }
+                }
+                listener.newConnectionHandler = { [weak self] connection in self?.handle(connection) }
+                listener.start(queue: queue)
+                self.listener = listener
+            } catch {
+                Self.publishServiceError("Wormhole signal listener failed: \(error.localizedDescription)")
+            }
         }
     }
 
+    static func port(from configuredPort: Int?) -> NWEndpoint.Port? {
+        guard let value = UInt16(exactly: configuredPort ?? defaultPort), value > 0 else { return nil }
+        return NWEndpoint.Port(rawValue: value)
+    }
+
+    /// Pending notices only travel over the tailnet, so connections from any other
+    /// network are dropped before they can occupy a connection slot.
+    static func isTailnetAddress(_ endpoint: NWEndpoint) -> Bool {
+        guard case .hostPort(let host, _) = endpoint else { return false }
+        switch host {
+        case .ipv4(let address):
+            return isTailnetIPv4([UInt8](address.rawValue))
+        case .ipv6(let address):
+            let bytes = [UInt8](address.rawValue)
+            guard bytes.count == 16 else { return false }
+            let isIPv4Mapped = bytes[0..<10].allSatisfy { $0 == 0 } && bytes[10] == 0xff && bytes[11] == 0xff
+            if isIPv4Mapped { return isTailnetIPv4(Array(bytes[12..<16])) }
+            return Array(bytes[0..<6]) == [0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0]
+        default:
+            return false
+        }
+    }
+
+    private static func isTailnetIPv4(_ bytes: [UInt8]) -> Bool {
+        bytes.count == 4 && bytes[0] == 100 && bytes[1] & 0xc0 == 64
+    }
+
     private func handle(_ connection: NWConnection) {
+        guard Self.isTailnetAddress(connection.endpoint) else {
+            connection.cancel()
+            return
+        }
         let identifier = ObjectIdentifier(connection)
         connection.start(queue: queue)
         guard activeConnections.count < Self.maximumConnections else {
@@ -297,11 +335,14 @@ struct TailOpsWormholePendingSignalClient {
         guard let secret = try secretStore.secret(for: contact.id) else { throw TailOpsWormholePendingSignalError.missingSecret }
         let body = try TailOpsWormholePendingSignalServer.encoder.encode(TailOpsWormholePendingSignalPayload(transfer: transfer))
         let configuration = try wormholeStore.loadWormholeConfiguration() ?? TailOpsWormholeConfiguration()
+        guard let port = TailOpsWormholePendingSignalServer.port(from: configuration.pendingSignalPort) else {
+            throw TailOpsWormholePendingSignalError.connectionFailed
+        }
         let response = try await Self.sendRawPendingRequest(
             body: body,
             signature: TailOpsWormholePendingSignalServer.signature(for: body, secret: secret),
             address: address,
-            port: configuration.pendingSignalPort ?? 39117
+            port: Int(port.rawValue)
         )
         guard response.status == 201,
               let acknowledgement = try? TailOpsWormholePendingSignalServer.decoderForClient.decode(TailOpsWormholePendingSignalAcknowledgement.self, from: response.body),
@@ -350,14 +391,19 @@ struct TailOpsWormholePendingSignalClient {
         }.value
     }
 
-    private nonisolated static func responseIsComplete(_ data: Data) -> Bool {
+    nonisolated static func responseIsComplete(_ data: Data) -> Bool {
         guard let range = data.range(of: Data("\r\n\r\n".utf8)), range.lowerBound <= 4 * 1_024,
               let header = String(data: data[..<range.lowerBound], encoding: .utf8),
               let lengthLine = header.components(separatedBy: "\r\n").first(where: { $0.lowercased().hasPrefix("content-length:") }),
-              let length = Int(lengthLine.split(separator: ":", maxSplits: 1)[1].trimmingCharacters(in: .whitespaces)),
+              let lengthText = lengthLine.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).dropFirst().first,
+              let length = Int(lengthText.trimmingCharacters(in: .whitespaces)),
               (0...2 * 1_024).contains(length)
         else { return false }
         return data.count == range.upperBound + length
+    }
+
+    nonisolated static func parseResponseStatus(_ data: Data) throws -> Int {
+        try parseResponse(data).status
     }
 
     private nonisolated static func parseResponse(_ data: Data) throws -> RawResponse {
@@ -365,7 +411,8 @@ struct TailOpsWormholePendingSignalClient {
               let header = String(data: data[..<range.lowerBound], encoding: .utf8),
               let statusText = header.components(separatedBy: "\r\n").first,
               statusText.hasPrefix("HTTP/1.1 "),
-              let status = Int(statusText.split(separator: " ")[1]),
+              let statusCode = statusText.split(separator: " ").dropFirst().first,
+              let status = Int(statusCode),
               Data(data[range.upperBound...]).count <= 2 * 1_024,
               status != 201 || header.components(separatedBy: "\r\n").contains(where: {
                   $0.lowercased() == "content-type: application/json"
