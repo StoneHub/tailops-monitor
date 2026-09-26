@@ -28,6 +28,8 @@ Write a snapshot atomically with mode `600`:
 node bin/tailopsd.js snapshot --output /absolute/path/fleet-observation.json
 ```
 
+Each snapshot also records the collector node's own read-only health under `host`: OS, kernel, uptime, load, memory, root disk, failed systemd units, and the hottest thermal sensor. `host.warnings` lists what needs attention: a root disk at least 90% full, memory at or below 10% available, any failed unit, or a sensor at 80 °C or hotter. A probe that cannot run is listed in `host.probeErrors` without failing the snapshot. Pass `--no-host` for the tailnet view alone.
+
 Mullvad exit nodes carrying `tag:mullvad-exit-node` are excluded by default. Include provider infrastructure only for diagnostics:
 
 ```bash

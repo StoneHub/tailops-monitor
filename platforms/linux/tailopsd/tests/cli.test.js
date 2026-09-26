@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createRequire } from "node:module";
+
 import { runCLI } from "../src/cli.js";
+
+const { version } = createRequire(import.meta.url)("../package.json");
 
 const status = {
   Self: {
@@ -74,7 +78,7 @@ test("version reports the package version without collecting status", async () =
   });
 
   assert.equal(exitCode, 0);
-  assert.equal(stdout, "tailopsd 0.1.0\n");
+  assert.equal(stdout, `tailopsd ${version}\n`);
 });
 
 test("unknown options fail closed before collecting status", async () => {

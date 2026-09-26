@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 
 import { writeObservationFile } from "./atomic-snapshot.js";
 import { buildFleetObservation } from "./fleet-observation.js";
+import { collectHostHealth } from "./host-health.js";
 import { inspectLinuxRuntime } from "./runtime-doctor.js";
 import { collectTailscaleStatus } from "./tailscale-command.js";
 
@@ -9,7 +10,7 @@ const require = createRequire(import.meta.url);
 const { version } = require("../package.json");
 
 const HELP = `Usage:
-  tailopsd snapshot [--all-peers] [--pretty] [--output ABSOLUTE_PATH]
+  tailopsd snapshot [--all-peers] [--no-host] [--pretty] [--output ABSOLUTE_PATH]
   tailopsd doctor [--pretty]
   tailopsd version
 
@@ -20,6 +21,7 @@ Commands:
 
 Options:
   --all-peers  Include provider nodes such as Mullvad exit nodes.
+  --no-host    Omit this node's own health (disk, memory, load, failed units).
   --pretty     Pretty-print the JSON result.
   --output     Atomically write the observation to an absolute path.
   -h, --help   Show this help.
@@ -33,6 +35,7 @@ export async function runCLI(
   args,
   {
     collectStatus = collectTailscaleStatus,
+    collectHost = collectHostHealth,
     inspectRuntime = inspectLinuxRuntime,
     writeObservation = writeObservationFile,
     now = () => new Date(),
@@ -82,7 +85,7 @@ export async function runCLI(
         return 2;
       }
       index += 1;
-    } else if (argument === "--all-peers" || argument === "--pretty") {
+    } else if (argument === "--all-peers" || argument === "--pretty" || argument === "--no-host") {
       snapshotFlags.push(argument);
     } else {
       writeLine(writeStderr, `tailopsd: unknown option ${argument}`);
@@ -91,10 +94,14 @@ export async function runCLI(
   }
 
   try {
-    const status = await collectStatus();
+    const [status, host] = await Promise.all([
+      collectStatus(),
+      snapshotFlags.includes("--no-host") ? null : collectHost(),
+    ]);
     const observation = buildFleetObservation(status, {
       includeProviderNodes: snapshotFlags.includes("--all-peers"),
       observedAt: now().toISOString(),
+      host,
     });
 
     if (outputPath) {
@@ -106,6 +113,7 @@ export async function runCLI(
         path: outputPath,
         observedAt: observation.observedAt,
         nodeCount: observation.summary.nodeCount,
+        hostWarnings: observation.host?.warnings.length ?? null,
       }));
     } else {
       const spacing = snapshotFlags.includes("--pretty") ? 2 : 0;

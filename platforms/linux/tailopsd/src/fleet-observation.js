@@ -51,7 +51,7 @@ function collectorName(status) {
 
 export function buildFleetObservation(
   status,
-  { includeProviderNodes = false, observedAt = new Date().toISOString() } = {},
+  { includeProviderNodes = false, observedAt = new Date().toISOString(), host = null } = {},
 ) {
   if (!status || typeof status !== "object" || Array.isArray(status)) {
     throw new TypeError("Tailscale status must be an object");
@@ -80,5 +80,7 @@ export function buildFleetObservation(
       providerNodesExcluded: includeProviderNodes ? 0 : providerNodes.length,
     },
     nodes,
+    // Optional since 0.2.0: the collector node's own read-only health.
+    ...(host ? { host } : {}),
   };
 }
