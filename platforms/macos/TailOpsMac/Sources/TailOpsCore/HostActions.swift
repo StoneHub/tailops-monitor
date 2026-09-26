@@ -4,6 +4,8 @@ public struct HostAction: Codable, Equatable, Sendable {
     public enum Kind: String, Codable, Equatable, Sendable {
         case ssh
         case dashboard
+        case screenSharing
+        case fileSharing
         case copyAddress
     }
 
@@ -129,7 +131,7 @@ public enum TailnetActionValidationIssue: Codable, Equatable, Sendable {
         case .emptyTarget(let hostIndex, let actionIndex):
             return "Host \(hostIndex + 1), action \(actionIndex + 1): add a target."
         case .invalidURL(let hostIndex, let actionIndex):
-            return "Host \(hostIndex + 1), action \(actionIndex + 1): URL actions need http:// or https://."
+            return "Host \(hostIndex + 1), action \(actionIndex + 1): URL actions need a scheme such as https://, vnc://, or smb://."
         case .sshTargetContainsScheme(let hostIndex, let actionIndex):
             return "Host \(hostIndex + 1), action \(actionIndex + 1): SSH targets should be host names, not ssh:// URLs."
         }
@@ -153,12 +155,23 @@ public struct HostActionCatalog: Sendable {
         }
     }
 
+    /// Defaults follow what the device usually offers: Macs get Screen Sharing,
+    /// Windows gets file sharing, and phones get no SSH button they cannot use.
     private static func defaultActions(for host: TailnetHost) -> [HostAction] {
         var actions: [HostAction] = []
         let connectionName = host.magicDNSName ?? host.primaryAddress
+        let family = DeviceFamily(operatingSystem: host.operatingSystem)
 
-        if let connectionName, let sshURL = URL(string: "ssh://\(connectionName)") {
-            actions.append(HostAction(title: "SSH", kind: .ssh, url: sshURL, value: connectionName))
+        if let connectionName {
+            if family.offersSSH, let url = URL(string: "ssh://\(connectionName)") {
+                actions.append(HostAction(title: "SSH", kind: .ssh, url: url, value: connectionName))
+            }
+            if family == .mac, let url = URL(string: "vnc://\(connectionName)") {
+                actions.append(HostAction(title: "Screen", kind: .screenSharing, url: url, value: nil))
+            }
+            if family == .windows, let url = URL(string: "smb://\(connectionName)") {
+                actions.append(HostAction(title: "Files", kind: .fileSharing, url: url, value: nil))
+            }
         }
 
         actions.append(contentsOf: host.services.map { service in
@@ -185,7 +198,44 @@ public struct HostActionCatalog: Sendable {
         }
     }
 
+    /// A configured action replaces a default that opens the same URL, such as a
+    /// custom `vnc://` link replacing the default Screen Sharing button.
     private static func matchesSameTarget(_ lhs: HostAction, _ rhs: HostAction) -> Bool {
-        lhs.kind == rhs.kind && lhs.url == rhs.url && lhs.value == rhs.value
+        if let url = lhs.url {
+            return url == rhs.url
+        }
+        return lhs.kind == rhs.kind && lhs.value == rhs.value
+    }
+}
+
+enum DeviceFamily: Equatable {
+    case mac
+    case unix
+    case windows
+    case mobile
+    case unknown
+
+    init(operatingSystem: String?) {
+        switch operatingSystem?.lowercased() {
+        case "macos":
+            self = .mac
+        case "linux", "freebsd", "openbsd", "netbsd", "dragonfly", "illumos", "solaris":
+            self = .unix
+        case "windows":
+            self = .windows
+        case "ios", "ipados", "android", "tvos", "watchos", "visionos":
+            self = .mobile
+        default:
+            self = .unknown
+        }
+    }
+
+    var offersSSH: Bool {
+        switch self {
+        case .mac, .unix, .unknown:
+            return true
+        case .windows, .mobile:
+            return false
+        }
     }
 }

@@ -276,7 +276,7 @@ struct TailOpsWidgetView: View {
                 tileHorizontalPadding: 8,
                 tileVerticalPadding: 6,
                 tileContentSpacing: 5,
-                showsActionTitles: true
+                maximumTitledChips: 3
             )
         default:
             return WidgetHostStatusGrid.Style(
@@ -288,7 +288,7 @@ struct TailOpsWidgetView: View {
                 tileHorizontalPadding: 10,
                 tileVerticalPadding: 8,
                 tileContentSpacing: 7,
-                showsActionTitles: true
+                maximumTitledChips: 2
             )
         }
     }
@@ -559,7 +559,8 @@ private struct WidgetHostStatusGrid: View {
         let tileHorizontalPadding: CGFloat
         let tileVerticalPadding: CGFloat
         let tileContentSpacing: CGFloat
-        let showsActionTitles: Bool
+        /// Chips drop their titles when more than this many share a tile's width.
+        let maximumTitledChips: Int
     }
 
     private var gridColumns: [GridItem] {
@@ -646,16 +647,16 @@ private struct WidgetHostStatusTile: View {
             if host.status != .offline || pendingTransfer != nil {
                 HStack(spacing: 5) {
                     if let wormholeContact {
-                        WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: style.showsActionTitles)
+                        WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: showsChipTitles)
                         WidgetWormholeChip(
                             mode: .receive,
                             contact: wormholeContact,
                             pendingTransfer: pendingTransfer,
-                            showsTitle: style.showsActionTitles
+                            showsTitle: showsChipTitles
                         )
                     }
-                    ForEach(Array(actions.prefix(3).enumerated()), id: \.offset) { _, action in
-                        WidgetActionChip(action: action, showsTitle: style.showsActionTitles)
+                    ForEach(Array(visibleActions.enumerated()), id: \.offset) { _, action in
+                        WidgetActionChip(action: action, showsTitle: showsChipTitles)
                     }
                     Spacer(minLength: 0)
                 }
@@ -684,6 +685,15 @@ private struct WidgetHostStatusTile: View {
 
     private var detailText: String {
         host.keyExpiryText ?? host.primaryAddress ?? host.magicDNSName ?? host.operatingSystem ?? "No address"
+    }
+
+    private var visibleActions: ArraySlice<HostAction> {
+        actions.prefix(3)
+    }
+
+    private var showsChipTitles: Bool {
+        let chipCount = visibleActions.count + (wormholeContact == nil ? 0 : 2)
+        return chipCount <= style.maximumTitledChips
     }
 
     private var pingText: String? {
@@ -981,7 +991,7 @@ private struct WidgetActionChip: View {
                 chipContent
             }
             .buttonStyle(.plain)
-        } else if action.kind == .dashboard, let url = action.url {
+        } else if [.dashboard, .screenSharing, .fileSharing].contains(action.kind), let url = action.url {
             Button(intent: OpenDashboardURLIntent(url: url)) {
                 chipContent
             }
@@ -1034,6 +1044,10 @@ private struct WidgetActionChip: View {
             return "terminal"
         case .dashboard:
             return "gauge.with.dots.needle.50percent"
+        case .screenSharing:
+            return "rectangle.on.rectangle"
+        case .fileSharing:
+            return "folder"
         case .copyAddress:
             return "doc.on.doc"
         }

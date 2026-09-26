@@ -70,10 +70,19 @@ The widget is passive. It reads shared files when the host app reloads it and ot
 
 ## Actions and settings
 
-TailOps supports three host action kinds:
+Every host gets default actions based on its operating system:
+
+| Device | Default actions |
+| --- | --- |
+| macOS | SSH, Screen Sharing (`vnc://`), Copy IP |
+| Linux and BSD | SSH, Copy IP |
+| Windows | Files (`smb://`), Copy IP |
+| iOS and Android | Copy IP |
+
+Custom actions come first and replace a default that opens the same URL. TailOps supports three custom action kinds:
 
 - `ssh`: opens `ssh://host` with Terminal.
-- `url`: opens an HTTP or HTTPS dashboard.
+- `url`: opens an `http`, `https`, `vnc` (Screen Sharing), or `smb` (Finder) URL.
 - `copy`: copies the configured value.
 
 Settings stores host actions in `tailops-actions.json`; launch at login is read from and written to macOS through `SMAppService`. Files live in the signed App Group when available, with `Application Support/TailOpsMac` as the unsigned fallback.

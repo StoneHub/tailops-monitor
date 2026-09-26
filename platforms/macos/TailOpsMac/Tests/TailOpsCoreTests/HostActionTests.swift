@@ -51,6 +51,43 @@ final class HostActionTests: XCTestCase {
         XCTAssertEqual(actions.map(\.kind), [.dashboard, .ssh, .copyAddress])
     }
 
+    func testDefaultsFollowTheDeviceOperatingSystem() {
+        func defaults(_ operatingSystem: String?) -> [String] {
+            HostActionCatalog().actions(for: host(id: "h", name: "h", operatingSystem: operatingSystem)).map(\.title)
+        }
+
+        XCTAssertEqual(defaults("macOS"), ["SSH", "Screen", "Copy IP"])
+        XCTAssertEqual(defaults("linux"), ["SSH", "Copy IP"])
+        XCTAssertEqual(defaults("freebsd"), ["SSH", "Copy IP"])
+        XCTAssertEqual(defaults("windows"), ["Files", "Copy IP"])
+        XCTAssertEqual(defaults("iOS"), ["Copy IP"])
+        XCTAssertEqual(defaults("android"), ["Copy IP"])
+        XCTAssertEqual(defaults(nil), ["SSH", "Copy IP"])
+    }
+
+    func testScreenSharingAndFileSharingOpenSystemURLs() {
+        let mac = HostActionCatalog().actions(for: host(id: "m", name: "studio", operatingSystem: "macOS"))
+        let windows = HostActionCatalog().actions(for: host(id: "w", name: "stonebook", operatingSystem: "windows"))
+
+        XCTAssertEqual(mac[1].kind, .screenSharing)
+        XCTAssertEqual(mac[1].url, URL(string: "vnc://studio.tailnet.ts.net"))
+        XCTAssertEqual(windows[0].kind, .fileSharing)
+        XCTAssertEqual(windows[0].url, URL(string: "smb://stonebook.tailnet.ts.net"))
+    }
+
+    func testConfiguredURLReplacesTheDefaultWithTheSameTarget() {
+        let configuration = TailnetActionConfiguration(hostActions: [
+            TailnetHostActionConfiguration(hostID: "studio", actions: [
+                TailnetQuickAction(emoji: "🖥", title: "Studio", kind: .url, target: "vnc://studio.tailnet.ts.net"),
+            ]),
+        ])
+
+        let actions = HostActionCatalog(configuration: configuration)
+            .actions(for: host(id: "m", name: "studio", operatingSystem: "macOS"))
+
+        XCTAssertEqual(actions.map(\.title), ["Studio", "SSH", "Copy IP"])
+    }
+
     func testConfigurationDecodesCustomDashboardLinks() throws {
         let data = Data(
             """
@@ -108,6 +145,7 @@ final class HostActionTests: XCTestCase {
     private func host(
         id: String,
         name: String,
+        operatingSystem: String? = "linux",
         magicDNSName: String? = nil,
         services: [TailnetService] = []
     ) -> TailnetHost {
@@ -116,7 +154,7 @@ final class HostActionTests: XCTestCase {
             name: name,
             role: .peer,
             status: .online,
-            operatingSystem: "linux",
+            operatingSystem: operatingSystem,
             primaryAddress: "100.64.0.2",
             magicDNSName: magicDNSName ?? "\(name).tailnet.ts.net",
             lastSeen: nil,
