@@ -3,7 +3,6 @@ import Foundation
 import Network
 import TailOpsCore
 import TailOpsShared
-import WidgetKit
 
 @MainActor
 final class TailnetMonitor: NSObject, ObservableObject {
@@ -19,7 +18,8 @@ final class TailnetMonitor: NSObject, ObservableObject {
     private let maxRetainedPingSamples = 120
     private let maxConcurrentPings = 4
     private let pingDiagnosticsMinimumInterval: TimeInterval = 60 * 60
-    private let systemEventRefreshDelay: Duration = .seconds(5)
+    private let pingRetryInterval: TimeInterval = 10 * 60
+    private let systemEventRefreshDelay: TimeInterval = 5
     private let systemEventMinimumInterval: TimeInterval = 60
     private var automaticRefreshTask: Task<Void, Never>?
     private var systemEventRefreshTask: Task<Void, Never>?
@@ -95,8 +95,11 @@ final class TailnetMonitor: NSObject, ObservableObject {
             reloadWidget()
 
             if let pingProvider, shouldRefreshPingDiagnostics(now: Date()) {
-                lastPingDiagnosticsRefreshDate = Date()
                 let freshPings = await pingSummaries(for: parsed.hosts, using: pingProvider)
+                // When every ping failed (often right after wake), try again sooner than hourly.
+                lastPingDiagnosticsRefreshDate = freshPings.isEmpty
+                    ? Date().addingTimeInterval(pingRetryInterval - pingDiagnosticsMinimumInterval)
+                    : Date()
                 let mergedPings = previousPings.merging(freshPings) { previous, fresh in
                     previous.mergingRecentSamples(from: fresh, maxSamples: maxRetainedPingSamples)
                 }
@@ -141,7 +144,9 @@ final class TailnetMonitor: NSObject, ObservableObject {
         automaticRefreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: interval)
+                    // Suspending clock: time asleep does not count, so an overdue refresh
+                    // does not fire at wake before the network is back. Wake has its own refresh.
+                    try await Task.sleep(for: interval, tolerance: .seconds(60), clock: .suspending)
                 } catch {
                     break
                 }
@@ -191,15 +196,15 @@ final class TailnetMonitor: NSObject, ObservableObject {
         scheduleSystemEventRefresh()
     }
 
+    /// Waits a few seconds for the network to settle, and at least until a minute
+    /// has passed since the last refresh, so the final event in a burst is honored.
     private func scheduleSystemEventRefresh() {
         systemEventRefreshTask?.cancel()
-        systemEventRefreshTask = Task { [weak self, systemEventRefreshDelay] in
-            try? await Task.sleep(for: systemEventRefreshDelay)
+        let sinceLastRefresh = lastRefreshDate.map { Date().timeIntervalSince($0) } ?? .infinity
+        let delay = max(systemEventRefreshDelay, systemEventMinimumInterval - sinceLastRefresh)
+        systemEventRefreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self else { return }
-            if let lastRefreshDate,
-               Date().timeIntervalSince(lastRefreshDate) < systemEventMinimumInterval {
-                return
-            }
             await refresh()
         }
     }
@@ -210,7 +215,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
     }
 
     private func reloadWidget() {
-        WidgetCenter.shared.reloadTimelines(ofKind: "dev.tailops.monitor.widget")
+        TailOpsWidgetKind.reloadTimelines()
     }
 
     private func shouldRefreshPingDiagnostics(now: Date) -> Bool {
@@ -231,7 +236,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
         for hosts: [TailnetHost],
         using pingProvider: TailscalePingProviding
     ) async -> [String: TailnetPingSummary] {
-        var pending = hosts.filter { $0.role == .peer && $0.status == .online }[...]
+        var pending = hosts.filter { $0.role == .peer && $0.status != .offline }[...]
         var summaries: [String: TailnetPingSummary] = [:]
 
         await withTaskGroup(of: (String, TailnetPingSummary?).self) { group in
@@ -252,7 +257,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
         return summaries
     }
 
-    /// Attaches ping history to online peers only; offline hosts and this device
+    /// Attaches ping history to reachable peers only; offline hosts and this device
     /// carry no ping diagnostics.
     private static func snapshot(
         _ snapshot: TailnetSnapshot,
@@ -260,7 +265,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
     ) -> TailnetSnapshot {
         let hosts = snapshot.hosts.map { host in
             guard host.role == .peer,
-                  host.status == .online,
+                  host.status != .offline,
                   let ping = pingByHostID[host.id]
             else {
                 return host

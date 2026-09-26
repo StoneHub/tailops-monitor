@@ -57,6 +57,22 @@ final class TailnetMonitorRefreshTests: XCTestCase {
         XCTAssertEqual(saved.diagnostics?.ping, earlier)
     }
 
+    func testPeersWithExpiringKeysAreStillPinged() async throws {
+        let store = RecordingTailnetStore()
+        let monitor = TailnetMonitor(
+            statusProvider: ExpiringKeyStatusProvider(),
+            pingProvider: FakePingProvider(),
+            tailnetStore: store,
+            requestStore: InMemoryTailOpsStore()
+        )
+
+        await monitor.refresh()
+
+        let peer = try XCTUnwrap(store.savedSnapshots.last?.hosts.first { $0.id == "peer-1" })
+        XCTAssertEqual(peer.status, .warning)
+        XCTAssertNotNil(peer.diagnostics?.ping)
+    }
+
     private func makeMonitor(
         peerCount: Int,
         pingProvider: FakePingProvider,
@@ -87,6 +103,21 @@ private struct FakeStatusProvider: TailscaleStatusProviding {
             {
               "Self": { "ID": "self", "HostName": "this-mac", "TailscaleIPs": ["100.64.0.1"], "Online": true },
               "Peer": { \(peers.joined(separator: ",")) }
+            }
+            """.utf8
+        )
+    }
+}
+
+private struct ExpiringKeyStatusProvider: TailscaleStatusProviding {
+    func statusJSON() async throws -> Data {
+        let expiry = ISO8601DateFormatter().string(from: Date().addingTimeInterval(2 * 24 * 60 * 60))
+        return Data(
+            """
+            {
+              "Peer": {
+                "peer-1": { "ID": "peer-1", "HostName": "peer-1", "TailscaleIPs": ["100.64.0.11"], "Online": true, "KeyExpiry": "\(expiry)" }
+              }
             }
             """.utf8
         )
