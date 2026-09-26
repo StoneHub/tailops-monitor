@@ -240,7 +240,8 @@ except BaseException:
 
 # e. One commit and an annotated tag carrying the notes.
 run(['git', 'add', '--'] + changed)
-run(['git', 'commit', '-q', '-m', f'Release {version}'])
+# Local release: the gates above already ran here, so skip the GitHub runners (see AGENTS.md).
+run(['git', 'commit', '-q', '-m', f'Release {version} [skip ci]'])
 run(['git', 'tag', '-a', tag, '-F', str(notes_file)])
 step(f'Committed "Release {version}" and tagged {tag}')
 
