@@ -64,6 +64,8 @@ The hidden host app owns active work:
 - writes snapshots, refresh health, settings, and non-secret Wormhole state to the App Group or local fallback;
 - owns Settings, Finder Services, Wormhole orchestration, and the pending-transfer listener.
 
+The widget shows a single status line when the last refresh failed, Tailscale is off or needs login, Tailscale reports health warnings, or an exit node is in use. Each online host shows its route (Direct, DERP region, or peer relay), and a node key expiring within seven days turns the host into a warning. Offline hosts show no action buttons, and hosts beyond the widget's tile budget collapse into an offline count.
+
 The widget is passive. It reads shared files when the host app reloads it and otherwise schedules entries only for moments its display changes: the snapshot going stale after 90 minutes, a stuck refresh timing out, or a pending transfer expiring, with a six-hour safety reload. It supports medium, large, and extra-large families. Removing the widget leaves no separate backend process, while quitting the host app stops active refresh work.
 
 ## Actions and settings

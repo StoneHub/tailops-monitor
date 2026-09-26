@@ -7,7 +7,7 @@ import WidgetKit
 struct TailOpsWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "dev.tailops.monitor.widget", provider: TailOpsTimelineProvider()) { entry in
-            TailOpsWidgetView(entry: entry)
+            TailOpsWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("TailOps")
         .description("Glanceable Tailscale host reachability.")
@@ -83,9 +83,18 @@ struct TailOpsTimelineProvider: TimelineProvider {
     }
 }
 
-struct TailOpsWidgetView: View {
+private struct TailOpsWidgetEntryView: View {
     let entry: TailOpsEntry
     @Environment(\.widgetFamily) private var family
+
+    var body: some View {
+        TailOpsWidgetView(entry: entry, family: family)
+    }
+}
+
+struct TailOpsWidgetView: View {
+    let entry: TailOpsEntry
+    let family: WidgetFamily
     @Environment(\.widgetRenderingMode) private var renderingMode
 
     private var actionCatalog: HostActionCatalog {
@@ -98,6 +107,11 @@ struct TailOpsWidgetView: View {
 
     private var gridHosts: [TailnetHost] {
         Array(entry.snapshot.hosts.sorted(by: gridSort).prefix(gridHostLimit))
+    }
+
+    private var hiddenGridOfflineCount: Int {
+        let shownIDs = Set(gridHosts.map(\.id))
+        return entry.snapshot.hosts.filter { $0.status == .offline && !shownIDs.contains($0.id) }.count
     }
 
     var body: some View {
@@ -141,6 +155,10 @@ struct TailOpsWidgetView: View {
                 .buttonStyle(.plain)
             }
 
+            if let banner {
+                WidgetStatusBanner(banner: banner)
+            }
+
             if entry.snapshot.hosts.isEmpty {
                 WidgetEmptyState()
             } else if usesStatusGrid {
@@ -152,6 +170,9 @@ struct TailOpsWidgetView: View {
                     referenceDate: entry.date,
                     style: gridStyle
                 )
+                if hiddenGridOfflineCount > 0 {
+                    WidgetOfflineSummary(count: hiddenGridOfflineCount)
+                }
             } else {
                 VStack(alignment: .leading, spacing: rowSpacing) {
                     ForEach(layout.visibleHosts) { host in
@@ -167,7 +188,8 @@ struct TailOpsWidgetView: View {
                             showsActionTitles: family == .systemMedium
                         )
                     }
-                    if layout.hiddenOfflineCount > 0 {
+                    // The banner takes this line's space in the medium family.
+                    if layout.hiddenOfflineCount > 0, banner == nil {
                         WidgetOfflineSummary(count: layout.hiddenOfflineCount)
                     }
                 }
@@ -185,6 +207,25 @@ struct TailOpsWidgetView: View {
 
     private var symbol: String {
         "point.3.connected.trianglepath.dotted"
+    }
+
+    /// The single most important tailnet-wide message, if any.
+    private var banner: WidgetStatusBanner.Content? {
+        if entry.refreshHealth.hasFailedSinceLastSuccess, let error = entry.refreshHealth.lastError {
+            return .init(symbol: "exclamationmark.triangle.fill", text: error, tone: .problem)
+        }
+        guard let health = entry.snapshot.health else { return nil }
+        if let problem = health.backendProblem {
+            return .init(symbol: "power", text: problem, tone: .problem)
+        }
+        if let warning = health.warnings.first {
+            let more = health.warnings.count > 1 ? " (+\(health.warnings.count - 1) more)" : ""
+            return .init(symbol: "exclamationmark.triangle", text: warning + more, tone: .warning)
+        }
+        if let exitNode = health.exitNode {
+            return .init(symbol: "arrow.up.right.circle", text: "Exit node: \(exitNode.displayName)", tone: .info)
+        }
+        return nil
     }
 
     private var usesStatusGrid: Bool {
@@ -205,7 +246,8 @@ struct TailOpsWidgetView: View {
         case .systemExtraLarge:
             return 9
         case .systemLarge:
-            return 6
+            // Two rows of tiles; three do not fit a large widget's height.
+            return 4
         default:
             return visibleHostLimit
         }
@@ -241,7 +283,7 @@ struct TailOpsWidgetView: View {
                 columns: gridColumnCount,
                 columnSpacing: 10,
                 rowSpacing: 10,
-                tileMinHeight: 92,
+                tileMinHeight: 84,
                 tileMaxHeight: nil,
                 tileHorizontalPadding: 10,
                 tileVerticalPadding: 8,
@@ -392,6 +434,61 @@ private struct WidgetSnapshotFreshness: View {
     }
 }
 
+private struct WidgetStatusBanner: View {
+    struct Content {
+        enum Tone {
+            case problem
+            case warning
+            case info
+        }
+
+        let symbol: String
+        let text: String
+        let tone: Tone
+    }
+
+    let banner: Content
+
+    var body: some View {
+        Label {
+            Text(banner.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } icon: {
+            Image(systemName: banner.symbol)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(color)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var color: Color {
+        switch banner.tone {
+        case .problem:
+            return .red
+        case .warning:
+            return .orange
+        case .info:
+            return .secondary
+        }
+    }
+}
+
+private extension TailnetHost {
+    /// Idle peers have no live path worth naming; Tailscale connects on demand.
+    var activeRouteLabel: String? {
+        guard let connection, connection != .idle else { return nil }
+        return connection.label
+    }
+
+    /// Replaces the address line while a key-expiry warning is active.
+    var keyExpiryText: String? {
+        guard status == .warning, let keyExpiry else { return nil }
+        return "Key expires \(keyExpiry.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+}
+
 private struct WidgetEmptyState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -515,6 +612,13 @@ private struct WidgetHostStatusTile: View {
                             .foregroundStyle(color)
                             .lineLimit(1)
 
+                        if let route = host.activeRouteLabel {
+                            Text(route)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+
                         if let pingText {
                             Text(pingText)
                                 .font(.caption2.monospacedDigit().weight(.semibold))
@@ -539,22 +643,26 @@ private struct WidgetHostStatusTile: View {
                     .minimumScaleFactor(0.78)
             }
 
-            HStack(spacing: 5) {
-                if let wormholeContact {
-                    WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: style.showsActionTitles)
-                    WidgetWormholeChip(
-                        mode: .receive,
-                        contact: wormholeContact,
-                        pendingTransfer: pendingTransfer,
-                        showsTitle: style.showsActionTitles
-                    )
+            if host.status != .offline || pendingTransfer != nil {
+                HStack(spacing: 5) {
+                    if let wormholeContact {
+                        WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: style.showsActionTitles)
+                        WidgetWormholeChip(
+                            mode: .receive,
+                            contact: wormholeContact,
+                            pendingTransfer: pendingTransfer,
+                            showsTitle: style.showsActionTitles
+                        )
+                    }
+                    ForEach(Array(actions.prefix(3).enumerated()), id: \.offset) { _, action in
+                        WidgetActionChip(action: action, showsTitle: style.showsActionTitles)
+                    }
+                    Spacer(minLength: 0)
                 }
-                ForEach(Array(actions.prefix(3).enumerated()), id: \.offset) { _, action in
-                    WidgetActionChip(action: action, showsTitle: style.showsActionTitles)
-                }
-                Spacer(minLength: 0)
             }
         }
+        // The grid otherwise proposes a short row height and shrinks the host name to fit.
+        .fixedSize(horizontal: false, vertical: true)
         .frame(
             maxWidth: .infinity,
             minHeight: style.tileMinHeight,
@@ -575,7 +683,7 @@ private struct WidgetHostStatusTile: View {
     }
 
     private var detailText: String {
-        host.primaryAddress ?? host.magicDNSName ?? host.operatingSystem ?? "No address"
+        host.keyExpiryText ?? host.primaryAddress ?? host.magicDNSName ?? host.operatingSystem ?? "No address"
     }
 
     private var pingText: String? {
@@ -594,7 +702,7 @@ private struct WidgetHostStatusTile: View {
         case .online:
             return host.role == .thisDevice ? "This Mac" : "Online"
         case .warning:
-            return "Warn"
+            return host.keyExpiry == nil ? "Warning" : "Key expiring"
         case .offline:
             return "Offline"
         }
@@ -740,20 +848,20 @@ private struct WidgetHostActionRow: View {
     }
 
     private var detailText: String {
-        host.primaryAddress ?? host.magicDNSName ?? host.status.rawValue
+        if let keyExpiryText = host.keyExpiryText {
+            return keyExpiryText
+        }
+        let address = host.primaryAddress ?? host.magicDNSName ?? host.status.rawValue
+        guard let route = host.activeRouteLabel else { return address }
+        return "\(address) · \(route)"
     }
 
     private var pingText: String? {
-        guard let ping = host.diagnostics?.ping,
-              let latest = ping.latestLatencyMilliseconds,
-              let average = ping.averageLatencyMilliseconds
-        else {
+        guard let latest = host.diagnostics?.ping?.latestLatencyMilliseconds else {
             return nil
         }
 
-        let latestText = latest.formatted(.number.precision(.fractionLength(0...0)))
-        let averageText = average.formatted(.number.precision(.fractionLength(0...0)))
-        return "\(latestText) ms / \(averageText) avg"
+        return "\(latest.formatted(.number.precision(.fractionLength(0...0)))) ms"
     }
 
     private func color(for status: TailnetHost.Status) -> Color {
@@ -934,14 +1042,17 @@ private struct WidgetActionChip: View {
 
 #if DEBUG
 #Preview("Widget View") {
-    TailOpsWidgetView(entry: TailOpsEntry(
-        date: .now,
-        snapshot: .preview,
-        actionConfiguration: .preview,
-        refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now),
-        wormholeConfiguration: .previewBen,
-        pendingWormholeTransfers: .previewBen
-    ))
+    TailOpsWidgetView(
+        entry: TailOpsEntry(
+            date: .now,
+            snapshot: .preview,
+            actionConfiguration: .preview,
+            refreshHealth: TailOpsRefreshHealth(lastSuccessAt: .now),
+            wormholeConfiguration: .previewBen,
+            pendingWormholeTransfers: .previewBen
+        ),
+        family: .systemMedium
+    )
         .frame(width: 340, height: 240)
 }
 

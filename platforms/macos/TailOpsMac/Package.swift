@@ -68,6 +68,11 @@ let package = Package(
             path: "Tests/TailOpsCoreTests"
         ),
         .testTarget(
+            name: "TailOpsWidgetViewsTests",
+            dependencies: ["TailOpsCore", "TailOpsShared", "TailOpsWidgetViews"],
+            path: "Tests/TailOpsWidgetViewsTests"
+        ),
+        .testTarget(
             name: "TailOpsMacViewsTests",
             dependencies: ["TailOpsCore", "TailOpsShared", "TailOpsMacViews"],
             path: "Tests/TailOpsMacViewsTests"
