@@ -127,6 +127,7 @@ struct TailOpsMacApp: App {
                 await monitor.refresh()
             }
             monitor.startAutomaticRefresh()
+            monitor.startObservingSystemEvents()
         }
     }
 
