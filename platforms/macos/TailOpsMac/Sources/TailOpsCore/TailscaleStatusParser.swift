@@ -26,15 +26,37 @@ public struct TailnetSnapshotParser: Sendable {
         var hosts: [TailnetHost] = []
 
         if let selfDevice = response.selfDevice {
-            hosts.append(Self.host(from: selfDevice, role: .thisDevice))
+            hosts.append(Self.host(from: selfDevice, role: .thisDevice, at: generatedAt))
         }
 
         hosts.append(contentsOf: response.peers
             .filter { peerSelectionPolicy.includes($0.value) }
             .sorted { $0.key < $1.key }
-            .map { Self.host(from: $0.value, role: .peer) })
+            .map { Self.host(from: $0.value, role: .peer, at: generatedAt) })
 
-        return TailnetSnapshot(hosts: Self.sortedByRecentAvailability(hosts), generatedAt: generatedAt)
+        return TailnetSnapshot(
+            hosts: Self.sortedByRecentAvailability(hosts),
+            generatedAt: generatedAt,
+            health: Self.health(from: response)
+        )
+    }
+
+    /// Exit nodes are found among all peers, because provider nodes such as
+    /// Mullvad are hidden from the managed-fleet host list.
+    private static func health(from response: TailscaleStatusResponse) -> TailnetHealth? {
+        guard let backendState = response.backendState, !backendState.isEmpty else { return nil }
+        let exitNode = response.peers.values.first { $0.exitNode == true }.map { node in
+            TailnetExitNode(
+                name: TailnetDisplayName.cleaned(node.hostName) ?? normalizedDNSName(node.dnsName) ?? "Exit node",
+                location: node.location?.displayName
+            )
+        }
+        return TailnetHealth(
+            backendState: backendState,
+            warnings: response.health.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
+            exitNode: exitNode,
+            tailnetName: response.currentTailnetName
+        )
     }
 
     private static func sortedByRecentAvailability(_ hosts: [TailnetHost]) -> [TailnetHost] {
@@ -74,19 +96,42 @@ public struct TailnetSnapshotParser: Sendable {
         }
     }
 
-    private static func host(from node: TailscaleNode, role: TailnetHost.Role) -> TailnetHost {
+    private static func host(from node: TailscaleNode, role: TailnetHost.Role, at date: Date) -> TailnetHost {
         let magicDNSName = normalizedDNSName(node.dnsName)
+        let isOnline = node.online == true
+        let keyExpiry = node.keyExpiry.flatMap(parseDate)
+        let keyExpiresSoon = keyExpiry.map {
+            $0.timeIntervalSince(date) < TailnetHost.keyExpiryWarningInterval
+        } ?? false
+
         return TailnetHost(
             id: node.id ?? node.publicKey ?? node.dnsName ?? node.hostName ?? UUID().uuidString,
             name: TailnetDisplayName.cleaned(node.hostName) ?? magicDNSName ?? "Unknown host",
             role: role,
-            status: node.online == true ? .online : .offline,
+            status: isOnline ? (keyExpiresSoon ? .warning : .online) : .offline,
             operatingSystem: node.os,
             primaryAddress: node.tailscaleIPs?.first,
             magicDNSName: magicDNSName,
             lastSeen: node.lastSeen.flatMap(parseDate),
-            services: []
+            services: [],
+            connection: role == .peer && isOnline ? connection(for: node) : nil,
+            keyExpiry: keyExpiry
         )
+    }
+
+    /// Mirrors how `tailscale status` describes a peer: a current UDP address
+    /// means a direct path, otherwise traffic goes through a peer relay or DERP.
+    private static func connection(for node: TailscaleNode) -> TailnetConnection {
+        if let address = node.currentAddress, !address.isEmpty {
+            return .direct
+        }
+        if let peerRelay = node.peerRelay, !peerRelay.isEmpty {
+            return .peerRelay
+        }
+        if node.active == true, let relay = node.relay, !relay.isEmpty {
+            return .derp(region: relay)
+        }
+        return .idle
     }
 
     private static func normalizedDNSName(_ value: String?) -> String? {
@@ -140,16 +185,33 @@ enum TailnetDisplayName {
 private struct TailscaleStatusResponse: Decodable {
     let selfDevice: TailscaleNode?
     let peers: [String: TailscaleNode]
+    let backendState: String?
+    let health: [String]
+    let currentTailnetName: String?
 
     enum CodingKeys: String, CodingKey {
         case selfDevice = "Self"
         case peers = "Peer"
+        case backendState = "BackendState"
+        case health = "Health"
+        case currentTailnet = "CurrentTailnet"
+    }
+
+    private struct CurrentTailnet: Decodable {
+        let name: String?
+
+        enum CodingKeys: String, CodingKey {
+            case name = "Name"
+        }
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         selfDevice = try container.decodeIfPresent(TailscaleNode.self, forKey: .selfDevice)
         peers = try container.decodeIfPresent([String: TailscaleNode].self, forKey: .peers) ?? [:]
+        backendState = try container.decodeIfPresent(String.self, forKey: .backendState)
+        health = try container.decodeIfPresent([String].self, forKey: .health) ?? []
+        currentTailnetName = try container.decodeIfPresent(CurrentTailnet.self, forKey: .currentTailnet)?.name
     }
 }
 
@@ -163,6 +225,13 @@ private struct TailscaleNode: Decodable {
     let lastSeen: String?
     let os: String?
     let tags: [String]
+    let currentAddress: String?
+    let relay: String?
+    let peerRelay: String?
+    let active: Bool?
+    let exitNode: Bool?
+    let keyExpiry: String?
+    let location: TailscaleLocation?
 
     enum CodingKeys: String, CodingKey {
         case id = "ID"
@@ -174,6 +243,13 @@ private struct TailscaleNode: Decodable {
         case lastSeen = "LastSeen"
         case os = "OS"
         case tags = "Tags"
+        case currentAddress = "CurAddr"
+        case relay = "Relay"
+        case peerRelay = "PeerRelay"
+        case active = "Active"
+        case exitNode = "ExitNode"
+        case keyExpiry = "KeyExpiry"
+        case location = "Location"
     }
 
     init(from decoder: Decoder) throws {
@@ -187,5 +263,26 @@ private struct TailscaleNode: Decodable {
         lastSeen = try container.decodeIfPresent(String.self, forKey: .lastSeen)
         os = try container.decodeIfPresent(String.self, forKey: .os)
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        currentAddress = try container.decodeIfPresent(String.self, forKey: .currentAddress)
+        relay = try container.decodeIfPresent(String.self, forKey: .relay)
+        peerRelay = try container.decodeIfPresent(String.self, forKey: .peerRelay)
+        active = try container.decodeIfPresent(Bool.self, forKey: .active)
+        exitNode = try container.decodeIfPresent(Bool.self, forKey: .exitNode)
+        keyExpiry = try container.decodeIfPresent(String.self, forKey: .keyExpiry)
+        location = try container.decodeIfPresent(TailscaleLocation.self, forKey: .location)
+    }
+}
+
+private struct TailscaleLocation: Decodable {
+    let city: String?
+    let country: String?
+
+    enum CodingKeys: String, CodingKey {
+        case city = "City"
+        case country = "Country"
+    }
+
+    var displayName: String? {
+        [city, country].compactMap { $0 }.first { !$0.isEmpty && $0 != "Any" }
     }
 }

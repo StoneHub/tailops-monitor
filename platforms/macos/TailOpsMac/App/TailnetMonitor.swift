@@ -269,6 +269,6 @@ final class TailnetMonitor: NSObject, ObservableObject {
             return host.withDiagnostics(TailnetHostDiagnostics(ping: ping))
         }
 
-        return TailnetSnapshot(hosts: hosts, generatedAt: snapshot.generatedAt)
+        return snapshot.withHosts(hosts)
     }
 }
