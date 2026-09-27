@@ -115,6 +115,8 @@ struct TailOpsMacApp: App {
         let monitor = TailnetMonitor(
             statusProvider: ProcessTailscaleStatusProvider(),
             pingProvider: ProcessTailscalePingProvider(),
+            healthProvider: SSHFleetHealthProvider(),
+            healthSources: { FleetHealthSettings.sources() },
             tailnetStore: store,
             requestStore: store
         )

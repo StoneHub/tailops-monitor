@@ -75,7 +75,7 @@ sudo stat -c '%a %U %G %n' /var/lib/tailopsd/fleet-observation.json
 sudo jq '{kind, schemaVersion, policy, observedAt, summary, host: {os: .host.os, failedUnits: .host.failedUnits, warnings: .host.warnings}}' /var/lib/tailopsd/fleet-observation.json
 ```
 
-Expected snapshot mode is `600`, owned by `tailopsd`. Do not print the full node list into public logs or pull requests.
+Expected snapshot mode is `600`, owned by `tailopsd`. The health-only `/var/lib/tailopsd/host-health.json` is mode `644` in a `0751` directory, so local accounts can read that file by name but cannot list the directory or read the full observation. Check it as your own login with `cat /var/lib/tailopsd/host-health.json`. Do not print the full node list into public logs or pull requests.
 
 ## Disable without deleting state
 

@@ -49,6 +49,22 @@ function collectorName(status) {
   return peerName(self, peerID(self, 0));
 }
 
+/**
+ * The shareable subset of an observation: the collector's health and node counts,
+ * without the peer list or any addresses. Readable by the node's local accounts so a
+ * controller can fetch it over its existing SSH login.
+ */
+export function buildHostHealthDocument(observation) {
+  return {
+    schemaVersion: 1,
+    kind: "tailops.host-health",
+    observedAt: observation.observedAt,
+    collector: observation.collector,
+    summary: observation.summary,
+    host: observation.host ?? null,
+  };
+}
+
 export function buildFleetObservation(
   status,
   { includeProviderNodes = false, observedAt = new Date().toISOString(), host = null } = {},

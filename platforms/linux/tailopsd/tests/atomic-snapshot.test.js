@@ -27,3 +27,20 @@ test("observation files require an absolute output path", async () => {
     /must be absolute/,
   );
 });
+
+test("an explicit mode survives a restrictive umask", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "tailopsd-test-"));
+  context.after(async () => {
+    const { rm } = await import("node:fs/promises");
+    await rm(directory, { recursive: true, force: true });
+  });
+  const outputPath = join(directory, "host-health.json");
+  const previous = process.umask(0o077);
+  try {
+    await writeObservationFile(outputPath, { kind: "tailops.host-health" }, { mode: 0o644 });
+  } finally {
+    process.umask(previous);
+  }
+
+  assert.equal((await stat(outputPath)).mode & 0o777, 0o644);
+});

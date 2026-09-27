@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 
 import { writeObservationFile } from "./atomic-snapshot.js";
-import { buildFleetObservation } from "./fleet-observation.js";
+import { buildFleetObservation, buildHostHealthDocument } from "./fleet-observation.js";
 import { collectHostHealth } from "./host-health.js";
 import { inspectLinuxRuntime } from "./runtime-doctor.js";
 import { collectTailscaleStatus } from "./tailscale-command.js";
@@ -11,6 +11,7 @@ const { version } = require("../package.json");
 
 const HELP = `Usage:
   tailopsd snapshot [--all-peers] [--no-host] [--pretty] [--output ABSOLUTE_PATH]
+                    [--health-output ABSOLUTE_PATH]
   tailopsd doctor [--pretty]
   tailopsd version
 
@@ -23,7 +24,9 @@ Options:
   --all-peers  Include provider nodes such as Mullvad exit nodes.
   --no-host    Omit this node's own health (disk, memory, load, failed units).
   --pretty     Pretty-print the JSON result.
-  --output     Atomically write the observation to an absolute path.
+  --output     Atomically write the observation to an absolute path (mode 600).
+  --health-output
+               Also write the health-only document, without peers or addresses (mode 644).
   -h, --help   Show this help.
 `;
 
@@ -75,6 +78,7 @@ export async function runCLI(
   }
 
   let outputPath = null;
+  let healthOutputPath = null;
   const snapshotFlags = [];
   for (let index = 1; index < args.length; index += 1) {
     const argument = args[index];
@@ -82,6 +86,13 @@ export async function runCLI(
       outputPath = args[index + 1] ?? null;
       if (!outputPath || outputPath.startsWith("--")) {
         writeLine(writeStderr, "tailopsd: --output requires an absolute path");
+        return 2;
+      }
+      index += 1;
+    } else if (argument === "--health-output") {
+      healthOutputPath = args[index + 1] ?? null;
+      if (!healthOutputPath || healthOutputPath.startsWith("--")) {
+        writeLine(writeStderr, "tailopsd: --health-output requires an absolute path");
         return 2;
       }
       index += 1;
@@ -104,6 +115,14 @@ export async function runCLI(
       host,
     });
 
+    if (healthOutputPath) {
+      if (snapshotFlags.includes("--no-host")) {
+        writeLine(writeStderr, "tailopsd: --health-output needs host health; drop --no-host");
+        return 2;
+      }
+      await writeObservation(healthOutputPath, buildHostHealthDocument(observation), { mode: 0o644 });
+    }
+
     if (outputPath) {
       await writeObservation(outputPath, observation);
       writeLine(writeStdout, JSON.stringify({
@@ -114,6 +133,7 @@ export async function runCLI(
         observedAt: observation.observedAt,
         nodeCount: observation.summary.nodeCount,
         hostWarnings: observation.host?.warnings.length ?? null,
+        ...(healthOutputPath ? { healthPath: healthOutputPath } : {}),
       }));
     } else {
       const spacing = snapshotFlags.includes("--pretty") ? 2 : 0;

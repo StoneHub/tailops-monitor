@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { rename, unlink, writeFile } from "node:fs/promises";
+import { chmod, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
 export async function writeObservationFile(
@@ -8,8 +8,10 @@ export async function writeObservationFile(
   {
     createID = randomUUID,
     write = writeFile,
+    setMode = chmod,
     move = rename,
     remove = unlink,
+    mode = 0o600,
   } = {},
 ) {
   if (typeof filePath !== "string" || !isAbsolute(filePath)) {
@@ -21,6 +23,8 @@ export async function writeObservationFile(
 
   try {
     await write(temporaryPath, data, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    // Set the final mode explicitly: the service's umask would otherwise strip read bits.
+    await setMode(temporaryPath, mode);
     await move(temporaryPath, filePath);
   } catch (error) {
     await remove(temporaryPath).catch(() => {});

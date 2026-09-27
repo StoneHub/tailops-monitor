@@ -12,6 +12,8 @@ final class TailnetMonitor: NSObject, ObservableObject {
 
     private let statusProvider: TailscaleStatusProviding
     private let pingProvider: TailscalePingProviding?
+    private let healthProvider: FleetHealthProviding?
+    private let healthSources: @MainActor () -> [String]
     private let parser = TailnetSnapshotParser()
     private let tailnetStore: any TailnetStateStoring
     private let requestStore: any TailOpsAppGroupRequestStoring
@@ -21,6 +23,8 @@ final class TailnetMonitor: NSObject, ObservableObject {
     private let pingRetryInterval: TimeInterval = 10 * 60
     private let systemEventRefreshDelay: TimeInterval = 5
     private let systemEventMinimumInterval: TimeInterval = 60
+    /// tailopsd writes every 15 minutes, so refresh that often while a health source is set.
+    private let healthRefreshInterval: Duration = .seconds(15 * 60)
     private var automaticRefreshTask: Task<Void, Never>?
     private var systemEventRefreshTask: Task<Void, Never>?
     private var pathMonitor: NWPathMonitor?
@@ -32,12 +36,16 @@ final class TailnetMonitor: NSObject, ObservableObject {
     init(
         statusProvider: TailscaleStatusProviding,
         pingProvider: TailscalePingProviding? = nil,
+        healthProvider: FleetHealthProviding? = nil,
+        healthSources: @escaping @MainActor () -> [String] = { [] },
         tailnetStore: any TailnetStateStoring,
         requestStore: any TailOpsAppGroupRequestStoring,
         initialSnapshot: TailnetSnapshot? = nil
     ) {
         self.statusProvider = statusProvider
         self.pingProvider = pingProvider
+        self.healthProvider = healthProvider
+        self.healthSources = healthSources
         self.tailnetStore = tailnetStore
         self.requestStore = requestStore
         super.init()
@@ -86,7 +94,9 @@ final class TailnetMonitor: NSObject, ObservableObject {
             let data = try await statusProvider.statusJSON()
             let parsed = try parser.parse(data)
             let previousPings = pingSummariesByHostID(in: snapshot)
-            try publish(Self.snapshot(parsed, applying: previousPings))
+            let sources = healthProvider == nil ? [] : healthSources()
+            let previousHealth = sources.isEmpty ? [] : snapshot.hosts.compactMap(\.health)
+            try publish(Self.snapshot(parsed, applying: previousPings, health: previousHealth, at: Date()))
             lastError = nil
             try tailnetStore.saveRefreshHealth(TailOpsRefreshHealth(
                 lastAttemptAt: attemptAt,
@@ -94,20 +104,31 @@ final class TailnetMonitor: NSObject, ObservableObject {
             ))
             reloadWidget()
 
+            // Second phase: node health over SSH and the hourly ping burst run together.
+            async let freshHealth = nodeHealth(from: sources)
+            var mergedPings = previousPings
+            var pingsChanged = false
             if let pingProvider, shouldRefreshPingDiagnostics(now: Date()) {
                 let freshPings = await pingSummaries(for: parsed.hosts, using: pingProvider)
                 // When every ping failed (often right after wake), try again sooner than hourly.
                 lastPingDiagnosticsRefreshDate = freshPings.isEmpty
                     ? Date().addingTimeInterval(pingRetryInterval - pingDiagnosticsMinimumInterval)
                     : Date()
-                let mergedPings = previousPings.merging(freshPings) { previous, fresh in
+                mergedPings = previousPings.merging(freshPings) { previous, fresh in
                     previous.mergingRecentSamples(from: fresh, maxSamples: maxRetainedPingSamples)
                 }
+                pingsChanged = true
+            }
+            let fetchedHealth = await freshHealth
+            if pingsChanged || !sources.isEmpty {
+                // A node that could not be reached keeps its last reading, marked stale once old.
+                let fetchedCollectors = Set(fetchedHealth.map { $0.collector.lowercased() })
+                let health = fetchedHealth + previousHealth.filter { !fetchedCollectors.contains($0.collector.lowercased()) }
                 do {
-                    try publish(Self.snapshot(parsed, applying: mergedPings))
+                    try publish(Self.snapshot(parsed, applying: mergedPings, health: health, at: Date()))
                     reloadWidget()
                 } catch {
-                    NSLog("TailOps could not save ping diagnostics: %@", error.localizedDescription)
+                    NSLog("TailOps could not save diagnostics: %@", error.localizedDescription)
                 }
             }
         } catch {
@@ -143,10 +164,11 @@ final class TailnetMonitor: NSObject, ObservableObject {
 
         automaticRefreshTask = Task { [weak self] in
             while !Task.isCancelled {
+                let wait = self?.automaticRefreshInterval(default: interval) ?? interval
                 do {
                     // Suspending clock: time asleep does not count, so an overdue refresh
                     // does not fire at wake before the network is back. Wake has its own refresh.
-                    try await Task.sleep(for: interval, tolerance: .seconds(60), clock: .suspending)
+                    try await Task.sleep(for: wait, tolerance: .seconds(60), clock: .suspending)
                 } catch {
                     break
                 }
@@ -259,19 +281,42 @@ final class TailnetMonitor: NSObject, ObservableObject {
 
     /// Attaches ping history to reachable peers only; offline hosts and this device
     /// carry no ping diagnostics.
+    private func automaticRefreshInterval(default interval: Duration) -> Duration {
+        healthProvider != nil && !healthSources().isEmpty ? min(interval, healthRefreshInterval) : interval
+    }
+
+    /// Reads each configured node's health concurrently; unreachable nodes are skipped.
+    private func nodeHealth(from sources: [String]) async -> [TailnetNodeHealth] {
+        guard let healthProvider, !sources.isEmpty else { return [] }
+        return await withTaskGroup(of: TailnetNodeHealth?.self) { group in
+            for source in sources {
+                group.addTask { try? await healthProvider.health(from: source) }
+            }
+            var readings: [TailnetNodeHealth] = []
+            for await reading in group {
+                if let reading {
+                    readings.append(reading)
+                }
+            }
+            return readings
+        }
+    }
+
     private static func snapshot(
         _ snapshot: TailnetSnapshot,
-        applying pingByHostID: [String: TailnetPingSummary]
+        applying pingByHostID: [String: TailnetPingSummary],
+        health: [TailnetNodeHealth] = [],
+        at date: Date
     ) -> TailnetSnapshot {
         let hosts = snapshot.hosts.map { host in
-            guard host.role == .peer,
-                  host.status != .offline,
-                  let ping = pingByHostID[host.id]
-            else {
-                return host
+            var host = host
+            if host.role == .peer, host.status != .offline, let ping = pingByHostID[host.id] {
+                host = host.withDiagnostics(TailnetHostDiagnostics(ping: ping))
             }
-
-            return host.withDiagnostics(TailnetHostDiagnostics(ping: ping))
+            if let reading = health.first(where: { $0.matches(host) }) {
+                host = host.withHealth(reading.checkingStaleness(at: date))
+            }
+            return host
         }
 
         return snapshot.withHosts(hosts)
