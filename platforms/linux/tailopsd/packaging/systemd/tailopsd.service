@@ -10,7 +10,7 @@ Type=oneshot
 User=tailopsd
 Group=tailopsd
 WorkingDirectory=/var/lib/tailopsd
-ExecStart=/opt/tailopsd/current/bin/tailopsd.js snapshot --output /var/lib/tailopsd/fleet-observation.json
+ExecStart=/opt/tailopsd/current/bin/tailopsd.js snapshot --output /var/lib/tailopsd/fleet-observation.json --health-output /var/lib/tailopsd/host-health.json
 TimeoutStartSec=60s
 UMask=0077
 

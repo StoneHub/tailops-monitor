@@ -119,3 +119,47 @@ test("snapshot includes host health unless --no-host is passed", async () => {
   }), 0);
   assert.equal("host" in JSON.parse(stdout), false);
 });
+
+test("--health-output writes a readable health-only document without peers", async () => {
+  const status = {
+    Self: { ID: "self", HostName: "fcfdev", Online: true, TailscaleIPs: ["100.64.0.1"] },
+    Peer: { a: { ID: "a", HostName: "laptop", Online: false, TailscaleIPs: ["100.64.0.2"] } },
+  };
+  const host = { hostname: "fcfdev", warnings: [] };
+  const writes = [];
+
+  const exitCode = await runCLI(
+    ["snapshot", "--output", "/var/lib/tailopsd/fleet-observation.json", "--health-output", "/var/lib/tailopsd/host-health.json"],
+    {
+      collectStatus: async () => status,
+      collectHost: async () => host,
+      now: () => new Date("2026-09-26T22:00:00.000Z"),
+      writeObservation: async (path, document, options) => { writes.push({ path, document, options }); },
+      writeStdout: () => {},
+      writeStderr: () => {},
+    },
+  );
+
+  assert.equal(exitCode, 0);
+  const health = writes.find((write) => write.path.endsWith("host-health.json"));
+  assert.equal(health.options.mode, 0o644);
+  assert.equal(health.document.kind, "tailops.host-health");
+  assert.deepEqual(health.document.host, host);
+  assert.equal(health.document.summary.nodeCount, 2);
+  assert.equal(JSON.stringify(health.document).includes("100.64.0"), false);
+  assert.equal("nodes" in health.document, false);
+
+  const full = writes.find((write) => write.path.endsWith("fleet-observation.json"));
+  assert.equal(full.options, undefined);
+});
+
+test("--health-output refuses --no-host", async () => {
+  let stderr = "";
+  const exitCode = await runCLI(["snapshot", "--no-host", "--health-output", "/tmp/h.json"], {
+    collectStatus: async () => ({ Self: { ID: "s" } }),
+    writeStdout: () => {},
+    writeStderr: (value) => { stderr += value; },
+  });
+  assert.equal(exitCode, 2);
+  assert.match(stderr, /needs host health/);
+});
