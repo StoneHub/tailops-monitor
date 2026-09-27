@@ -25,6 +25,8 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
     /// How this Mac currently reaches an online peer; nil for this device and offline hosts.
     public let connection: TailnetConnection?
     public let keyExpiry: Date?
+    /// The node's own health from its tailopsd collector, when TailOps reads one.
+    public let health: TailnetNodeHealth?
 
     /// Online hosts whose node key expires within this window show as warnings.
     public static let keyExpiryWarningInterval: TimeInterval = 7 * 24 * 60 * 60
@@ -41,7 +43,8 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
         services: [TailnetService],
         diagnostics: TailnetHostDiagnostics? = nil,
         connection: TailnetConnection? = nil,
-        keyExpiry: Date? = nil
+        keyExpiry: Date? = nil,
+        health: TailnetNodeHealth? = nil
     ) {
         self.id = id
         self.name = name
@@ -55,11 +58,12 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
         self.diagnostics = diagnostics
         self.connection = connection
         self.keyExpiry = keyExpiry
+        self.health = health
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, role, status, operatingSystem, primaryAddress, magicDNSName
-        case lastSeen, services, diagnostics, connection, keyExpiry
+        case lastSeen, services, diagnostics, connection, keyExpiry, health
     }
 
     public init(from decoder: Decoder) throws {
@@ -78,6 +82,7 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
         // make the whole snapshot unreadable.
         connection = try? container.decodeIfPresent(TailnetConnection.self, forKey: .connection)
         keyExpiry = try container.decodeIfPresent(Date.self, forKey: .keyExpiry)
+        health = try? container.decodeIfPresent(TailnetNodeHealth.self, forKey: .health)
     }
 
     public func withDiagnostics(_ diagnostics: TailnetHostDiagnostics?) -> TailnetHost {
@@ -93,7 +98,28 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
             services: services,
             diagnostics: diagnostics,
             connection: connection,
-            keyExpiry: keyExpiry
+            keyExpiry: keyExpiry,
+            health: health
+        )
+    }
+
+    /// Attaches a node health reading; fresh warnings make an online host a warning.
+    public func withHealth(_ health: TailnetNodeHealth?) -> TailnetHost {
+        let hasActiveWarnings = !(health?.activeWarnings.isEmpty ?? true)
+        return TailnetHost(
+            id: id,
+            name: name,
+            role: role,
+            status: status == .online && hasActiveWarnings ? .warning : status,
+            operatingSystem: operatingSystem,
+            primaryAddress: primaryAddress,
+            magicDNSName: magicDNSName,
+            lastSeen: lastSeen,
+            services: services,
+            diagnostics: diagnostics,
+            connection: connection,
+            keyExpiry: keyExpiry,
+            health: health
         )
     }
 }

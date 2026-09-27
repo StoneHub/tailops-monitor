@@ -109,6 +109,7 @@ struct TailOpsSettingsView: View {
                 )
                 appControls
                 TailOpsUpdatePanel(updater: TailOpsAppUpdater.shared)
+                FleetHealthPanel()
 
                 VStack(alignment: .leading, spacing: 10) {
                     Label("Widget-first by design", systemImage: "rectangle.3.group")
@@ -354,6 +355,27 @@ struct TailOpsSettingsView: View {
             .buttonStyle(.borderedProminent)
             .disabled(!model.canSave)
         }
+    }
+}
+
+/// Linux Fleet nodes whose tailopsd health TailOps reads over SSH.
+private struct FleetHealthPanel: View {
+    @AppStorage(FleetHealthSettings.sourcesKey) private var sources = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Fleet health", systemImage: "heart.text.square")
+                .font(.headline)
+            TextField("SSH hosts, e.g. fcfdev", text: $sources)
+                .textFieldStyle(.roundedBorder)
+            Text("TailOps reads each host's tailopsd health file with your existing SSH login every 15 minutes and shows it on that host's widget tile. Leave empty to turn this off.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tailOpsGlassPanel(tint: .blue)
     }
 }
 

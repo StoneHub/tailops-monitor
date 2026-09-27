@@ -73,6 +73,33 @@ final class TailnetMonitorRefreshTests: XCTestCase {
         XCTAssertNotNil(peer.diagnostics?.ping)
     }
 
+    func testNodeHealthIsAttachedAndKeptStaleWhenUnreachable() async throws {
+        let store = RecordingTailnetStore()
+        let provider = FakeHealthProvider()
+        await provider.set(TailnetNodeHealth(collector: "peer-1", observedAt: Date(), warnings: ["1 failed systemd unit"]))
+        let monitor = TailnetMonitor(
+            statusProvider: FakeStatusProvider(peerCount: 2),
+            healthProvider: provider,
+            healthSources: { ["peer-1"] },
+            tailnetStore: store,
+            requestStore: InMemoryTailOpsStore()
+        )
+
+        await monitor.refresh()
+
+        let first = try XCTUnwrap(store.savedSnapshots.last?.hosts.first { $0.id == "peer-1" })
+        XCTAssertEqual(first.status, .warning)
+        XCTAssertEqual(first.health?.warnings, ["1 failed systemd unit"])
+        XCTAssertNil(store.savedSnapshots.last?.hosts.first { $0.id == "peer-2" }?.health)
+
+        // The node stops answering: its last reading stays attached.
+        await provider.set(nil)
+        await monitor.refresh()
+
+        let second = try XCTUnwrap(store.savedSnapshots.last?.hosts.first { $0.id == "peer-1" })
+        XCTAssertEqual(second.health?.collector, "peer-1")
+    }
+
     private func makeMonitor(
         peerCount: Int,
         pingProvider: FakePingProvider,
@@ -121,6 +148,19 @@ private struct ExpiringKeyStatusProvider: TailscaleStatusProviding {
             }
             """.utf8
         )
+    }
+}
+
+private actor FakeHealthProvider: FleetHealthProviding {
+    private var reading: TailnetNodeHealth?
+
+    func set(_ reading: TailnetNodeHealth?) {
+        self.reading = reading
+    }
+
+    func health(from source: String) async throws -> TailnetNodeHealth {
+        guard let reading else { throw TailscaleStatusError.commandFailed("unreachable") }
+        return reading
     }
 }
 

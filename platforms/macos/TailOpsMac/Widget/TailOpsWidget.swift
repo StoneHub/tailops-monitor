@@ -484,8 +484,22 @@ private extension TailnetHost {
 
     /// Replaces the address line while a key-expiry warning is active.
     var keyExpiryText: String? {
-        guard status == .warning, let keyExpiry else { return nil }
+        guard status == .warning, let keyExpiry,
+              keyExpiry.timeIntervalSinceNow < TailnetHost.keyExpiryWarningInterval
+        else { return nil }
         return "Key expires \(keyExpiry.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
+    /// What needs attention on this host: a node health warning first, then key expiry.
+    var attentionText: String? {
+        if let health, !health.activeWarnings.isEmpty {
+            return health.summaryText
+        }
+        return keyExpiryText
+    }
+
+    var hasHealthWarnings: Bool {
+        !(health?.activeWarnings.isEmpty ?? true)
     }
 }
 
@@ -684,7 +698,8 @@ private struct WidgetHostStatusTile: View {
     }
 
     private var detailText: String {
-        host.keyExpiryText ?? host.primaryAddress ?? host.magicDNSName ?? host.operatingSystem ?? "No address"
+        host.attentionText ?? host.health?.summaryText ?? host.primaryAddress ?? host.magicDNSName
+            ?? host.operatingSystem ?? "No address"
     }
 
     private var visibleActions: ArraySlice<HostAction> {
@@ -712,7 +727,8 @@ private struct WidgetHostStatusTile: View {
         case .online:
             return host.role == .thisDevice ? "This Mac" : "Online"
         case .warning:
-            return host.keyExpiry == nil ? "Warning" : "Key expiring"
+            if host.hasHealthWarnings { return "Attention" }
+            return host.keyExpiryText == nil ? "Warning" : "Key expiring"
         case .offline:
             return "Offline"
         }
@@ -858,8 +874,8 @@ private struct WidgetHostActionRow: View {
     }
 
     private var detailText: String {
-        if let keyExpiryText = host.keyExpiryText {
-            return keyExpiryText
+        if let attentionText = host.attentionText {
+            return attentionText
         }
         let address = host.primaryAddress ?? host.magicDNSName ?? host.status.rawValue
         guard let route = host.activeRouteLabel else { return address }

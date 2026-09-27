@@ -148,3 +148,60 @@ enum TailscaleStatusError: LocalizedError {
         }
     }
 }
+
+protocol FleetHealthProviding: Sendable {
+    func health(from source: String) async throws -> TailnetNodeHealth
+}
+
+/// Reads a Linux node's health-only tailopsd document over the controller's existing
+/// SSH login. The remote command is fixed and the host alias is validated, so the
+/// configured value can only name a host.
+struct SSHFleetHealthProvider: FleetHealthProviding {
+    static let remotePath = "/var/lib/tailopsd/host-health.json"
+    private let processRunner = BoundedProcessRunner()
+    private let parser = TailnetNodeHealthParser()
+
+    static func isValidSource(_ source: String) -> Bool {
+        guard let first = source.first, first != "-", source.count <= 253 else { return false }
+        return source.unicodeScalars.allSatisfy { scalar in
+            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || "._-@".unicodeScalars.contains(scalar))
+        }
+    }
+
+    func health(from source: String) async throws -> TailnetNodeHealth {
+        guard Self.isValidSource(source) else {
+            throw TailscaleStatusError.commandFailed("\(source) is not a valid SSH host.")
+        }
+        let result = try await processRunner.run(
+            executableURL: URL(fileURLWithPath: "/usr/bin/ssh"),
+            arguments: [
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=8",
+                "-o", "StrictHostKeyChecking=yes",
+                "--", source,
+                "cat", Self.remotePath,
+            ],
+            timeout: 20,
+            maximumStandardOutputBytes: 256 * 1_024,
+            maximumStandardErrorBytes: 16 * 1_024
+        )
+        guard result.terminationStatus == 0, !result.stdoutWasTruncated else {
+            let message = String(decoding: result.stderr, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            throw TailscaleStatusError.commandFailed(message.isEmpty ? "ssh \(source) failed." : message)
+        }
+        return try parser.parse(result.stdout)
+    }
+}
+
+/// Which Linux nodes TailOps asks for health. Only the host app reads this, so it lives
+/// in the app's own defaults rather than the shared App Group.
+enum FleetHealthSettings {
+    static let sourcesKey = "FleetHealthSSHHosts"
+
+    static func sources(in defaults: UserDefaults = .standard) -> [String] {
+        (defaults.string(forKey: sourcesKey) ?? "")
+            .split(whereSeparator: { $0 == "," || $0.isWhitespace })
+            .map(String.init)
+            .filter(SSHFleetHealthProvider.isValidSource)
+    }
+}
