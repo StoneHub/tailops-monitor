@@ -151,7 +151,9 @@ final class TailnetMonitor: NSObject, ObservableObject {
         isRefreshing = false
         if refreshRequestedWhileRefreshing {
             refreshRequestedWhileRefreshing = false
-            await refresh()
+            if !(await refreshIfRequested()) {
+                await refresh()
+            }
         }
     }
 
@@ -159,6 +161,13 @@ final class TailnetMonitor: NSObject, ObservableObject {
     func refreshIfRequested() async -> Bool {
         guard (try? requestStore.loadRefreshRequest()) != nil else {
             return false
+        }
+
+        // Keep the request visible to the widget while diagnostics finish. It
+        // is consumed only when the next status attempt can actually begin.
+        guard !isRefreshing else {
+            refreshRequestedWhileRefreshing = true
+            return true
         }
 
         try? requestStore.clearRefreshRequest()

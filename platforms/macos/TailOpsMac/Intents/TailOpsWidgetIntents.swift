@@ -34,12 +34,15 @@ public struct RefreshTailOpsWidgetIntent: AppIntent {
 
     public init() {}
 
-    public func perform() async throws -> some IntentResult & OpensIntent {
+    public func perform() async throws -> some IntentResult {
         try SharedSnapshotStore().saveRefreshRequest(TailOpsRefreshRequest())
         TailOpsWidgetKind.reloadTimelines()
         // Open only after persisting the request. URL delivery also reaches an
         // already-running host, without relying on a cross-process notification.
-        return .result(opensIntent: OpenURLIntent(TailOpsRefreshSignal.url))
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        try await NSWorkspace.shared.open(TailOpsRefreshSignal.url, configuration: configuration)
+        return .result()
     }
 }
 
