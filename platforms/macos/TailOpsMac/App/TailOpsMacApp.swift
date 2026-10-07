@@ -33,6 +33,8 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        // Activation is a fallback for a queued request if URL delivery was lost.
+        Self.refreshIfRequested()
         Self.openWormholeWindowIfRequested()
     }
 
@@ -55,6 +57,13 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
 
     static func openSettingsWindow() {
         TailOpsSettingsWindowController.shared.show()
+    }
+
+    private static func refreshIfRequested() {
+        NotificationCenter.default.post(
+            name: Notification.Name(TailOpsRefreshSignal.notificationName),
+            object: nil
+        )
     }
 
     static func openWormholeWindowIfRequested(
@@ -94,6 +103,8 @@ final class TailOpsAppDelegate: NSObject, NSApplicationDelegate {
     private static func route(_ url: URL) {
         guard url.scheme == TailOpsSettingsOpenSignal.url.scheme else { return }
         switch url.host {
+        case TailOpsRefreshSignal.url.host:
+            refreshIfRequested()
         case TailOpsSettingsOpenSignal.url.host:
             openSettingsWindow()
         case TailOpsWormholeSignal.url.host:

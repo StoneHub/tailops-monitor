@@ -6,6 +6,91 @@ import XCTest
 
 @MainActor
 final class TailnetMonitorRefreshTests: XCTestCase {
+    func testRequestDuringDiagnosticsRemainsPendingUntilNextStatusAttempt() async throws {
+        let store = RecordingTailnetStore()
+        let requestStore = InMemoryTailOpsStore()
+        let pingStarted = expectation(description: "Diagnostics started")
+        let pingProvider = SuspendedPingProvider(started: pingStarted)
+        let monitor = TailnetMonitor(
+            statusProvider: FakeStatusProvider(peerCount: 1),
+            pingProvider: pingProvider,
+            tailnetStore: store,
+            requestStore: requestStore
+        )
+        let refreshTask = Task { await monitor.refresh() }
+        let result = await XCTWaiter.fulfillment(of: [pingStarted], timeout: 2)
+        XCTAssertEqual(result, .completed)
+        let successAt = try XCTUnwrap(store.health?.lastSuccessAt)
+        let request = TailOpsRefreshRequest(requestedAt: successAt.addingTimeInterval(1))
+        try requestStore.saveRefreshRequest(request)
+
+        let queued = await monitor.refreshIfRequested()
+
+        XCTAssertTrue(queued)
+        XCTAssertEqual(try requestStore.loadRefreshRequest(), request)
+        let pendingHealth = try XCTUnwrap(store.health).including(requestStore.loadRefreshRequest())
+        XCTAssertTrue(pendingHealth.isRefreshInProgress(at: request.requestedAt))
+        XCTAssertTrue(pendingHealth.hasTimedOut(at: request.requestedAt.addingTimeInterval(120)))
+
+        await pingProvider.resume()
+        await refreshTask.value
+        XCTAssertNil(try requestStore.loadRefreshRequest())
+        XCTAssertEqual(store.savedSnapshots.count, 3)
+        XCTAssertFalse(try XCTUnwrap(store.health).isRefreshInProgress)
+    }
+
+    func testRefreshSignalConsumesQueuedRequestInRunningHost() async throws {
+        let store = RecordingTailnetStore()
+        let requestStore = InMemoryTailOpsStore(refreshRequest: TailOpsRefreshRequest())
+        let monitor = TailnetMonitor(
+            statusProvider: FakeStatusProvider(peerCount: 1),
+            tailnetStore: store,
+            requestStore: requestStore
+        )
+        let refreshed = expectation(description: "Fresh status saved after URL handoff signal")
+        store.didSave = { refreshed.fulfill() }
+
+        NotificationCenter.default.post(
+            name: Notification.Name(TailOpsRefreshSignal.notificationName),
+            object: nil
+        )
+        let result = await XCTWaiter.fulfillment(of: [refreshed], timeout: 2)
+
+        XCTAssertEqual(result, .completed)
+        XCTAssertNil(try requestStore.loadRefreshRequest())
+        XCTAssertEqual(monitor.snapshot.hosts.count, 2)
+        XCTAssertNotNil(store.health?.lastSuccessAt)
+    }
+
+    func testActivationWithoutQueuedRequestDoesNotRefresh() async throws {
+        let store = RecordingTailnetStore()
+        let monitor = makeMonitor(peerCount: 1, pingProvider: FakePingProvider(), store: store)
+
+        let didRefresh = await monitor.refreshIfRequested()
+
+        XCTAssertFalse(didRefresh)
+        XCTAssertTrue(store.savedSnapshots.isEmpty)
+    }
+
+    func testFailedStatusKeepsSnapshotAgeAndPublishesError() async throws {
+        let store = RecordingTailnetStore()
+        let snapshot = TailnetSnapshot(hosts: [], generatedAt: Date().addingTimeInterval(-60))
+        try store.save(snapshot)
+        let monitor = TailnetMonitor(
+            statusProvider: FailedStatusProvider(),
+            tailnetStore: store,
+            requestStore: InMemoryTailOpsStore(refreshRequest: TailOpsRefreshRequest())
+        )
+
+        await monitor.refreshIfRequested()
+
+        XCTAssertEqual(store.savedSnapshots, [snapshot])
+        XCTAssertEqual(monitor.snapshot.generatedAt, snapshot.generatedAt)
+        XCTAssertEqual(store.health?.lastError, "Tailscale unavailable")
+        XCTAssertTrue(try XCTUnwrap(store.health).hasFailedSinceLastSuccess)
+        XCTAssertFalse(try XCTUnwrap(store.health).hasTimedOut(at: Date().addingTimeInterval(120)))
+    }
+
     func testStatusIsPublishedBeforePingDiagnostics() async throws {
         let store = RecordingTailnetStore()
         let monitor = makeMonitor(peerCount: 2, pingProvider: FakePingProvider(), store: store)
@@ -136,6 +221,12 @@ private struct FakeStatusProvider: TailscaleStatusProviding {
     }
 }
 
+private struct FailedStatusProvider: TailscaleStatusProviding {
+    func statusJSON() async throws -> Data {
+        throw TailscaleStatusError.commandFailed("Tailscale unavailable")
+    }
+}
+
 private struct ExpiringKeyStatusProvider: TailscaleStatusProviding {
     func statusJSON() async throws -> Data {
         let expiry = ISO8601DateFormatter().string(from: Date().addingTimeInterval(2 * 24 * 60 * 60))
@@ -161,6 +252,26 @@ private actor FakeHealthProvider: FleetHealthProviding {
     func health(from source: String) async throws -> TailnetNodeHealth {
         guard let reading else { throw TailscaleStatusError.commandFailed("unreachable") }
         return reading
+    }
+}
+
+private actor SuspendedPingProvider: TailscalePingProviding {
+    private let started: XCTestExpectation
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(started: XCTestExpectation) { self.started = started }
+
+    func pingSummary(for host: TailnetHost) async throws -> TailnetPingSummary? {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            started.fulfill()
+        }
+        return TailnetPingSummary(samples: [TailnetPingSample(latencyMilliseconds: 20, route: .direct)])
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 
@@ -192,9 +303,13 @@ private actor FakePingProvider: TailscalePingProviding {
 private final class RecordingTailnetStore: TailnetStateStoring, @unchecked Sendable {
     private(set) var savedSnapshots: [TailnetSnapshot] = []
     private(set) var health: TailOpsRefreshHealth?
+    var didSave: (() -> Void)?
 
     func load() throws -> TailnetSnapshot? { savedSnapshots.last }
-    func save(_ snapshot: TailnetSnapshot) throws { savedSnapshots.append(snapshot) }
+    func save(_ snapshot: TailnetSnapshot) throws {
+        savedSnapshots.append(snapshot)
+        didSave?()
+    }
     func loadRefreshHealth() throws -> TailOpsRefreshHealth? { health }
     func saveRefreshHealth(_ health: TailOpsRefreshHealth) throws { self.health = health }
 }

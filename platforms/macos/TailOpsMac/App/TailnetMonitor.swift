@@ -59,7 +59,13 @@ final class TailnetMonitor: NSObject, ObservableObject {
             .max()
         DistributedNotificationCenter.default().addObserver(
             self,
-            selector: #selector(refreshFromDistributedNotification),
+            selector: #selector(refreshFromNotification),
+            name: Notification.Name(TailOpsRefreshSignal.notificationName),
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(refreshFromNotification),
             name: Notification.Name(TailOpsRefreshSignal.notificationName),
             object: nil
         )
@@ -71,6 +77,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
         pathMonitor?.cancel()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         DistributedNotificationCenter.default().removeObserver(self)
+        NotificationCenter.default.removeObserver(self)
     }
 
     /// Publishes fresh Tailscale status first, then runs the hourly ping burst and
@@ -144,7 +151,9 @@ final class TailnetMonitor: NSObject, ObservableObject {
         isRefreshing = false
         if refreshRequestedWhileRefreshing {
             refreshRequestedWhileRefreshing = false
-            await refresh()
+            if !(await refreshIfRequested()) {
+                await refresh()
+            }
         }
     }
 
@@ -152,6 +161,13 @@ final class TailnetMonitor: NSObject, ObservableObject {
     func refreshIfRequested() async -> Bool {
         guard (try? requestStore.loadRefreshRequest()) != nil else {
             return false
+        }
+
+        // Keep the request visible to the widget while diagnostics finish. It
+        // is consumed only when the next status attempt can actually begin.
+        guard !isRefreshing else {
+            refreshRequestedWhileRefreshing = true
+            return true
         }
 
         try? requestStore.clearRefreshRequest()
@@ -199,7 +215,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
         pathMonitor = monitor
     }
 
-    @objc private func refreshFromDistributedNotification(_ notification: Notification) {
+    @objc private func refreshFromNotification(_ notification: Notification) {
         Task { @MainActor [weak self] in
             await self?.refreshIfRequested()
         }

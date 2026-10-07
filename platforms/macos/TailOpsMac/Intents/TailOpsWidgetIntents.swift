@@ -30,17 +30,18 @@ public struct CopyTailnetValueIntent: AppIntent {
 public struct RefreshTailOpsWidgetIntent: AppIntent {
     public static let title: LocalizedStringResource = "Refresh TailOps Widget"
     public static let description = IntentDescription("Asks the TailOps app to fetch fresh tailnet status.")
-    public static let openAppWhenRun = true
+    public static let openAppWhenRun = false
 
     public init() {}
 
     public func perform() async throws -> some IntentResult {
         try SharedSnapshotStore().saveRefreshRequest(TailOpsRefreshRequest())
-        DistributedNotificationCenter.default().postNotificationName(
-            Notification.Name(TailOpsRefreshSignal.notificationName),
-            object: nil,
-            deliverImmediately: true
-        )
+        TailOpsWidgetKind.reloadTimelines()
+        // Open only after persisting the request. URL delivery also reaches an
+        // already-running host, without relying on a cross-process notification.
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        try await NSWorkspace.shared.open(TailOpsRefreshSignal.url, configuration: configuration)
         return .result()
     }
 }
