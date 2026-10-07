@@ -40,27 +40,34 @@ final class WidgetLayoutFitTests: XCTestCase {
             nil,
             TailnetHealth(backendState: "Running", warnings: [String(repeating: "Long health warning ", count: 8)]),
         ]
+        let refreshStates = [
+            TailOpsRefreshHealth(lastAttemptAt: now, lastSuccessAt: now),
+            TailOpsRefreshHealth(lastAttemptAt: now),
+            TailOpsRefreshHealth(lastAttemptAt: now.addingTimeInterval(-TailOpsWidgetSchedule.refreshTimeout)),
+        ]
 
         for health in banners {
-            let entry = TailOpsEntry(
-                date: now,
-                snapshot: TailnetSnapshot(hosts: hosts, generatedAt: now, health: health),
-                actionConfiguration: TailnetActionConfiguration(),
-                refreshHealth: TailOpsRefreshHealth(lastAttemptAt: now, lastSuccessAt: now),
-                wormholeConfiguration: TailOpsWormholeConfiguration(),
-                pendingWormholeTransfers: []
-            )
-            for (family, size) in families {
-                let view = TailOpsWidgetView(entry: entry, family: family)
-                    .frame(width: size.width)
-                    .fixedSize(horizontal: false, vertical: true)
-                let height = try XCTUnwrap(ImageRenderer(content: view).nsImage?.size.height)
-
-                XCTAssertLessThanOrEqual(
-                    height,
-                    size.height,
-                    "\(family) content is \(Int(height))pt tall (banner: \(health != nil))"
+            for refreshHealth in refreshStates {
+                let entry = TailOpsEntry(
+                    date: now,
+                    snapshot: TailnetSnapshot(hosts: hosts, generatedAt: now, health: health),
+                    actionConfiguration: TailnetActionConfiguration(),
+                    refreshHealth: refreshHealth,
+                    wormholeConfiguration: TailOpsWormholeConfiguration(),
+                    pendingWormholeTransfers: []
                 )
+                for (family, size) in families {
+                    let view = TailOpsWidgetView(entry: entry, family: family)
+                        .frame(width: size.width)
+                        .fixedSize(horizontal: false, vertical: true)
+                    let height = try XCTUnwrap(ImageRenderer(content: view).nsImage?.size.height)
+
+                    XCTAssertLessThanOrEqual(
+                        height,
+                        size.height,
+                        "\(family) content is \(Int(height))pt tall (banner: \(health != nil), refresh: \(refreshHealth))"
+                    )
+                }
             }
         }
     }

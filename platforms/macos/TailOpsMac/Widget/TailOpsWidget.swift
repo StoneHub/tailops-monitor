@@ -76,7 +76,8 @@ struct TailOpsTimelineProvider: TimelineProvider {
             date: Date(),
             snapshot: (try? store.load()) ?? TailnetSnapshot(hosts: []),
             actionConfiguration: (try? store.loadActionConfiguration()) ?? TailnetActionConfiguration(),
-            refreshHealth: (try? store.loadRefreshHealth()) ?? TailOpsRefreshHealth(),
+            refreshHealth: ((try? store.loadRefreshHealth()) ?? TailOpsRefreshHealth())
+                .including(try? store.loadRefreshRequest()),
             wormholeConfiguration: (try? store.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration(),
             pendingWormholeTransfers: (try? store.loadWormholePendingTransfers()) ?? []
         )
@@ -380,6 +381,9 @@ private struct WidgetSnapshotFreshness: View {
                 ProgressView()
                     .controlSize(.mini)
                 Text("Refreshing")
+            } else if hasTimedOut {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text("Timed out")
             } else if isStale {
                 Image(systemName: "clock.badge.exclamationmark")
                 Text("Stale")
@@ -390,6 +394,7 @@ private struct WidgetSnapshotFreshness: View {
                     Text("·")
                 }
                 Text(generatedAt, style: .relative)
+                    .id(generatedAt)
                     .monospacedDigit()
             } else {
                 Text("No data")
@@ -407,30 +412,38 @@ private struct WidgetSnapshotFreshness: View {
     }
 
     private var showsStateLabel: Bool {
-        refreshHealth.hasFailedSinceLastSuccess || isRefreshActive || isStale
+        refreshHealth.hasFailedSinceLastSuccess || isRefreshActive || hasTimedOut || isStale
     }
 
     private var showsWarning: Bool {
-        refreshHealth.hasFailedSinceLastSuccess || isStale
+        refreshHealth.hasFailedSinceLastSuccess || hasTimedOut || isStale
     }
 
     private var isRefreshActive: Bool {
         refreshHealth.isRefreshInProgress(at: referenceDate, timeout: TailOpsWidgetSchedule.refreshTimeout)
     }
 
+    private var hasTimedOut: Bool {
+        refreshHealth.hasTimedOut(at: referenceDate, timeout: TailOpsWidgetSchedule.refreshTimeout)
+    }
+
     private var accessibilityText: String {
-        guard hasSnapshot else { return "No tailnet snapshot available" }
-        let age = RelativeDateTimeFormatter().localizedString(for: generatedAt, relativeTo: referenceDate)
+        let age = hasSnapshot
+            ? "Snapshot generated " + RelativeDateTimeFormatter().localizedString(for: generatedAt, relativeTo: referenceDate)
+            : "No tailnet snapshot available"
         if refreshHealth.hasFailedSinceLastSuccess {
-            return "Refresh failed. Snapshot generated \(age)"
+            return "Refresh failed. \(age)"
         }
         if isRefreshActive {
-            return "Refreshing. Snapshot generated \(age)"
+            return "Refreshing. \(age)"
+        }
+        if hasTimedOut {
+            return "Refresh timed out. \(age)"
         }
         if isStale {
-            return "Snapshot stale. Generated \(age)"
+            return "Snapshot stale. \(age)"
         }
-        return "Snapshot generated \(age)"
+        return age
     }
 }
 

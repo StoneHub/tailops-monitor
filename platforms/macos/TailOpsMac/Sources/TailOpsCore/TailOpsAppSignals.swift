@@ -35,10 +35,27 @@ public struct TailOpsRefreshHealth: Codable, Equatable, Sendable {
         guard isRefreshInProgress, let lastAttemptAt else { return false }
         return date.timeIntervalSince(lastAttemptAt) < timeout
     }
+
+    public func hasTimedOut(at date: Date, timeout: TimeInterval = 120) -> Bool {
+        guard isRefreshInProgress, let lastAttemptAt else { return false }
+        return date.timeIntervalSince(lastAttemptAt) >= timeout
+    }
+
+    /// A widget tap is pending before the host has started its attempt. Derive
+    /// that state when reading, rather than letting the intent overwrite health
+    /// that the host may be updating at the same time.
+    public func including(_ request: TailOpsRefreshRequest?) -> TailOpsRefreshHealth {
+        guard let request,
+              lastAttemptAt.map({ request.requestedAt > $0 }) ?? true,
+              lastSuccessAt.map({ request.requestedAt > $0 }) ?? true
+        else { return self }
+        return TailOpsRefreshHealth(lastAttemptAt: request.requestedAt, lastSuccessAt: lastSuccessAt)
+    }
 }
 
 public enum TailOpsRefreshSignal {
     public static let notificationName = "dev.tailops.monitor.refresh"
+    public static let url = URL(string: "tailops://refresh")!
 }
 
 public enum TailOpsSettingsOpenSignal {

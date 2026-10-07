@@ -113,8 +113,52 @@ final class TailOpsCoreTests: XCTestCase {
         XCTAssertTrue(refreshing.isRefreshInProgress)
         XCTAssertTrue(refreshing.isRefreshInProgress(at: Date(timeIntervalSince1970: 250)))
         XCTAssertFalse(refreshing.isRefreshInProgress(at: Date(timeIntervalSince1970: 400)))
+        XCTAssertFalse(refreshing.hasTimedOut(at: Date(timeIntervalSince1970: 319)))
+        XCTAssertTrue(refreshing.hasTimedOut(at: Date(timeIntervalSince1970: 320)))
+        XCTAssertFalse(successful.hasTimedOut(at: Date(timeIntervalSince1970: 400)))
         XCTAssertTrue(failed.hasFailedSinceLastSuccess)
         XCTAssertFalse(failed.isRefreshInProgress)
+        XCTAssertFalse(failed.hasTimedOut(at: Date(timeIntervalSince1970: 400)))
+    }
+
+    func testPendingRefreshShowsProgressThenTimeoutBeforeHostResponds() {
+        let health = TailOpsRefreshHealth(
+            lastAttemptAt: Date(timeIntervalSince1970: 100),
+            lastSuccessAt: Date(timeIntervalSince1970: 101)
+        )
+        let pending = health.including(TailOpsRefreshRequest(requestedAt: Date(timeIntervalSince1970: 200)))
+
+        XCTAssertTrue(pending.isRefreshInProgress(at: Date(timeIntervalSince1970: 201)))
+        XCTAssertEqual(pending.lastSuccessAt, health.lastSuccessAt)
+        XCTAssertTrue(pending.hasTimedOut(at: Date(timeIntervalSince1970: 320)))
+        XCTAssertTrue(TailOpsRefreshHealth().including(
+            TailOpsRefreshRequest(requestedAt: Date(timeIntervalSince1970: 200))
+        ).isRefreshInProgress)
+    }
+
+    func testOlderRequestDoesNotHideSuccessActiveAttemptOrFailure() {
+        let request = TailOpsRefreshRequest(requestedAt: Date(timeIntervalSince1970: 200))
+        let states = [
+            TailOpsRefreshHealth(lastAttemptAt: request.requestedAt, lastSuccessAt: Date(timeIntervalSince1970: 201)),
+            TailOpsRefreshHealth(lastAttemptAt: Date(timeIntervalSince1970: 201)),
+            TailOpsRefreshHealth(lastAttemptAt: Date(timeIntervalSince1970: 201), lastError: "Tailscale unavailable"),
+        ]
+
+        for health in states {
+            XCTAssertEqual(health.including(request), health)
+            XCTAssertEqual(health.including(nil), health)
+        }
+    }
+
+    func testNewRequestClearsPreviousFailureForDisplay() {
+        let failed = TailOpsRefreshHealth(
+            lastAttemptAt: Date(timeIntervalSince1970: 100),
+            lastError: "Tailscale unavailable"
+        )
+        let pending = failed.including(TailOpsRefreshRequest(requestedAt: Date(timeIntervalSince1970: 200)))
+
+        XCTAssertFalse(pending.hasFailedSinceLastSuccess)
+        XCTAssertTrue(pending.isRefreshInProgress)
     }
 
     func testActionValidationRejectsMalformedURLAndSSHScheme() {

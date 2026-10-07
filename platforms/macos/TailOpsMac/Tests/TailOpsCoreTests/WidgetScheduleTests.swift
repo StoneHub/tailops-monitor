@@ -42,4 +42,18 @@ final class WidgetScheduleTests: XCTestCase {
 
         XCTAssertEqual(dates, [now])
     }
+
+    func testQueuedRequestSchedulesTimeoutWithoutHostAttempt() {
+        let requestedAt = now.addingTimeInterval(-10)
+        let health = TailOpsRefreshHealth().including(TailOpsRefreshRequest(requestedAt: requestedAt))
+
+        let dates = TailOpsWidgetSchedule.entryDates(
+            now: now,
+            snapshotGeneratedAt: nil,
+            refreshHealth: health,
+            pendingTransferExpiries: []
+        )
+
+        XCTAssertEqual(dates, [now, requestedAt.addingTimeInterval(TailOpsWidgetSchedule.refreshTimeout)])
+    }
 }

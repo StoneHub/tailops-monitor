@@ -167,6 +167,8 @@ Host SSH chips run `OpenSSHInTerminalIntent`, which opens `ssh://<host>` explici
 
 The widget itself does not ping or poll. The host app reloads it after each refresh; between reloads the widget only schedules entries for display changes (stale after 90 minutes, a stuck refresh timing out, a pending transfer expiring) plus a six-hour safety reload.
 
+The refresh button saves a request, reloads the widget to show **Refreshing**, then opens `tailops://refresh` to deliver the request to the host app even when it is already running. The timer is the age of the last saved status snapshot; it resets when fresh status is saved. If the host has not saved fresh status within two minutes, the widget shows **Timed out** beside the existing snapshot age. A failed status fetch shows **Failed** and its error instead.
+
 The app does the active refresh work. It refreshes on launch, once per hour while the app remains alive, when the refresh button is pressed, and a few seconds after wake or a network path change (at most once a minute). Each refresh runs:
 
 ```text
