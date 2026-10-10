@@ -1,6 +1,6 @@
 # TailOps glass refresh
 
-Status: implemented on `codex/tailops-liquid-glass-refresh`
+Status: implemented on `codex/tailops-liquid-glass-refresh`. The widget's color direction is superseded by [System-driven widget appearance](2026-10-10-system-driven-widget-appearance.md).
 
 ## Goal
 

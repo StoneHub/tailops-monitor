@@ -61,7 +61,8 @@ let package = Package(
             path: "Widget",
             exclude: ["TailOpsWidgetBundle.swift"],
             sources: [
-                "TailOpsWidget.swift"
+                "TailOpsWidget.swift",
+                "WidgetChrome.swift"
             ]
         ),
         .testTarget(
