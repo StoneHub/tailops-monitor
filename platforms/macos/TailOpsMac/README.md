@@ -125,7 +125,11 @@ If `wormhole` is missing, open `tailops://wormhole` or the widget Wormhole butto
 
 ## Liquid Glass And Widget Rendering
 
-The widget uses WidgetKit container backgrounds and marks the background as removable so macOS can apply clear, tinted, and Liquid Glass appearances. It also opts the widget surface, host tiles, status dots, and action chips out of accent tinting with `widgetAccentable(false)` so passive online/offline status remains colorful when the desktop widget is visible but not focused.
+The widget takes its whole appearance from macOS instead of drawing its own. Its removable container background is the translucent system fill, so the system glass platter, Light or Dark appearance, the glass tint amount, and the Clear and Tinted widget styles all come from System Settings. Tiles, chips, and text use adaptive system fills and hierarchical styles; status keeps the semantic green, orange, and gray.
+
+The accent comes from `NSColor.controlAccentColor` (`WidgetChrome.accent`), applied as the root tint. SwiftUI's `Color.accentColor` stays the default blue when WidgetKit renders off-screen, so use `.tint` for accent content, never `Color.accentColor`. Clear and Tinted styles render every color white, so host status is carried by symbol shape (checkmark, triangle, minus) as well as color.
+
+`Widget/WidgetChrome.swift` holds these conventions: the surface, tile, pill, header, and footnote styles. Fan Lever keeps a matching copy so the two desktop widgets look alike; change both together.
 
 The widget supports medium, large, and extra-large families. It is not freely resizable like a normal app window; macOS only allows the widget families the extension declares and may delay showing new families until WidgetKit reloads the updated extension metadata. TailOps keeps the medium widget usable as a fallback by showing two prioritized online/warning hosts, collapsing extra offline devices into a count, and moving controls into the header instead of a bottom footer. Large and extra-large families switch to a status grid: large shows up to six devices and extra-large shows up to nine devices. Grid tiles keep feature parity with row tiles by showing status, address, latency when available, and up to three quick-action buttons.
 

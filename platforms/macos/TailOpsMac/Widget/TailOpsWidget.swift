@@ -96,7 +96,6 @@ private struct TailOpsWidgetEntryView: View {
 struct TailOpsWidgetView: View {
     let entry: TailOpsEntry
     let family: WidgetFamily
-    @Environment(\.widgetRenderingMode) private var renderingMode
 
     private var actionCatalog: HostActionCatalog {
         HostActionCatalog(configuration: entry.actionConfiguration)
@@ -117,24 +116,13 @@ struct TailOpsWidgetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: verticalSpacing) {
-            HStack {
-                Image(systemName: symbol)
-                    .font(.caption.weight(.semibold))
-                    .imageScale(.small)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.primary)
-                    .frame(width: 18, height: 18)
-                Text("TailOps")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Spacer()
+            WidgetChromeHeader(symbol: symbol, title: "TailOps") {
                 HStack(spacing: 7) {
                     Button(intent: OpenTailscaleAppIntent()) {
-                        Label("Tailscale", systemImage: "arrow.up.forward.app")
-                            .labelStyle(.titleAndIcon)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 4)
-                            .background(Color.primary.opacity(0.09), in: Capsule())
+                        WidgetChromePill {
+                            Label("Tailscale", systemImage: "arrow.up.forward.app")
+                                .labelStyle(.titleAndIcon)
+                        }
                     }
                     Button(intent: RefreshTailOpsWidgetIntent()) {
                         Image(systemName: "arrow.clockwise")
@@ -151,8 +139,6 @@ struct TailOpsWidgetView: View {
                     }
                     .accessibilityLabel("Open TailOps Settings")
                 }
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
                 .buttonStyle(.plain)
             }
 
@@ -198,10 +184,7 @@ struct TailOpsWidgetView: View {
 
             Spacer(minLength: 0)
         }
-        .containerBackground(for: .widget) {
-            TailOpsWidgetBackground(renderingMode: renderingMode)
-        }
-        .widgetAccentable(false)
+        .widgetChromeSurface()
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, verticalPadding)
     }
@@ -532,40 +515,77 @@ private struct WidgetEmptyState: View {
     }
 }
 
-private struct TailOpsWidgetBackground: View {
-    let renderingMode: WidgetRenderingMode
-
-    var body: some View {
-        if renderingMode == .fullColor {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.06, green: 0.17, blue: 0.31).opacity(0.96),
-                    Color(red: 0.09, green: 0.28, blue: 0.48).opacity(0.88),
-                    Color.cyan.opacity(0.12)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        } else {
-            Color.clear
-        }
-    }
-}
-
 private struct WidgetOfflineSummary: View {
     let count: Int
 
     var body: some View {
         HStack(spacing: 5) {
-            Circle()
-                .fill(.secondary)
-                .frame(width: 6, height: 6)
+            WidgetHostStatusMarker(status: .offline, style: .inline)
             Text("\(count) offline")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
             Spacer()
         }
+        .widgetChromeFootnote()
         .padding(.top, 1)
+    }
+}
+
+/// Status by symbol as well as color: Clear and Tinted widget styles render
+/// every color white, so the shape has to carry the meaning on its own.
+private struct WidgetHostStatusMarker: View {
+    enum Style {
+        /// A symbol on a soft circle, for grid tiles.
+        case badge
+        /// A bare symbol sized to sit beside a line of text.
+        case inline
+    }
+
+    let status: TailnetHost.Status
+    let style: Style
+
+    var body: some View {
+        switch style {
+        case .badge:
+            ZStack {
+                Circle()
+                    .fill(status.widgetColor.opacity(status == .offline ? 0.18 : 0.26))
+                    .frame(width: 18, height: 18)
+                symbol
+            }
+            .widgetAccentable()
+        case .inline:
+            symbol
+                .widgetAccentable()
+        }
+    }
+
+    private var symbol: some View {
+        Image(systemName: status.widgetSymbol)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(status.widgetColor)
+    }
+}
+
+private extension TailnetHost.Status {
+    var widgetColor: Color {
+        switch self {
+        case .online:
+            return .green
+        case .warning:
+            return .orange
+        case .offline:
+            return .secondary
+        }
+    }
+
+    var widgetSymbol: String {
+        switch self {
+        case .online:
+            return "checkmark.circle.fill"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .offline:
+            return "minus.circle.fill"
+        }
     }
 }
 
@@ -625,7 +645,7 @@ private struct WidgetHostStatusTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: style.tileContentSpacing) {
             HStack(alignment: .top, spacing: 7) {
-                statusMarker
+                WidgetHostStatusMarker(status: host.status, style: .badge)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(host.name)
@@ -637,7 +657,7 @@ private struct WidgetHostStatusTile: View {
                     HStack(spacing: 5) {
                         Text(statusText)
                             .font(.caption2.weight(.bold))
-                            .foregroundStyle(color)
+                            .foregroundStyle(host.status.widgetColor)
                             .lineLimit(1)
 
                         if let route = host.activeRouteLabel {
@@ -666,7 +686,7 @@ private struct WidgetHostStatusTile: View {
             if let pendingTransfer {
                 Text("Pending \(pendingTransfer.fileName)")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(.tint)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
@@ -699,15 +719,7 @@ private struct WidgetHostStatusTile: View {
         )
         .padding(.horizontal, style.tileHorizontalPadding)
         .padding(.vertical, style.tileVerticalPadding)
-        .background(tileBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .widgetAccentable(false)
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(
-                    pendingTransfer == nil ? Color.white.opacity(0.18) : Color.accentColor.opacity(0.92),
-                    lineWidth: pendingTransfer == nil ? 1 : 2
-                )
-        }
+        .widgetChromeTile(highlighted: pendingTransfer != nil)
     }
 
     private var detailText: String {
@@ -746,52 +758,6 @@ private struct WidgetHostStatusTile: View {
             return "Offline"
         }
     }
-
-    private var statusIcon: String {
-        switch host.status {
-        case .online:
-            return "checkmark.circle.fill"
-        case .warning:
-            return "exclamationmark.triangle.fill"
-        case .offline:
-            return "minus.circle.fill"
-        }
-    }
-
-    private var statusMarker: some View {
-        ZStack {
-            Circle()
-                .fill(color.opacity(host.status == .offline ? 0.18 : 0.26))
-                .frame(width: 18, height: 18)
-            Image(systemName: statusIcon)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(color)
-        }
-        .widgetAccentable(false)
-    }
-
-    private var tileBackground: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color.white.opacity(0.13),
-                Color.blue.opacity(0.07),
-                Color.black.opacity(0.05)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private var color: Color {
-        switch host.status {
-        case .online:
-            return .green
-        case .warning:
-            return .orange
-        case .offline:
-            return .secondary
-        }
-    }
 }
 
 private struct WidgetHostActionRow: View {
@@ -805,11 +771,8 @@ private struct WidgetHostActionRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(color(for: host.status))
-                        .frame(width: 7, height: 7)
-                        .widgetAccentable(false)
+                HStack(spacing: 5) {
+                    WidgetHostStatusMarker(status: host.status, style: .inline)
                     Text(host.name)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
@@ -823,7 +786,7 @@ private struct WidgetHostActionRow: View {
                 if let pendingTransfer {
                     Text("Pending \(pendingTransfer.fileName)")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(.tint)
                         .lineLimit(1)
                 }
             }
@@ -840,50 +803,42 @@ private struct WidgetHostActionRow: View {
 
             HStack(spacing: 4) {
                 if let wormholeContact {
-                    WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: showsActionTitles)
+                    WidgetWormholeChip(mode: .send, contact: wormholeContact, showsTitle: showsChipTitles)
                     WidgetWormholeChip(
                         mode: .receive,
                         contact: wormholeContact,
                         pendingTransfer: pendingTransfer,
-                        showsTitle: showsActionTitles
+                        showsTitle: showsChipTitles
                     )
                 }
-                ForEach(Array(actions.prefix(2).enumerated()), id: \.offset) { _, action in
-                    WidgetActionChip(action: action, showsTitle: showsActionTitles)
+                ForEach(Array(visibleActions.enumerated()), id: \.offset) { _, action in
+                    WidgetActionChip(action: action, showsTitle: showsChipTitles)
                 }
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, isCompact ? 5 : 6)
-        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .widgetAccentable(false)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(color(for: host.status).opacity(host.status == .offline ? 0.55 : 0.9))
-                .frame(width: 3)
-                .clipShape(UnevenRoundedRectangle(
-                    topLeadingRadius: 8,
-                    bottomLeadingRadius: 8,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 0
-                ))
-        }
         .overlay {
-            ZStack {
-                if let samples = host.diagnostics?.ping?.samples {
-                    PingSparklineView(samples: samples)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 3)
-                        .opacity(0.11)
-                        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                        .allowsHitTesting(false)
-                }
-                if wormholeContact != nil {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(Color.accentColor.opacity(pendingTransfer == nil ? 0.62 : 0.95), lineWidth: pendingTransfer == nil ? 1.25 : 2)
-                }
+            if let samples = host.diagnostics?.ping?.samples {
+                PingSparklineView(samples: samples)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 3)
+                    .opacity(0.11)
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .allowsHitTesting(false)
             }
         }
+        .widgetChromeTile(cornerRadius: 11, highlighted: pendingTransfer != nil)
+    }
+
+    private var visibleActions: ArraySlice<HostAction> {
+        actions.prefix(2)
+    }
+
+    /// A row has room for two titled chips; more squeeze the titles out.
+    private var showsChipTitles: Bool {
+        let chipCount = visibleActions.count + (wormholeContact == nil ? 0 : 2)
+        return showsActionTitles && chipCount <= 2
     }
 
     private var detailText: String {
@@ -902,17 +857,6 @@ private struct WidgetHostActionRow: View {
 
         return "\(latest.formatted(.number.precision(.fractionLength(0...0)))) ms"
     }
-
-    private func color(for status: TailnetHost.Status) -> Color {
-        switch status {
-        case .online:
-            return .green
-        case .warning:
-            return .orange
-        case .offline:
-            return .red
-        }
-    }
 }
 
 private struct WidgetWormholeChip: View {
@@ -927,22 +871,16 @@ private struct WidgetWormholeChip: View {
             contactID: contact.id,
             pendingTransferID: mode == .receive ? pendingTransfer?.id : nil
         )) {
-            HStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .frame(width: 18, height: 18)
-                if showsTitle {
-                    Text(title)
-                        .font(.caption2.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
+            WidgetChromePill(prominence: pendingTransfer == nil ? .tinted : .selected, iconOnly: !showsTitle) {
+                HStack(spacing: 4) {
+                    Image(systemName: systemImage)
+                        .frame(width: 18, height: 18)
+                    if showsTitle {
+                        Text(title)
+                            .minimumScaleFactor(0.75)
+                    }
                 }
             }
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(Color.accentColor)
-            .frame(height: 22)
-            .padding(.horizontal, showsTitle ? 7 : 2)
-            .background(Color.accentColor.opacity(pendingTransfer == nil ? 0.14 : 0.28), in: Capsule())
-            .widgetAccentable(false)
             .accessibilityLabel("\(title) with \(contact.displayName)")
         }
         .buttonStyle(.plain)
@@ -1037,22 +975,16 @@ private struct WidgetActionChip: View {
     }
 
     private var chipContent: some View {
-        HStack(spacing: 4) {
-            chipIcon
-                .frame(width: 18, height: 18)
-            if showsTitle {
-                Text(action.title)
-                    .font(.caption2.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+        WidgetChromePill(iconOnly: !showsTitle) {
+            HStack(spacing: 4) {
+                chipIcon
+                    .frame(width: 18, height: 18)
+                if showsTitle {
+                    Text(action.title)
+                        .minimumScaleFactor(0.75)
+                }
             }
         }
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(Color.primary.opacity(0.8))
-        .frame(height: 22)
-        .padding(.horizontal, showsTitle ? 7 : 2)
-        .background(Color.primary.opacity(0.1), in: Capsule())
-        .widgetAccentable(false)
         .accessibilityLabel(action.title)
     }
 

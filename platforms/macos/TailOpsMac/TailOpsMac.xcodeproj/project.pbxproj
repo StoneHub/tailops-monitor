@@ -24,6 +24,7 @@
 		A10000000000000000000020 /* Xcode/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Xcode/Assets.xcassets */; };
 		A10000000000000000000007 /* Widget/TailOpsWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */; };
 		A10000000000000000000008 /* Widget/TailOpsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* Widget/TailOpsWidget.swift */; };
+		A10000000000000000000031 /* Widget/WidgetChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* Widget/WidgetChrome.swift */; };
 		A10000000000000000000009 /* TailOpsWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* TailOpsWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A10000000000000000000010 /* TailOpsCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* TailOpsCore */; };
 		A10000000000000000000011 /* TailOpsShared in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* TailOpsShared */; };
@@ -73,6 +74,7 @@
 		A20000000000000000000019 /* Xcode/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Xcode/Assets.xcassets; sourceTree = "<group>"; };
 		A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidgetBundle.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* Widget/TailOpsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/TailOpsWidget.swift; sourceTree = "<group>"; };
+		A20000000000000000000031 /* Widget/WidgetChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Widget/WidgetChrome.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* TailOps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TailOps.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000010 /* TailOpsWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TailOpsWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000011 /* Xcode/TailOpsMacApp/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Xcode/TailOpsMacApp/Info.plist; sourceTree = "<group>"; };
@@ -139,6 +141,7 @@
 			children = (
 				A20000000000000000000007 /* Widget/TailOpsWidgetBundle.swift */,
 				A20000000000000000000008 /* Widget/TailOpsWidget.swift */,
+				A20000000000000000000031 /* Widget/WidgetChrome.swift */,
 			);
 			name = Widget;
 			sourceTree = "<group>";
@@ -298,6 +301,7 @@
 			files = (
 				A10000000000000000000007 /* Widget/TailOpsWidgetBundle.swift in Sources */,
 				A10000000000000000000008 /* Widget/TailOpsWidget.swift in Sources */,
+				A10000000000000000000031 /* Widget/WidgetChrome.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -351,7 +355,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsMacApp/TailOpsMacApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -373,7 +377,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsMacApp/TailOpsMacApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -395,7 +399,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsWidget/TailOpsWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -419,7 +423,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Xcode/TailOpsWidget/TailOpsWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;

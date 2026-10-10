@@ -20,7 +20,7 @@ public struct PingSparklineView: View {
                             path.addLine(to: point)
                         }
                     }
-                    .stroke(.blue.opacity(0.45), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .stroke(.tint.opacity(0.45), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 }
 
                 ForEach(Array(points.enumerated()), id: \.offset) { index, point in
