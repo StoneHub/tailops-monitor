@@ -13,7 +13,8 @@ public enum TailOpsWidgetSchedule {
         now: Date,
         snapshotGeneratedAt: Date?,
         refreshHealth: TailOpsRefreshHealth,
-        pendingTransferExpiries: [Date]
+        pendingTransferExpiries: [Date],
+        agentActivityHidesAt: [Date] = []
     ) -> [Date] {
         var dates = [now]
         if let snapshotGeneratedAt {
@@ -24,6 +25,8 @@ public enum TailOpsWidgetSchedule {
             dates.append(lastAttemptAt.addingTimeInterval(refreshTimeout))
         }
         dates.append(contentsOf: pendingTransferExpiries)
+        // An agent count drops off its tile once it is too old to be worth showing.
+        dates.append(contentsOf: agentActivityHidesAt)
 
         return Array(Set(dates.filter { $0 >= now })).sorted()
     }

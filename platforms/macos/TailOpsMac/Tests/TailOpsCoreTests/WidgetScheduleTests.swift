@@ -32,6 +32,20 @@ final class WidgetScheduleTests: XCTestCase {
         XCTAssertEqual(dates, [now, attempt.addingTimeInterval(TailOpsWidgetSchedule.refreshTimeout), expiry])
     }
 
+    func testAgentCountsScheduleTheMomentTheyDropOff() {
+        let hidesAt = now.addingTimeInterval(TailnetAgentActivity.displayInterval)
+
+        let dates = TailOpsWidgetSchedule.entryDates(
+            now: now,
+            snapshotGeneratedAt: nil,
+            refreshHealth: TailOpsRefreshHealth(),
+            pendingTransferExpiries: [],
+            agentActivityHidesAt: [hidesAt, now.addingTimeInterval(-60)]
+        )
+
+        XCTAssertEqual(dates, [now, hidesAt])
+    }
+
     func testAlreadyStaleSnapshotAddsNoPastEntries() {
         let dates = TailOpsWidgetSchedule.entryDates(
             now: now,

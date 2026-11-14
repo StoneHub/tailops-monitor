@@ -128,6 +128,7 @@ struct TailOpsMacApp: App {
             pingProvider: ProcessTailscalePingProvider(),
             healthProvider: SSHFleetHealthProvider(),
             healthSources: { FleetHealthSettings.sources() },
+            agentProvider: FleetAgentActivityProvider(),
             tailnetStore: store,
             requestStore: store
         )

@@ -205,3 +205,55 @@ enum FleetHealthSettings {
             .filter(SSHFleetHealthProvider.isValidSource)
     }
 }
+
+protocol FleetAgentActivityProviding: Sendable {
+    /// This Mac's own observer state, or nil when the observer is not installed here.
+    func localActivity() async throws -> TailnetAgentActivity?
+    func activity(from source: String) async throws -> TailnetAgentActivity
+}
+
+/// Reads the Fleet agent observer's `state.json`: from this Mac's disk, or from another
+/// host over the controller's existing SSH login with a fixed command that only `cat`s
+/// the observer's state from its Linux or macOS home.
+struct FleetAgentActivityProvider: FleetAgentActivityProviding {
+    static let remoteCommand =
+        #"cat .local/state/fleet-observer/state.json 2>/dev/null || cat "Library/Application Support/Fleet Observer/state.json""#
+    private let processRunner = BoundedProcessRunner()
+    private let parser = TailnetAgentActivityParser()
+    private let localStateURL: URL
+
+    init(localStateURL: URL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/Fleet Observer/state.json")) {
+        self.localStateURL = localStateURL
+    }
+
+    func localActivity() async throws -> TailnetAgentActivity? {
+        guard FileManager.default.fileExists(atPath: localStateURL.path) else { return nil }
+        let data = try Data(contentsOf: localStateURL)
+        return try parser.parse(data, source: nil, readAt: Date())
+    }
+
+    func activity(from source: String) async throws -> TailnetAgentActivity {
+        guard SSHFleetHealthProvider.isValidSource(source) else {
+            throw TailscaleStatusError.commandFailed("\(source) is not a valid SSH host.")
+        }
+        let result = try await processRunner.run(
+            executableURL: URL(fileURLWithPath: "/usr/bin/ssh"),
+            arguments: [
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=8",
+                "-o", "StrictHostKeyChecking=yes",
+                "--", source,
+                Self.remoteCommand,
+            ],
+            timeout: 20,
+            maximumStandardOutputBytes: 512 * 1_024,
+            maximumStandardErrorBytes: 16 * 1_024
+        )
+        guard result.terminationStatus == 0, !result.stdoutWasTruncated else {
+            let message = String(decoding: result.stderr, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            throw TailscaleStatusError.commandFailed(message.isEmpty ? "ssh \(source) failed." : message)
+        }
+        return try parser.parse(result.stdout, source: source, readAt: Date())
+    }
+}
