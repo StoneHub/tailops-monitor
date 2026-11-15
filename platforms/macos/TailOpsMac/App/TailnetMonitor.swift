@@ -14,6 +14,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
     private let pingProvider: TailscalePingProviding?
     private let healthProvider: FleetHealthProviding?
     private let healthSources: @MainActor () -> [String]
+    private let agentProvider: FleetAgentActivityProviding?
     private let parser = TailnetSnapshotParser()
     private let tailnetStore: any TailnetStateStoring
     private let requestStore: any TailOpsAppGroupRequestStoring
@@ -38,6 +39,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
         pingProvider: TailscalePingProviding? = nil,
         healthProvider: FleetHealthProviding? = nil,
         healthSources: @escaping @MainActor () -> [String] = { [] },
+        agentProvider: FleetAgentActivityProviding? = nil,
         tailnetStore: any TailnetStateStoring,
         requestStore: any TailOpsAppGroupRequestStoring,
         initialSnapshot: TailnetSnapshot? = nil
@@ -46,6 +48,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
         self.pingProvider = pingProvider
         self.healthProvider = healthProvider
         self.healthSources = healthSources
+        self.agentProvider = agentProvider
         self.tailnetStore = tailnetStore
         self.requestStore = requestStore
         super.init()
@@ -82,7 +85,11 @@ final class TailnetMonitor: NSObject, ObservableObject {
 
     /// Publishes fresh Tailscale status first, then runs the hourly ping burst and
     /// publishes again, so the widget never waits on pings to show who is online.
-    func refresh() async {
+    ///
+    /// Agent activity from other hosts is read over SSH only when `includeRemoteAgents`
+    /// is set, which a refresh you ask for (the widget's button) does; this Mac's own
+    /// observer state is one local file read and is taken on every refresh.
+    func refresh(includeRemoteAgents: Bool = false) async {
         guard !isRefreshing else {
             refreshRequestedWhileRefreshing = true
             return
@@ -103,7 +110,15 @@ final class TailnetMonitor: NSObject, ObservableObject {
             let previousPings = pingSummariesByHostID(in: snapshot)
             let sources = healthProvider == nil ? [] : healthSources()
             let previousHealth = sources.isEmpty ? [] : snapshot.hosts.compactMap(\.health)
-            try publish(Self.snapshot(parsed, applying: previousPings, health: previousHealth, at: Date()))
+            // Readings too old to show are dropped rather than carried forward.
+            let previousAgents = snapshot.hosts.compactMap(\.agents).filter { $0.isShown(at: attemptAt) }
+            try publish(Self.snapshot(
+                parsed,
+                applying: previousPings,
+                health: previousHealth,
+                agents: previousAgents,
+                at: Date()
+            ))
             lastError = nil
             try tailnetStore.saveRefreshHealth(TailOpsRefreshHealth(
                 lastAttemptAt: attemptAt,
@@ -111,8 +126,9 @@ final class TailnetMonitor: NSObject, ObservableObject {
             ))
             reloadWidget()
 
-            // Second phase: node health over SSH and the hourly ping burst run together.
+            // Second phase: node health over SSH, agent activity and the hourly ping burst run together.
             async let freshHealth = nodeHealth(from: sources)
+            async let freshAgents = agentActivity(remoteSources: includeRemoteAgents ? sources : [])
             var mergedPings = previousPings
             var pingsChanged = false
             if let pingProvider, shouldRefreshPingDiagnostics(now: Date()) {
@@ -127,12 +143,16 @@ final class TailnetMonitor: NSObject, ObservableObject {
                 pingsChanged = true
             }
             let fetchedHealth = await freshHealth
-            if pingsChanged || !sources.isEmpty {
+            let fetchedAgents = await freshAgents
+            if pingsChanged || !sources.isEmpty || !fetchedAgents.isEmpty {
                 // A node that could not be reached keeps its last reading, marked stale once old.
                 let fetchedCollectors = Set(fetchedHealth.map { $0.collector.lowercased() })
                 let health = fetchedHealth + previousHealth.filter { !fetchedCollectors.contains($0.collector.lowercased()) }
+                // Agent readings that were not retaken stay until they age off the tile.
+                let fetchedAgentSources = Set(fetchedAgents.map(\.sourceKey))
+                let agents = fetchedAgents + previousAgents.filter { !fetchedAgentSources.contains($0.sourceKey) }
                 do {
-                    try publish(Self.snapshot(parsed, applying: mergedPings, health: health, at: Date()))
+                    try publish(Self.snapshot(parsed, applying: mergedPings, health: health, agents: agents, at: Date()))
                     reloadWidget()
                 } catch {
                     NSLog("TailOps could not save diagnostics: %@", error.localizedDescription)
@@ -171,7 +191,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
         }
 
         try? requestStore.clearRefreshRequest()
-        await refresh()
+        await refresh(includeRemoteAgents: true)
         return true
     }
 
@@ -318,10 +338,30 @@ final class TailnetMonitor: NSObject, ObservableObject {
         }
     }
 
+    /// Reads this Mac's observer state and, when asked, each remote host's; unreachable
+    /// hosts and hosts without the observer are skipped.
+    private func agentActivity(remoteSources: [String]) async -> [TailnetAgentActivity] {
+        guard let agentProvider else { return [] }
+        return await withTaskGroup(of: TailnetAgentActivity?.self) { group in
+            group.addTask { try? await agentProvider.localActivity() }
+            for source in remoteSources {
+                group.addTask { try? await agentProvider.activity(from: source) }
+            }
+            var readings: [TailnetAgentActivity] = []
+            for await reading in group {
+                if let reading {
+                    readings.append(reading)
+                }
+            }
+            return readings
+        }
+    }
+
     private static func snapshot(
         _ snapshot: TailnetSnapshot,
         applying pingByHostID: [String: TailnetPingSummary],
         health: [TailnetNodeHealth] = [],
+        agents: [TailnetAgentActivity] = [],
         at date: Date
     ) -> TailnetSnapshot {
         let hosts = snapshot.hosts.map { host in
@@ -331,6 +371,11 @@ final class TailnetMonitor: NSObject, ObservableObject {
             }
             if let reading = health.first(where: { $0.matches(host) }) {
                 host = host.withHealth(reading.checkingStaleness(at: date))
+            }
+            // This Mac's own reading wins over a remote one that happens to name it.
+            if let reading = agents.first(where: { $0.source == nil && $0.matches(host) })
+                ?? agents.first(where: { $0.matches(host) }) {
+                host = host.withAgents(reading)
             }
             return host
         }

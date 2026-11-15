@@ -185,6 +185,45 @@ final class TailnetMonitorRefreshTests: XCTestCase {
         XCTAssertEqual(second.health?.collector, "peer-1")
     }
 
+    func testAgentActivityIsLocalOnEveryRefreshAndRemoteOnlyWhenAsked() async throws {
+        let store = RecordingTailnetStore()
+        let requestStore = InMemoryTailOpsStore()
+        let agents = FakeAgentProvider()
+        let monitor = TailnetMonitor(
+            statusProvider: FakeStatusProvider(peerCount: 2),
+            healthProvider: FakeHealthProvider(),
+            healthSources: { ["peer-1"] },
+            agentProvider: agents,
+            tailnetStore: store,
+            requestStore: requestStore
+        )
+
+        await monitor.refresh()
+
+        let thisMac = try XCTUnwrap(store.savedSnapshots.last?.hosts.first { $0.role == .thisDevice })
+        XCTAssertEqual(thisMac.agents?.working, 2)
+        XCTAssertNil(store.savedSnapshots.last?.hosts.first { $0.id == "peer-1" }?.agents)
+        let unrequestedRemoteReads = await agents.remoteSources
+        XCTAssertEqual(unrequestedRemoteReads, [])
+
+        try requestStore.saveRefreshRequest(TailOpsRefreshRequest())
+        let refreshed = await monitor.refreshIfRequested()
+
+        XCTAssertTrue(refreshed)
+        let requestedRemoteReads = await agents.remoteSources
+        XCTAssertEqual(requestedRemoteReads, ["peer-1"])
+        let peer = try XCTUnwrap(store.savedSnapshots.last?.hosts.first { $0.id == "peer-1" })
+        XCTAssertEqual(peer.agents?.activeHarnesses, ["openclaw"])
+        XCTAssertNil(store.savedSnapshots.last?.hosts.first { $0.id == "peer-2" }?.agents)
+
+        // A later automatic refresh keeps the remote reading until it ages off the tile.
+        await monitor.refresh()
+        let kept = try XCTUnwrap(store.savedSnapshots.last?.hosts.first { $0.id == "peer-1" })
+        XCTAssertEqual(kept.agents?.working, 1)
+        let remoteReadsAfterAutomaticRefresh = await agents.remoteSources
+        XCTAssertEqual(remoteReadsAfterAutomaticRefresh, ["peer-1"])
+    }
+
     private func makeMonitor(
         peerCount: Int,
         pingProvider: FakePingProvider,
@@ -252,6 +291,25 @@ private actor FakeHealthProvider: FleetHealthProviding {
     func health(from source: String) async throws -> TailnetNodeHealth {
         guard let reading else { throw TailscaleStatusError.commandFailed("unreachable") }
         return reading
+    }
+}
+
+private actor FakeAgentProvider: FleetAgentActivityProviding {
+    private(set) var remoteSources: [String] = []
+
+    func localActivity() async throws -> TailnetAgentActivity? {
+        TailnetAgentActivity(
+            source: nil, collector: "this-mac", generatedAt: Date(), readAt: Date(),
+            working: 2, waiting: 0, idle: 1, activeHarnesses: ["claude-code"]
+        )
+    }
+
+    func activity(from source: String) async throws -> TailnetAgentActivity {
+        remoteSources.append(source)
+        return TailnetAgentActivity(
+            source: source, collector: source, generatedAt: Date(), readAt: Date(),
+            working: 1, waiting: 0, idle: 0, activeHarnesses: ["openclaw"]
+        )
     }
 }
 

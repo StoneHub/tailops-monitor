@@ -36,6 +36,10 @@ _Avoid_: Fleet registry entry, orchestrator
 A serialized view of Fleet nodes that the native host app writes and the widget reads.
 _Avoid_: Live widget state, backend state
 
+**Agent activity**:
+A count of working and waiting coding agents on one host, read on request from that host's Fleet agent observer (`fleet.agent-state/1`). It is shown for a short time after it is read and is never treated as live.
+_Avoid_: Agent monitoring, live agent feed
+
 **Taildrop**:
 Same-account file transfer through Tailscale.
 _Avoid_: Cross-account transfer

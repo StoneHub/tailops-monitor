@@ -63,7 +63,8 @@ struct TailOpsTimelineProvider: TimelineProvider {
             now: entry.date,
             snapshotGeneratedAt: entry.snapshot.hosts.isEmpty ? nil : entry.snapshot.generatedAt,
             refreshHealth: entry.refreshHealth,
-            pendingTransferExpiries: entry.pendingWormholeTransfers.map(\.expiresAt)
+            pendingTransferExpiries: entry.pendingWormholeTransfers.map(\.expiresAt),
+            agentActivityHidesAt: entry.snapshot.hosts.compactMap { $0.agents?.hidesAt }
         )
         let entries = dates.map { entry.at($0) }
         let safetyReload = entry.date.addingTimeInterval(TailOpsWidgetSchedule.safetyReloadInterval)
@@ -172,7 +173,8 @@ struct TailOpsWidgetView: View {
                                 at: entry.date
                             ),
                             isCompact: usesCompactRows,
-                            showsActionTitles: family == .systemMedium
+                            showsActionTitles: family == .systemMedium,
+                            referenceDate: entry.date
                         )
                     }
                     // The banner takes this line's space in the medium family.
@@ -494,6 +496,12 @@ private extension TailnetHost {
         return keyExpiryText
     }
 
+    /// The agent observer's last count for this host, while it is recent enough to show.
+    func agentText(at date: Date) -> String? {
+        guard let agents, agents.isShown(at: date) else { return nil }
+        return agents.summaryText
+    }
+
     var hasHealthWarnings: Bool {
         !(health?.activeWarnings.isEmpty ?? true)
     }
@@ -628,7 +636,8 @@ private struct WidgetHostStatusGrid: View {
                         for: wormholeConfiguration.contact(for: host),
                         at: referenceDate
                     ),
-                    style: style
+                    style: style,
+                    referenceDate: referenceDate
                 )
             }
         }
@@ -641,6 +650,7 @@ private struct WidgetHostStatusTile: View {
     let wormholeContact: TailOpsWormholeContact?
     let pendingTransfer: TailOpsWormholePendingTransfer?
     let style: WidgetHostStatusGrid.Style
+    let referenceDate: Date
 
     var body: some View {
         VStack(alignment: .leading, spacing: style.tileContentSpacing) {
@@ -723,7 +733,8 @@ private struct WidgetHostStatusTile: View {
     }
 
     private var detailText: String {
-        host.attentionText ?? host.health?.summaryText ?? host.primaryAddress ?? host.magicDNSName
+        host.attentionText ?? host.agentText(at: referenceDate) ?? host.health?.summaryText
+            ?? host.primaryAddress ?? host.magicDNSName
             ?? host.operatingSystem ?? "No address"
     }
 
@@ -767,6 +778,7 @@ private struct WidgetHostActionRow: View {
     let pendingTransfer: TailOpsWormholePendingTransfer?
     let isCompact: Bool
     let showsActionTitles: Bool
+    let referenceDate: Date
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -844,6 +856,9 @@ private struct WidgetHostActionRow: View {
     private var detailText: String {
         if let attentionText = host.attentionText {
             return attentionText
+        }
+        if let agentText = host.agentText(at: referenceDate) {
+            return agentText
         }
         let address = host.primaryAddress ?? host.magicDNSName ?? host.status.rawValue
         guard let route = host.activeRouteLabel else { return address }

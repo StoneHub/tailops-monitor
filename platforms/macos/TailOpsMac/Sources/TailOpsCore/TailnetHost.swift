@@ -27,6 +27,8 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
     public let keyExpiry: Date?
     /// The node's own health from its tailopsd collector, when TailOps reads one.
     public let health: TailnetNodeHealth?
+    /// What the Fleet agent observer on this host last reported, when TailOps reads one.
+    public let agents: TailnetAgentActivity?
 
     /// Online hosts whose node key expires within this window show as warnings.
     public static let keyExpiryWarningInterval: TimeInterval = 7 * 24 * 60 * 60
@@ -44,7 +46,8 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
         diagnostics: TailnetHostDiagnostics? = nil,
         connection: TailnetConnection? = nil,
         keyExpiry: Date? = nil,
-        health: TailnetNodeHealth? = nil
+        health: TailnetNodeHealth? = nil,
+        agents: TailnetAgentActivity? = nil
     ) {
         self.id = id
         self.name = name
@@ -59,11 +62,12 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
         self.connection = connection
         self.keyExpiry = keyExpiry
         self.health = health
+        self.agents = agents
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, role, status, operatingSystem, primaryAddress, magicDNSName
-        case lastSeen, services, diagnostics, connection, keyExpiry, health
+        case lastSeen, services, diagnostics, connection, keyExpiry, health, agents
     }
 
     public init(from decoder: Decoder) throws {
@@ -83,6 +87,7 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
         connection = try? container.decodeIfPresent(TailnetConnection.self, forKey: .connection)
         keyExpiry = try container.decodeIfPresent(Date.self, forKey: .keyExpiry)
         health = try? container.decodeIfPresent(TailnetNodeHealth.self, forKey: .health)
+        agents = try? container.decodeIfPresent(TailnetAgentActivity.self, forKey: .agents)
     }
 
     public func withDiagnostics(_ diagnostics: TailnetHostDiagnostics?) -> TailnetHost {
@@ -99,7 +104,28 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
             diagnostics: diagnostics,
             connection: connection,
             keyExpiry: keyExpiry,
-            health: health
+            health: health,
+            agents: agents
+        )
+    }
+
+    /// Attaches the agent observer's latest reading for this host.
+    public func withAgents(_ agents: TailnetAgentActivity?) -> TailnetHost {
+        TailnetHost(
+            id: id,
+            name: name,
+            role: role,
+            status: status,
+            operatingSystem: operatingSystem,
+            primaryAddress: primaryAddress,
+            magicDNSName: magicDNSName,
+            lastSeen: lastSeen,
+            services: services,
+            diagnostics: diagnostics,
+            connection: connection,
+            keyExpiry: keyExpiry,
+            health: health,
+            agents: agents
         )
     }
 
@@ -119,7 +145,8 @@ public struct TailnetHost: Codable, Equatable, Identifiable, Sendable {
             diagnostics: diagnostics,
             connection: connection,
             keyExpiry: keyExpiry,
-            health: health
+            health: health,
+            agents: agents
         )
     }
 }

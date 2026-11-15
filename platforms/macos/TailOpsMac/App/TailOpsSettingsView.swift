@@ -368,7 +368,7 @@ private struct FleetHealthPanel: View {
                 .font(.headline)
             TextField("SSH hosts, e.g. fcfdev", text: $sources)
                 .textFieldStyle(.roundedBorder)
-            Text("TailOps reads each host's tailopsd health file with your existing SSH login every 15 minutes and shows it on that host's widget tile. Leave empty to turn this off.")
+            Text("TailOps reads each host's tailopsd health file with your existing SSH login every 15 minutes and shows it on that host's widget tile. When you tap refresh on the widget, it also reads each host's Fleet agent observer and shows who is working for 30 minutes. Leave empty to turn this off.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

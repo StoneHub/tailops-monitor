@@ -13,7 +13,11 @@ public extension TailnetSnapshot {
             primaryAddress: "100.64.0.1",
             magicDNSName: "monroe-mac.tailnet.ts.net",
             lastSeen: nil,
-            services: []
+            services: [],
+            agents: TailnetAgentActivity(
+                source: nil, collector: "monroe-mac", generatedAt: Date(), readAt: Date(),
+                working: 2, waiting: 1, idle: 1, activeHarnesses: ["claude-code", "codex"]
+            )
         ),
         TailnetHost(
             id: "openclaw",
@@ -27,7 +31,11 @@ public extension TailnetSnapshot {
             services: [
                 TailnetService(label: "OpenClaw", url: URL(string: "http://openclaw.tailnet.ts.net:8080")!)
             ],
-            diagnostics: TailnetHostDiagnostics(ping: .previewDirect)
+            diagnostics: TailnetHostDiagnostics(ping: .previewDirect),
+            agents: TailnetAgentActivity(
+                source: "openclaw", collector: "openclaw", generatedAt: Date(), readAt: Date(),
+                working: 1, waiting: 0, idle: 2, activeHarnesses: ["openclaw"]
+            )
         ),
         TailnetHost(
             id: "router",
