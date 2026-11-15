@@ -207,53 +207,69 @@ enum FleetHealthSettings {
 }
 
 protocol FleetAgentActivityProviding: Sendable {
-    /// This Mac's own observer state, or nil when the observer is not installed here.
+    /// This Mac's own observer reading, or nil when the observer is not installed here.
     func localActivity() async throws -> TailnetAgentActivity?
-    func activity(from source: String) async throws -> TailnetAgentActivity
+    /// Another host's counts-only summary from the read-only file it shares on the tailnet.
+    func activity(from source: String, at url: URL) async throws -> TailnetAgentActivity
 }
 
-/// Reads the Fleet agent observer's `state.json`: from this Mac's disk, or from another
-/// host over the controller's existing SSH login with a fixed command that only `cat`s
-/// the observer's state from its Linux or macOS home.
+/// Reads the Fleet agent observer's counts: this Mac's from disk, another host's with one
+/// HTTPS GET of the summary it shares with Tailscale Serve. Nothing logs in to the host and
+/// nothing can run there; the request carries no cookies or credentials.
 struct FleetAgentActivityProvider: FleetAgentActivityProviding {
-    static let remoteCommand =
-        #"cat .local/state/fleet-observer/state.json 2>/dev/null || cat "Library/Application Support/Fleet Observer/state.json""#
-    private let processRunner = BoundedProcessRunner()
+    static let maximumBytes = 64 * 1_024
     private let parser = TailnetAgentActivityParser()
-    private let localStateURL: URL
+    private let observerHome: URL
+    private let session: URLSession
 
-    init(localStateURL: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Fleet Observer/state.json")) {
-        self.localStateURL = localStateURL
+    init(observerHome: URL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/Fleet Observer")) {
+        self.observerHome = observerHome
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 8
+        configuration.timeoutIntervalForResource = 15
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.urlCache = nil
+        session = URLSession(configuration: configuration)
     }
 
     func localActivity() async throws -> TailnetAgentActivity? {
-        guard FileManager.default.fileExists(atPath: localStateURL.path) else { return nil }
-        let data = try Data(contentsOf: localStateURL)
-        return try parser.parse(data, source: nil, readAt: Date())
+        // Observers installed before the summary existed only write state.json.
+        for name in ["agent-summary.json", "state.json"] {
+            let url = observerHome.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return try parser.parse(Data(contentsOf: url), source: nil, readAt: Date())
+            }
+        }
+        return nil
     }
 
-    func activity(from source: String) async throws -> TailnetAgentActivity {
-        guard SSHFleetHealthProvider.isValidSource(source) else {
-            throw TailscaleStatusError.commandFailed("\(source) is not a valid SSH host.")
+    func activity(from source: String, at url: URL) async throws -> TailnetAgentActivity {
+        guard url.scheme == "https" else {
+            throw TailscaleStatusError.commandFailed("\(source) has no HTTPS address for its agent summary.")
         }
-        let result = try await processRunner.run(
-            executableURL: URL(fileURLWithPath: "/usr/bin/ssh"),
-            arguments: [
-                "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=8",
-                "-o", "StrictHostKeyChecking=yes",
-                "--", source,
-                Self.remoteCommand,
-            ],
-            timeout: 20,
-            maximumStandardOutputBytes: 512 * 1_024,
-            maximumStandardErrorBytes: 16 * 1_024
-        )
-        guard result.terminationStatus == 0, !result.stdoutWasTruncated else {
-            let message = String(decoding: result.stderr, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            throw TailscaleStatusError.commandFailed(message.isEmpty ? "ssh \(source) failed." : message)
+        var request = URLRequest(url: url)
+        request.httpShouldHandleCookies = false
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw TailscaleStatusError.commandFailed("\(source) does not share an agent summary.")
         }
-        return try parser.parse(result.stdout, source: source, readAt: Date())
+        guard data.count <= Self.maximumBytes else {
+            throw TailscaleStatusError.commandFailed("\(source) returned an oversized agent summary.")
+        }
+        return try parser.parse(data, source: source, readAt: Date())
+    }
+}
+
+/// Which tailnet hosts TailOps asks for agent counts. Only the host app reads this.
+enum FleetAgentSettings {
+    static let hostsKey = "FleetAgentHosts"
+
+    static func hosts(in defaults: UserDefaults = .standard) -> [String] {
+        (defaults.string(forKey: hostsKey) ?? "")
+            .split(whereSeparator: { $0 == "," || $0.isWhitespace })
+            .map(String.init)
+            .filter(SSHFleetHealthProvider.isValidSource)
     }
 }

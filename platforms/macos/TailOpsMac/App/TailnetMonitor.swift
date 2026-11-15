@@ -15,6 +15,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
     private let healthProvider: FleetHealthProviding?
     private let healthSources: @MainActor () -> [String]
     private let agentProvider: FleetAgentActivityProviding?
+    private let agentHosts: @MainActor () -> [String]
     private let parser = TailnetSnapshotParser()
     private let tailnetStore: any TailnetStateStoring
     private let requestStore: any TailOpsAppGroupRequestStoring
@@ -40,6 +41,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
         healthProvider: FleetHealthProviding? = nil,
         healthSources: @escaping @MainActor () -> [String] = { [] },
         agentProvider: FleetAgentActivityProviding? = nil,
+        agentHosts: @escaping @MainActor () -> [String] = { [] },
         tailnetStore: any TailnetStateStoring,
         requestStore: any TailOpsAppGroupRequestStoring,
         initialSnapshot: TailnetSnapshot? = nil
@@ -49,6 +51,7 @@ final class TailnetMonitor: NSObject, ObservableObject {
         self.healthProvider = healthProvider
         self.healthSources = healthSources
         self.agentProvider = agentProvider
+        self.agentHosts = agentHosts
         self.tailnetStore = tailnetStore
         self.requestStore = requestStore
         super.init()
@@ -86,9 +89,9 @@ final class TailnetMonitor: NSObject, ObservableObject {
     /// Publishes fresh Tailscale status first, then runs the hourly ping burst and
     /// publishes again, so the widget never waits on pings to show who is online.
     ///
-    /// Agent activity from other hosts is read over SSH only when `includeRemoteAgents`
-    /// is set, which a refresh you ask for (the widget's button) does; this Mac's own
-    /// observer state is one local file read and is taken on every refresh.
+    /// Agent counts from other hosts are fetched from the summary they share on the tailnet
+    /// only when `includeRemoteAgents` is set, which a refresh you ask for (the widget's
+    /// button) does; this Mac's own observer reading is one local file read on every refresh.
     func refresh(includeRemoteAgents: Bool = false) async {
         guard !isRefreshing else {
             refreshRequestedWhileRefreshing = true
@@ -128,7 +131,8 @@ final class TailnetMonitor: NSObject, ObservableObject {
 
             // Second phase: node health over SSH, agent activity and the hourly ping burst run together.
             async let freshHealth = nodeHealth(from: sources)
-            async let freshAgents = agentActivity(remoteSources: includeRemoteAgents ? sources : [])
+            let agentTargets = includeRemoteAgents ? Self.agentTargets(for: agentHosts(), in: parsed) : []
+            async let freshAgents = agentActivity(remoteTargets: agentTargets)
             var mergedPings = previousPings
             var pingsChanged = false
             if let pingProvider, shouldRefreshPingDiagnostics(now: Date()) {
@@ -338,14 +342,27 @@ final class TailnetMonitor: NSObject, ObservableObject {
         }
     }
 
-    /// Reads this Mac's observer state and, when asked, each remote host's; unreachable
-    /// hosts and hosts without the observer are skipped.
-    private func agentActivity(remoteSources: [String]) async -> [TailnetAgentActivity] {
+    /// The summary address of each configured host that is online now; offline hosts and
+    /// hosts without a MagicDNS name are not asked.
+    private static func agentTargets(for names: [String], in snapshot: TailnetSnapshot) -> [(String, URL)] {
+        names.compactMap { name in
+            let wanted = name.lowercased()
+            guard let host = snapshot.hosts.first(where: { host in
+                host.role == .peer && host.status != .offline && (host.name.lowercased() == wanted
+                    || host.magicDNSName?.lowercased().hasPrefix(wanted + ".") == true)
+            }), let url = TailnetAgentActivity.summaryURL(for: host) else { return nil }
+            return (name, url)
+        }
+    }
+
+    /// Reads this Mac's observer and, when asked, each remote host's shared summary;
+    /// unreachable hosts and hosts that share nothing are skipped.
+    private func agentActivity(remoteTargets: [(String, URL)]) async -> [TailnetAgentActivity] {
         guard let agentProvider else { return [] }
         return await withTaskGroup(of: TailnetAgentActivity?.self) { group in
             group.addTask { try? await agentProvider.localActivity() }
-            for source in remoteSources {
-                group.addTask { try? await agentProvider.activity(from: source) }
+            for (source, url) in remoteTargets {
+                group.addTask { try? await agentProvider.activity(from: source, at: url) }
             }
             var readings: [TailnetAgentActivity] = []
             for await reading in group {
