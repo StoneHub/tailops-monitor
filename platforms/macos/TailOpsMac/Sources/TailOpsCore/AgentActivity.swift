@@ -3,12 +3,14 @@ import Foundation
 /// What the Fleet agent observer on one host reported when TailOps last asked: how many
 /// coding agents (Claude Code, Codex, OpenClaw) are working or waiting for you.
 ///
-/// The observer keeps `fleet.agent-state/1` in its own home; TailOps reads it only when
-/// you ask (the widget's refresh button) for other hosts, and on every refresh for this
-/// Mac, where it is one local file read. A reading is shown for `displayInterval` after
-/// it was taken and then drops off the tile, so an old count never looks live.
+/// The observer writes a counts-only `fleet.agent-summary/1` file beside its full
+/// `fleet.agent-state/1` state. TailOps reads this Mac's copy on every refresh (one local
+/// file read) and another host's only when you ask (the widget's refresh button), over
+/// HTTPS from the read-only file that host shares on the tailnet with Tailscale Serve.
+/// A reading is shown for `displayInterval` after it was taken and then drops off the
+/// tile, so an old count never looks live.
 public struct TailnetAgentActivity: Codable, Equatable, Sendable {
-    /// The SSH host alias the reading came from; nil for this Mac's own observer.
+    /// The tailnet host name the reading came from; nil for this Mac's own observer.
     public let source: String?
     /// The observer's host name (`host` in the state document).
     public let collector: String
@@ -45,6 +47,19 @@ public struct TailnetAgentActivity: Codable, Equatable, Sendable {
         self.waiting = waiting
         self.idle = idle
         self.activeHarnesses = activeHarnesses
+    }
+
+    /// Where a host shares its summary with `tailscale serve --set-path`.
+    public static let summaryPath = "/fleet/agent-summary.json"
+
+    /// The summary's address on a host that shares it; nil without a MagicDNS name.
+    public static func summaryURL(for host: TailnetHost) -> URL? {
+        guard let dnsName = host.magicDNSName, !dnsName.isEmpty else { return nil }
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = dnsName
+        components.path = summaryPath
+        return components.url
     }
 
     /// Readings from the same place replace each other.
@@ -98,8 +113,8 @@ public struct TailnetAgentActivity: Codable, Equatable, Sendable {
         }
     }
 
-    /// A local reading belongs to this Mac's tile; a remote one to the host its SSH alias
-    /// or observer host name names.
+    /// A local reading belongs to this Mac's tile; a remote one to the host it was read
+    /// from or that the observer names.
     public func matches(_ host: TailnetHost) -> Bool {
         guard let source else {
             return host.role == .thisDevice
@@ -120,20 +135,24 @@ public enum TailnetAgentActivityError: LocalizedError, Equatable {
     }
 }
 
-/// Reads the summary out of the observer's `fleet.agent-state/1` document and ignores the
-/// rest (per-agent usage, models and session ids stay out of the shared snapshot).
+/// Reads the observer's counts-only `fleet.agent-summary/1` file, or the counts out of its
+/// full `fleet.agent-state/1` document (per-agent usage, models and session ids are ignored,
+/// so they never reach the shared snapshot).
 public struct TailnetAgentActivityParser: Sendable {
-    public static let schema = "fleet.agent-state/1"
+    public static let summarySchema = "fleet.agent-summary/1"
+    public static let stateSchema = "fleet.agent-state/1"
 
     public init() {}
 
     public func parse(_ data: Data, source: String?, readAt: Date) throws -> TailnetAgentActivity {
         let document = try JSONDecoder().decode(Document.self, from: data)
-        guard document.schema == Self.schema, let generatedAt = Self.parseDate(document.generatedAt) else {
+        guard [Self.summarySchema, Self.stateSchema].contains(document.schema),
+              let generatedAt = Self.parseDate(document.generatedAt)
+        else {
             throw TailnetAgentActivityError.notAgentState
         }
         let active = Set(
-            (document.agents ?? [])
+            document.activeHarnesses ?? (document.agents ?? [])
                 .filter { $0.status == "working" || $0.status == "waiting" }
                 .map(\.harness)
         )
@@ -176,6 +195,9 @@ public struct TailnetAgentActivityParser: Sendable {
         let host: String?
         let generatedAt: String
         let summary: Summary
+        /// Summary documents name the busy harnesses directly.
+        let activeHarnesses: [String]?
+        /// State documents list every agent instead.
         let agents: [Agent]?
     }
 }

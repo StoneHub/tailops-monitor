@@ -190,10 +190,9 @@ final class TailnetMonitorRefreshTests: XCTestCase {
         let requestStore = InMemoryTailOpsStore()
         let agents = FakeAgentProvider()
         let monitor = TailnetMonitor(
-            statusProvider: FakeStatusProvider(peerCount: 2),
-            healthProvider: FakeHealthProvider(),
-            healthSources: { ["peer-1"] },
+            statusProvider: FakeStatusProvider(peerCount: 2, dnsNames: true),
             agentProvider: agents,
+            agentHosts: { ["peer-1", "not-on-tailnet"] },
             tailnetStore: store,
             requestStore: requestStore
         )
@@ -203,15 +202,15 @@ final class TailnetMonitorRefreshTests: XCTestCase {
         let thisMac = try XCTUnwrap(store.savedSnapshots.last?.hosts.first { $0.role == .thisDevice })
         XCTAssertEqual(thisMac.agents?.working, 2)
         XCTAssertNil(store.savedSnapshots.last?.hosts.first { $0.id == "peer-1" }?.agents)
-        let unrequestedRemoteReads = await agents.remoteSources
+        let unrequestedRemoteReads = await agents.remoteURLs
         XCTAssertEqual(unrequestedRemoteReads, [])
 
         try requestStore.saveRefreshRequest(TailOpsRefreshRequest())
         let refreshed = await monitor.refreshIfRequested()
 
         XCTAssertTrue(refreshed)
-        let requestedRemoteReads = await agents.remoteSources
-        XCTAssertEqual(requestedRemoteReads, ["peer-1"])
+        let requestedRemoteReads = await agents.remoteURLs
+        XCTAssertEqual(requestedRemoteReads, ["https://peer-1.tailnet.ts.net/fleet/agent-summary.json"])
         let peer = try XCTUnwrap(store.savedSnapshots.last?.hosts.first { $0.id == "peer-1" })
         XCTAssertEqual(peer.agents?.activeHarnesses, ["openclaw"])
         XCTAssertNil(store.savedSnapshots.last?.hosts.first { $0.id == "peer-2" }?.agents)
@@ -220,8 +219,8 @@ final class TailnetMonitorRefreshTests: XCTestCase {
         await monitor.refresh()
         let kept = try XCTUnwrap(store.savedSnapshots.last?.hosts.first { $0.id == "peer-1" })
         XCTAssertEqual(kept.agents?.working, 1)
-        let remoteReadsAfterAutomaticRefresh = await agents.remoteSources
-        XCTAssertEqual(remoteReadsAfterAutomaticRefresh, ["peer-1"])
+        let remoteReadsAfterAutomaticRefresh = await agents.remoteURLs
+        XCTAssertEqual(remoteReadsAfterAutomaticRefresh.count, 1)
     }
 
     private func makeMonitor(
@@ -242,11 +241,13 @@ final class TailnetMonitorRefreshTests: XCTestCase {
 
 private struct FakeStatusProvider: TailscaleStatusProviding {
     let peerCount: Int
+    var dnsNames = false
 
     func statusJSON() async throws -> Data {
         let peers = (1...peerCount).map { index in
-            """
-            "peer-\(index)": { "ID": "peer-\(index)", "HostName": "peer-\(index)", "TailscaleIPs": ["100.64.0.\(10 + index)"], "Online": true }
+            let dns = dnsNames ? #", "DNSName": "peer-\#(index).tailnet.ts.net.""# : ""
+            return """
+            "peer-\(index)": { "ID": "peer-\(index)", "HostName": "peer-\(index)", "TailscaleIPs": ["100.64.0.\(10 + index)"], "Online": true\(dns) }
             """
         }
         return Data(
@@ -295,7 +296,7 @@ private actor FakeHealthProvider: FleetHealthProviding {
 }
 
 private actor FakeAgentProvider: FleetAgentActivityProviding {
-    private(set) var remoteSources: [String] = []
+    private(set) var remoteURLs: [String] = []
 
     func localActivity() async throws -> TailnetAgentActivity? {
         TailnetAgentActivity(
@@ -304,8 +305,8 @@ private actor FakeAgentProvider: FleetAgentActivityProviding {
         )
     }
 
-    func activity(from source: String) async throws -> TailnetAgentActivity {
-        remoteSources.append(source)
+    func activity(from source: String, at url: URL) async throws -> TailnetAgentActivity {
+        remoteURLs.append(url.absoluteString)
         return TailnetAgentActivity(
             source: source, collector: source, generatedAt: Date(), readAt: Date(),
             working: 1, waiting: 0, idle: 0, activeHarnesses: ["openclaw"]

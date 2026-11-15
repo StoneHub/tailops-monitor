@@ -36,6 +36,34 @@ final class AgentActivityTests: XCTestCase {
         XCTAssertEqual(activity.sourceKey, "fcfdev")
     }
 
+    func testParsesTheCountsOnlySummary() throws {
+        let summary = Data(
+            #"{"schema":"fleet.agent-summary/1","host":"fcfdev","generatedAt":"2026-11-14T20:02:20+00:00","summary":{"working":1,"waiting":0,"idle":2,"stale":0},"activeHarnesses":["openclaw"]}"#.utf8
+        )
+        let activity = try TailnetAgentActivityParser().parse(summary, source: "fcfdev", readAt: readAt)
+
+        XCTAssertEqual([activity.working, activity.waiting, activity.idle], [1, 0, 2])
+        XCTAssertEqual(activity.activeHarnesses, ["openclaw"])
+        XCTAssertEqual(activity.summaryText, "Claw · 1 working")
+    }
+
+    func testSummaryURLUsesTheHostsMagicDNSName() {
+        let host = TailnetHost(
+            id: "n1", name: "fcfdev", role: .peer, status: .online, operatingSystem: "linux",
+            primaryAddress: "100.64.0.2", magicDNSName: "fcfdev.tail8797e7.ts.net", lastSeen: nil, services: []
+        )
+        let bare = host.withAgents(nil)
+        XCTAssertEqual(
+            TailnetAgentActivity.summaryURL(for: bare)?.absoluteString,
+            "https://fcfdev.tail8797e7.ts.net/fleet/agent-summary.json"
+        )
+        let noDNS = TailnetHost(
+            id: "n2", name: "x", role: .peer, status: .online, operatingSystem: nil,
+            primaryAddress: "100.64.0.3", magicDNSName: nil, lastSeen: nil, services: []
+        )
+        XCTAssertNil(TailnetAgentActivity.summaryURL(for: noDNS))
+    }
+
     func testRejectsOtherDocuments() {
         let health = Data(#"{"schemaVersion":1,"kind":"tailops.host-health","observedAt":"2026-09-26T22:21:08Z"}"#.utf8)
         XCTAssertThrowsError(try TailnetAgentActivityParser().parse(health, source: "fcfdev", readAt: readAt))

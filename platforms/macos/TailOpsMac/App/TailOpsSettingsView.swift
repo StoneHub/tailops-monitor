@@ -110,6 +110,7 @@ struct TailOpsSettingsView: View {
                 appControls
                 TailOpsUpdatePanel(updater: TailOpsAppUpdater.shared)
                 FleetHealthPanel()
+                FleetAgentPanel()
 
                 VStack(alignment: .leading, spacing: 10) {
                     Label("Widget-first by design", systemImage: "rectangle.3.group")
@@ -368,7 +369,7 @@ private struct FleetHealthPanel: View {
                 .font(.headline)
             TextField("SSH hosts, e.g. fcfdev", text: $sources)
                 .textFieldStyle(.roundedBorder)
-            Text("TailOps reads each host's tailopsd health file with your existing SSH login every 15 minutes and shows it on that host's widget tile. When you tap refresh on the widget, it also reads each host's Fleet agent observer and shows who is working for 30 minutes. Leave empty to turn this off.")
+            Text("TailOps reads each host's tailopsd health file with your existing SSH login every 15 minutes and shows it on that host's widget tile. Leave empty to turn this off.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -376,6 +377,27 @@ private struct FleetHealthPanel: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .tailOpsGlassPanel(tint: .blue)
+    }
+}
+
+/// Tailnet hosts whose Fleet agent counts TailOps fetches when you tap refresh.
+private struct FleetAgentPanel: View {
+    @AppStorage(FleetAgentSettings.hostsKey) private var hosts = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Agent activity", systemImage: "person.2.wave.2")
+                .font(.headline)
+            TextField("Tailnet hosts, e.g. fcfdev", text: $hosts)
+                .textFieldStyle(.roundedBorder)
+            Text("This Mac's own agents show when the Fleet agent observer is installed here. For each host listed, tapping refresh on the widget fetches the counts-only summary that host shares read-only on your tailnet (https://host\(TailnetAgentActivity.summaryPath)); TailOps never logs in to it. Counts stay on the tile for 30 minutes.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tailOpsGlassPanel(tint: .purple)
     }
 }
 

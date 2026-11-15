@@ -129,6 +129,7 @@ struct TailOpsMacApp: App {
             healthProvider: SSHFleetHealthProvider(),
             healthSources: { FleetHealthSettings.sources() },
             agentProvider: FleetAgentActivityProvider(),
+            agentHosts: { FleetAgentSettings.hosts() },
             tailnetStore: store,
             requestStore: store
         )
