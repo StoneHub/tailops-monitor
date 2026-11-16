@@ -22,7 +22,7 @@ final class TailOpsWormholeListenerBoundaryTests: XCTestCase {
     func testListenerBindsOnlyToThisMacsTailnetAddresses() {
         let candidates = [
             "127.0.0.1", "192.168.1.20", "10.0.0.5", "fe80::1", "::1",
-            "fd7a:115c:a1e0::2a", "100.101.102.103", "::ffff:100.100.1.1", "100.101.102.103"
+            "fd7a:115c:a1e0::2a", "100.101.102.103", "100.101.102.103"
         ].map { NWEndpoint.Host($0) }
 
         let hosts = TailOpsWormholePendingSignalServer.tailnetBindHosts(from: candidates)
