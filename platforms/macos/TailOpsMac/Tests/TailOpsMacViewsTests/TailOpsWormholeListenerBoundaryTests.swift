@@ -19,6 +19,43 @@ final class TailOpsWormholeListenerBoundaryTests: XCTestCase {
         XCTAssertFalse(isTailnet("::ffff:192.168.1.20"))
     }
 
+    func testListenerBindsOnlyToThisMacsTailnetAddresses() {
+        let candidates = [
+            "127.0.0.1", "192.168.1.20", "10.0.0.5", "fe80::1", "::1",
+            "fd7a:115c:a1e0::2a", "100.101.102.103", "100.101.102.103"
+        ].map { NWEndpoint.Host($0) }
+
+        let hosts = TailOpsWormholePendingSignalServer.tailnetBindHosts(from: candidates)
+
+        XCTAssertEqual(hosts.count, 2)
+        XCTAssertEqual(Set(hosts), Set([NWEndpoint.Host("100.101.102.103"), NWEndpoint.Host("fd7a:115c:a1e0::2a")]))
+    }
+
+    func testListenerHasNothingToBindWithoutATailnetAddress() {
+        let wifiOnly = ["192.168.1.20", "fe80::1", "127.0.0.1"].map { NWEndpoint.Host($0) }
+
+        XCTAssertTrue(TailOpsWormholePendingSignalServer.tailnetBindHosts(from: wifiOnly).isEmpty)
+    }
+
+    func testBindHostsAreStableAcrossRescans() {
+        let first = ["fd7a:115c:a1e0::2a", "100.101.102.103"].map { NWEndpoint.Host($0) }
+        let second = ["100.101.102.103", "fd7a:115c:a1e0::2a"].map { NWEndpoint.Host($0) }
+
+        XCTAssertEqual(
+            TailOpsWormholePendingSignalServer.tailnetBindHosts(from: first),
+            TailOpsWormholePendingSignalServer.tailnetBindHosts(from: second)
+        )
+    }
+
+    func testInterfaceScanOnlyReportsUsableAddresses() {
+        let tailnetHosts = TailOpsWormholePendingSignalServer.tailnetBindHosts(
+            from: TailOpsWormholePendingSignalServer.interfaceAddresses()
+        )
+        XCTAssertTrue(tailnetHosts.allSatisfy {
+            TailOpsWormholePendingSignalServer.isTailnetAddress(.hostPort(host: $0, port: 39117))
+        })
+    }
+
     func testPortValidationRejectsOutOfRangeValuesInsteadOfTrapping() {
         XCTAssertEqual(TailOpsWormholePendingSignalServer.port(from: nil)?.rawValue, 39117)
         XCTAssertEqual(TailOpsWormholePendingSignalServer.port(from: 40000)?.rawValue, 40000)

@@ -40,8 +40,16 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
     static let requestTimeout: TimeInterval = 10
     static let defaultPort = 39117
 
+    /// How often to look again for the Mac's own tailnet address while Tailscale
+    /// is not up. Interface changes also trigger a look straight away.
+    static let addressRetryInterval: TimeInterval = 30
+
     private let queue = DispatchQueue(label: "dev.tailops.monitor.wormhole-pending")
-    private var listener: NWListener?
+    private var listeners: [NWListener] = []
+    private var boundHosts: [NWEndpoint.Host] = []
+    private var boundPort: NWEndpoint.Port?
+    private var pathMonitor: NWPathMonitor?
+    private var pendingRetry: DispatchWorkItem?
     private var retryDelay: TimeInterval = 30
     private var activeConnections = Set<ObjectIdentifier>()
     private var deadlines: [ObjectIdentifier: DispatchWorkItem] = [:]
@@ -57,47 +65,113 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
     }
 
     /// Starts listening once at least one Wormhole contact is paired. Safe to call
-    /// repeatedly; after a listener failure the next call starts a fresh one.
+    /// repeatedly. The listener binds only to this Mac's own tailnet addresses, never
+    /// to every interface, so devices on the local Wi-Fi cannot reach the port. While
+    /// Tailscale is down it waits and binds when the address appears, and it rebinds
+    /// when the address changes.
     func start() {
-        queue.async { [self] in
-            guard listener == nil else { return }
-            let configuration = (try? wormholeStore.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
-            guard !configuration.contacts.isEmpty else { return }
-            guard let port = Self.port(from: configuration.pendingSignalPort) else {
-                Self.publishServiceError("The Wormhole signal port is invalid.")
-                return
-            }
+        queue.async { [self] in refreshListeners() }
+    }
+
+    private func startPathMonitor() {
+        guard pathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] _ in self?.refreshListeners() }
+        monitor.start(queue: queue)
+        pathMonitor = monitor
+    }
+
+    /// Runs on `queue`. Brings the listeners in line with the paired contacts, the
+    /// configured port and the tailnet addresses this Mac has right now.
+    private func refreshListeners() {
+        let configuration = (try? wormholeStore.loadWormholeConfiguration()) ?? TailOpsWormholeConfiguration()
+        guard !configuration.contacts.isEmpty else {
+            stopListeners()
+            return
+        }
+        guard let port = Self.port(from: configuration.pendingSignalPort) else {
+            stopListeners()
+            Self.publishServiceError("The Wormhole signal port is invalid.")
+            return
+        }
+        startPathMonitor()
+        let hosts = Self.tailnetBindHosts(from: Self.interfaceAddresses())
+        if !listeners.isEmpty, hosts == boundHosts, port == boundPort { return }
+        stopListeners()
+        guard !hosts.isEmpty else {
+            // Tailscale is not up yet. Never fall back to every interface; look again later.
+            scheduleRefresh(after: Self.addressRetryInterval)
+            return
+        }
+
+        var started: [NWListener] = []
+        for host in hosts {
             do {
-                let listener = try NWListener(using: .tcp, on: port)
+                let parameters = NWParameters.tcp
+                parameters.requiredLocalEndpoint = .hostPort(host: host, port: port)
+                let listener = try NWListener(using: parameters)
                 listener.stateUpdateHandler = { [weak self, weak listener] state in
-                    guard let self else { return }
+                    guard let self, let listener else { return }
                     switch state {
                     case .ready:
                         self.retryDelay = 30
                     case .failed(let error):
                         Self.publishServiceError("Wormhole signal listener failed: \(error.localizedDescription)")
-                        listener?.cancel()
-                        guard self.listener === listener else { return }
-                        self.listener = nil
-                        self.scheduleRetry()
+                        self.listenerDidStop(listener)
+                    case .waiting:
+                        // The tailnet address went away under the listener; rebind once it is back.
+                        self.listenerDidStop(listener)
                     default:
                         break
                     }
                 }
                 listener.newConnectionHandler = { [weak self] connection in self?.handle(connection) }
                 listener.start(queue: queue)
-                self.listener = listener
+                started.append(listener)
             } catch {
+                started.forEach { $0.cancel() }
                 Self.publishServiceError("Wormhole signal listener failed: \(error.localizedDescription)")
+                scheduleBackoffRetry()
+                return
             }
         }
+        listeners = started
+        boundHosts = hosts
+        boundPort = port
+    }
+
+    private func stopListeners() {
+        pendingRetry?.cancel()
+        pendingRetry = nil
+        listeners.forEach { $0.cancel() }
+        listeners = []
+        boundHosts = []
+        boundPort = nil
+    }
+
+    private func listenerDidStop(_ listener: NWListener) {
+        listener.cancel()
+        guard listeners.contains(where: { $0 === listener }) else { return }
+        stopListeners()
+        scheduleBackoffRetry()
     }
 
     /// A port held by another process (for example a second build) frees up later.
-    private func scheduleRetry() {
+    private func scheduleBackoffRetry() {
         let delay = retryDelay
         retryDelay = min(retryDelay * 2, 15 * 60)
-        queue.asyncAfter(deadline: .now() + delay) { [weak self] in self?.start() }
+        scheduleRefresh(after: delay)
+    }
+
+    private func scheduleRefresh(after delay: TimeInterval) {
+        pendingRetry?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingRetry = nil
+            self.refreshListeners()
+        }
+        pendingRetry = work
+        queue.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     static func port(from configuredPort: Int?) -> NWEndpoint.Port? {
@@ -105,10 +179,48 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
         return NWEndpoint.Port(rawValue: value)
     }
 
+    /// The addresses to bind: this Mac's own tailnet addresses, without duplicates,
+    /// in a stable order so a rescan that finds the same addresses changes nothing.
+    static func tailnetBindHosts(from candidates: [NWEndpoint.Host]) -> [NWEndpoint.Host] {
+        var seen = Set<String>()
+        return candidates
+            .filter { isTailnetHost($0, allowIPv4Mapped: false) }
+            .filter { seen.insert("\($0)").inserted }
+            .sorted { "\($0)" < "\($1)" }
+    }
+
+    /// Every address on an interface that is up, as reported by `getifaddrs`.
+    static func interfaceAddresses() -> [NWEndpoint.Host] {
+        var head: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&head) == 0, let first = head else { return [] }
+        defer { freeifaddrs(head) }
+        var hosts: [NWEndpoint.Host] = []
+        for entry in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            guard entry.pointee.ifa_flags & UInt32(IFF_UP) != 0, let address = entry.pointee.ifa_addr else { continue }
+            switch Int32(address.pointee.sa_family) {
+            case AF_INET:
+                let raw = address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr }
+                let bytes = withUnsafeBytes(of: raw, { Data($0) })
+                if let ipv4 = IPv4Address(bytes) { hosts.append(.ipv4(ipv4)) }
+            case AF_INET6:
+                let raw = address.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { $0.pointee.sin6_addr }
+                let bytes = withUnsafeBytes(of: raw, { Data($0) })
+                if let ipv6 = IPv6Address(bytes) { hosts.append(.ipv6(ipv6)) }
+            default:
+                continue
+            }
+        }
+        return hosts
+    }
+
     /// Pending notices only travel over the tailnet, so connections from any other
     /// network are dropped before they can occupy a connection slot.
     static func isTailnetAddress(_ endpoint: NWEndpoint) -> Bool {
         guard case .hostPort(let host, _) = endpoint else { return false }
+        return isTailnetHost(host, allowIPv4Mapped: true)
+    }
+
+    private static func isTailnetHost(_ host: NWEndpoint.Host, allowIPv4Mapped: Bool) -> Bool {
         switch host {
         case .ipv4(let address):
             return isTailnetIPv4([UInt8](address.rawValue))
@@ -116,7 +228,7 @@ final class TailOpsWormholePendingSignalServer: @unchecked Sendable {
             let bytes = [UInt8](address.rawValue)
             guard bytes.count == 16 else { return false }
             let isIPv4Mapped = bytes[0..<10].allSatisfy { $0 == 0 } && bytes[10] == 0xff && bytes[11] == 0xff
-            if isIPv4Mapped { return isTailnetIPv4(Array(bytes[12..<16])) }
+            if isIPv4Mapped { return allowIPv4Mapped && isTailnetIPv4(Array(bytes[12..<16])) }
             return Array(bytes[0..<6]) == [0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0]
         default:
             return false
